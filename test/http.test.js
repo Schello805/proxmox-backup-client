@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { once } = require('node:events');
+const http = require('node:http');
 test('HTTP: Auth, Secret-Schutz, persistente Konfiguration und fehlende Mounts', async t => {
  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'qnap-test-'));
  const bin = path.join(tmp,'bin'), snapshotsFile = path.join(tmp,'snapshots.json');
@@ -68,6 +69,22 @@ test('HTTP: Auth, Secret-Schutz, persistente Konfiguration und fehlende Mounts',
  fs.writeFileSync(snapshotsFile,'invalid JSON');
  const stalePBS = await (await post('/api/pbs/refresh',{})).json(); assert.ok(stalePBS.error); assert.equal(stalePBS.snapshots.length,1); assert.equal(stalePBS.checkedAt,pbs.checkedAt);
 
+ const invalid = await post('/api/config', { ...config, namespace:'../ungueltig' });
+ assert.equal(invalid.status,400); assert.match((await invalid.json()).error,/Namespace/);
+ const missingTopic = await post('/api/notifications',{enabled:true,url:'https://ntfy.sh',token:''});
+ assert.equal(missingTopic.status,400); assert.match((await missingTopic.json()).error,/Topic/);
+ let delivered=''; const notifyServer=http.createServer(async(req,res)=>{for await(const chunk of req)delivered+=chunk;res.end('{}');});
+ notifyServer.listen(0,'127.0.0.1'); await once(notifyServer,'listening'); t.after(()=>new Promise(resolve=>notifyServer.close(resolve)));
+ assert.equal((await post('/api/notifications',{enabled:true,url:`http://127.0.0.1:${notifyServer.address().port}/test-topic`,token:''})).status,200);
+ assert.equal(JSON.parse(fs.readFileSync(path.join(tmp,'config.json'))).notifications.enabled,true);
+ assert.equal((await post('/api/notifications/test',{})).status,200); assert.match(delivered,/Test von QNAP/);
+ assert.equal((await post('/api/auth',{enabled:false})).status,200);
+ assert.equal((await fetch(url+'/api/status')).status,200);
+ assert.equal(JSON.parse(fs.readFileSync(path.join(tmp,'config.json'))).authEnabled,false);
+ const protectedAgain=await post('/api/auth',{enabled:true}); assert.equal(protectedAgain.status,200);
+ headers.Cookie=protectedAgain.headers.get('set-cookie').split(';')[0];
+ assert.equal((await fetch(url+'/api/status')).status,401);
+ assert.equal((await fetch(url+'/api/status',{headers})).status,200);
  assert.equal((await post('/api/logout', {})).status, 200);
  assert.equal((await fetch(url + '/api/status', { headers })).status, 401);
  for (let n = 0; n < 10; n++) assert.equal((await login('wrong')).status, 401);

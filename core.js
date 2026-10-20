@@ -26,11 +26,9 @@ function validateConfig(body, current) {
   try { if (typeof out.timezone !== 'string' || out.timezone.length > 80) throw new Error(); new Intl.DateTimeFormat('de', { timeZone: out.timezone }); } catch { throw new Error('Ungültige Zeitzone.'); }
   out.staleAfterDays = body.staleAfterDays ?? current.staleAfterDays ?? 14;
   if (!Number.isInteger(out.staleAfterDays) || out.staleAfterDays < 1 || out.staleAfterDays > 365) throw new Error('Warnschwelle muss 1 bis 365 Tage betragen.');
-  const notify = body.notifications ?? current.notifications ?? { enabled: false, url: '', token: '' };
-  if (typeof notify.enabled !== 'boolean' || typeof notify.url !== 'string' || typeof notify.token !== 'string' || notify.url.length > 1024 || notify.token.length > 1024 || /[\r\n\0]/.test(notify.token)) throw new Error('Ungültige Benachrichtigungseinstellungen.');
-  if (notify.url) { let url; try { url = new URL(notify.url); } catch { throw new Error('Ungültige ntfy-Topic-URL.'); } if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash || url.pathname === '/') throw new Error('Vollständige ntfy-Topic-URL ohne Zugangsdaten angeben.'); }
-  if (notify.enabled && !notify.url) throw new Error('ntfy-Topic-URL fehlt.');
-  out.notifications = { enabled: notify.enabled, url: notify.url, token: notify.token || (notify.url === current.notifications?.url ? current.notifications.token : '') || '' };
+  out.authEnabled = body.authEnabled ?? current.authEnabled ?? true;
+  if (typeof out.authEnabled !== 'boolean') throw new Error('Passwortschutz muss ein- oder ausgeschaltet sein.');
+  out.notifications = validateNotifications(body.notifications ?? current.notifications ?? { enabled: false, url: '', token: '' }, current.notifications);
   out.schedules = {};
   for (const source of out.sources) out.schedules[source.id] = normalizeSchedule(body.schedules[source.id] ?? current.schedules?.[source.id] ?? '');
   return out;
@@ -127,4 +125,12 @@ function parseSnapshots(value) {
     return { group: `${item['backup-type']}/${item['backup-id']}`, id: item['backup-id'], time: new Date(item['backup-time'] * 1000).toISOString(), size: Number.isFinite(item.size) ? item.size : null, files: Array.isArray(item.files) ? item.files.map(f => typeof f === 'string' ? f : f?.filename).filter(f => typeof f === 'string').slice(0,100) : [], protected: Boolean(item.protected) };
   }).sort((a,b) => b.time.localeCompare(a.time));
 }
-module.exports = { FOLDERS, defaultSources, validSourcePath, validateSources, mountFor, mountIssue, validateConfig, normalizeSchedule, scheduleKey, scheduleDue, occurrence, scheduleWindow, healthFor, parseSnapshots };
+module.exports = { FOLDERS, defaultSources, validSourcePath, validateSources, mountFor, mountIssue, validateConfig, normalizeSchedule, validateNotifications, scheduleKey, scheduleDue, occurrence, scheduleWindow, healthFor, parseSnapshots };
+
+function validateNotifications(notify, current) {
+  if (!notify || typeof notify !== 'object') throw new Error('Benachrichtigungseinstellungen fehlen.');
+  if (typeof notify.enabled !== 'boolean' || typeof notify.url !== 'string' || typeof notify.token !== 'string' || notify.url.length > 1024 || notify.token.length > 1024 || /[\r\n\0]/.test(notify.token)) throw new Error('Ungültige Benachrichtigungseinstellungen.');
+  if (notify.url) { let url; try { url = new URL(notify.url); } catch { throw new Error('Ungültige ntfy-Topic-URL.'); } if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash || url.pathname === '/') throw new Error('Vollständige ntfy-Topic-URL ohne Zugangsdaten angeben.'); }
+  if (notify.enabled && !notify.url) throw new Error('ntfy-Topic-URL fehlt.');
+  return { enabled: notify.enabled, url: notify.url, token: notify.token || (notify.url === current?.url ? current.token : '') || '' };
+}

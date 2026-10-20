@@ -6,21 +6,22 @@ const os = require('node:os');
 const crypto = require('node:crypto');
 const { spawn, execFile } = require('node:child_process');
 const { promisify } = require('node:util');
-const { mountFor, mountIssue, validSourcePath, validateConfig, scheduleKey, scheduleDue, occurrence, healthFor, parseSnapshots } = require('./core');
+const { mountFor, mountIssue, validSourcePath, validateConfig, validateNotifications, scheduleKey, scheduleDue, occurrence, healthFor, parseSnapshots } = require('./core');
 const { sendNotification } = require('./notifications');
 const run = promisify(execFile);
 const ROOT = __dirname, DATA = process.env.DATA_DIR || path.join(ROOT, 'data');
 const CONFIG = process.env.CONFIG_FILE || path.join(ROOT, 'config.json');
 const HOST = process.env.HOST || '127.0.0.1', PORT = Number(process.env.PORT || 3000);
-const PASS = process.env.APP_PASSWORD;
-if (!PASS || PASS.length < 6) throw new Error('APP_PASSWORD mit mindestens 6 Zeichen setzen.');
+const PASS = process.env.APP_PASSWORD || '';
 fs.mkdirSync(DATA, { recursive: true, mode: 0o700 });
 function save(file, value) {
   fs.writeFileSync(file + '.tmp', JSON.stringify(value, null, 2), { mode: 0o600 });
   fs.chmodSync(file + '.tmp', 0o600); fs.renameSync(file + '.tmp', file);
 }
 if (!fs.existsSync(CONFIG) || !fs.readFileSync(CONFIG, 'utf8').trim()) save(CONFIG, JSON.parse(fs.readFileSync(path.join(ROOT, 'config.example.json'))));
-let config = validateConfig(JSON.parse(fs.readFileSync(CONFIG)), { password: '' });
+const initialConfig = JSON.parse(fs.readFileSync(CONFIG));
+let config = validateConfig({ ...initialConfig, authEnabled: initialConfig.authEnabled ?? Boolean(PASS) }, { password: '' });
+if (config.authEnabled && PASS.length < 6) throw new Error('Für aktivierten Passwortschutz APP_PASSWORD mit mindestens 6 Zeichen setzen oder authEnabled in config.json deaktivieren.');
 const STATE = path.join(DATA, 'state.json'), PBS_STATE = path.join(DATA, 'pbs.json');
 let state = fs.existsSync(STATE) ? JSON.parse(fs.readFileSync(STATE)) : {};
 for (const key of ['jobs','triggered','history','watchSince','alerted']) state[key] ||= {};
@@ -112,6 +113,7 @@ function applyConfig(input) {
   if (active || queue.length) throw new Error('Konfiguration erst nach Ende aller Aufträge ändern.');
   if (pbsRequest) throw new Error('PBS-Abfrage läuft noch. Bitte kurz warten.');
   const next = validateConfig(input, config), now = new Date().toISOString();
+  if (next.authEnabled && PASS.length < 6) throw new Error('APP_PASSWORD mit mindestens 6 Zeichen fehlt.');
   for (const source of next.sources) {
     const old = sourceFor(source.id), targetChanged = config.repository !== next.repository || config.namespace !== next.namespace;
     const pathChanged = old && old.path !== source.path;
@@ -153,7 +155,7 @@ async function system() {
   try { debian = (await fs.promises.readFile('/etc/os-release', 'utf8')).match(/^PRETTY_NAME="?([^"\n]+)/m)?.[1] || debian; } catch {}
   systemCache = { hostname: os.hostname(), platform: debian, client: version }; return { ...systemCache, timezone: config.timezone };
 }
-function safeConfig(snapshot = config) { return { ...snapshot, password: '', hasPassword: Boolean(snapshot.password), notifications: { ...snapshot.notifications, token: '', hasToken: Boolean(snapshot.notifications.token) } }; }
+function safeConfig(snapshot = config) { return { ...snapshot, canEnableAuth: PASS.length >= 6, password: '', hasPassword: Boolean(snapshot.password), notifications: { ...snapshot.notifications, token: '', hasToken: Boolean(snapshot.notifications.token) } }; }
 const expectedPassword = crypto.createHash('sha256').update(PASS).digest();
 const sessions = new Map(), attempts = new Map();
 const SESSION_MS = 12 * 60 * 60 * 1000;
@@ -161,6 +163,7 @@ function sessionToken(req) {
   return (req.headers.cookie || '').split(';').map(c => c.trim()).find(c => c.startsWith('qnap_session='))?.slice(13);
 }
 function authorized(req) {
+  if (!config.authEnabled) return true;
   const token = sessionToken(req), expires = sessions.get(token);
   if (!expires || expires <= Date.now()) { if (token) sessions.delete(token); return false; }
   return true;
@@ -190,7 +193,9 @@ const server = http.createServer(async (req, res) => {
       const [file, type] = assets[url.pathname]; res.writeHead(200, { 'Content-Type': `${type}; charset=utf-8`, 'Cache-Control': 'no-cache' });
       return res.end(fs.readFileSync(path.join(ROOT, 'public', file)));
     }
+    if (req.method === 'GET' && url.pathname === '/api/session') return json(res, 200, { authenticated: authorized(req), authEnabled: config.authEnabled });
     if (req.method === 'POST' && url.pathname === '/api/login') {
+      if (!config.authEnabled) return json(res, 200, { success: true });
       const now = Date.now(), ip = req.socket.remoteAddress;
       for (const [key, entry] of attempts) if (entry.until <= now) attempts.delete(key);
       for (const [key, expires] of sessions) if (expires <= now) sessions.delete(key);
@@ -209,6 +214,20 @@ const server = http.createServer(async (req, res) => {
     }
     if (!url.pathname.startsWith('/api/')) return json(res, 404, { error: 'Nicht gefunden.' });
     if (!authorized(req)) return json(res, 401, { error: 'Bitte anmelden.' });
+    if (req.method === 'POST' && url.pathname === '/api/auth') {
+      const input = await body(req);
+      if (typeof input.enabled !== 'boolean') throw new Error('Passwortschutz muss ein- oder ausgeschaltet sein.');
+      if (input.enabled && PASS.length < 6) throw new Error('Zum Einschalten erst APP_PASSWORD mit mindestens 6 Zeichen in /etc/qnap-backup.env setzen und den Dienst neu starten.');
+      const next = { ...config, authEnabled: input.enabled }; save(CONFIG, next); config = next; sessions.clear();
+      if (input.enabled) { const token = crypto.randomBytes(32).toString('hex'); sessions.set(token, Date.now() + SESSION_MS); res.setHeader('Set-Cookie', cookie(req, token, SESSION_MS / 1000)); }
+      else res.setHeader('Set-Cookie', cookie(req, '', 0));
+      return json(res, 200, { success: true, authEnabled: config.authEnabled });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/notifications') {
+      const settings = validateNotifications(await body(req), config.notifications);
+      const next = { ...config, notifications: settings }; save(CONFIG, next); config = next; state.notification = null; persist();
+      return json(res, 200, { success: true });
+    }
     if (req.method === 'POST' && url.pathname === '/api/logout') {
       sessions.delete(sessionToken(req)); res.setHeader('Set-Cookie', cookie(req, '', 0));
       return json(res, 200, { success: true });

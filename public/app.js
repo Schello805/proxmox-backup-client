@@ -77,10 +77,10 @@ function fillForm(config) {
   form.elements.password.value = '';
   form.elements.timezone.value = config.timezone;
   form.elements.staleAfterDays.value = config.staleAfterDays;
-  form.elements.notifyEnabled.checked = config.notifications.enabled;
-  form.elements.notifyURL.value = config.notifications.url;
-  form.elements.notifyToken.value = '';
-  form.elements.notifyToken.placeholder = config.notifications.hasToken ? 'Token gespeichert · leer lassen' : 'Optionaler ntfy-Token';
+  $('#authForm').elements.authEnabled.checked = config.authEnabled;
+  $('#authResult').textContent = config.authEnabled ? 'Passwortschutz ist eingeschaltet.' : 'Zugriff im Netzwerk ohne App-Passwort.';
+  $('#logout').hidden = !config.authEnabled;
+  fillNotifications(config.notifications);
   $('#passwordHint').textContent = config.hasPassword ? 'PBS-Passwort gespeichert · leer lassen zum Beibehalten.' : 'PBS-Passwort noch nicht hinterlegt.';
   $('#schedules').replaceChildren(); scheduleControls.clear();
   for (const [id, name] of Object.entries(names)) buildSchedule(id, name, config.schedules[id]);
@@ -138,11 +138,10 @@ $('#configForm').addEventListener('submit', async event => {
   data.repository = `${form.elements.authId.value.trim()}@${form.elements.server.value.trim()}:${form.elements.datastore.value.trim()}`;
   for (const key of ['password', 'fingerprint', 'namespace', 'timezone']) data[key] = form.elements[key].value;
   data.staleAfterDays = Number(form.elements.staleAfterDays.value);
-  data.notifications = { enabled: form.elements.notifyEnabled.checked, url: form.elements.notifyURL.value.trim(), token: form.elements.notifyToken.value };
   data.sources = savedConfig.sources;
   for (const id of Object.keys(names)) { const control = scheduleControls.get(id); data.schedules[id] = { days: control.mode.value === 'manual' ? [] : control.days, time: control.mode.value === 'manual' ? '' : control.time.value }; }
-  button.disabled = true;
-  try { await api('/api/config', data); loaded = false; notice('Einstellungen gespeichert.'); $('#connectionResult').textContent = 'Verbindung nach Änderung erneut prüfen.'; await refresh(); const result = await api('/api/connection', {}); $('#connectionResult').textContent = result.message; notice(result.message, !result.ok); } catch (e) { notice(e.message, true); } finally { button.disabled = false; }
+  button.disabled = true; $('#settingsResult').textContent = '';
+  try { await api('/api/config', data); loaded = false; notice('Einstellungen gespeichert.'); $('#settingsResult').textContent = 'Einstellungen gespeichert.'; $('#connectionResult').textContent = 'Verbindung nach Änderung erneut prüfen.'; await refresh(); const result = await api('/api/connection', {}); $('#connectionResult').textContent = result.message; notice(result.message, !result.ok); } catch (e) { $('#settingsResult').textContent = e.message; notice(e.message, true); } finally { button.disabled = false; }
 });
 $('#testConnection').addEventListener('click', async event => {
   const button = event.currentTarget; button.disabled = true; $('#connectionResult').textContent = 'Verbindung wird geprüft …';
@@ -207,7 +206,7 @@ async function refreshActivity() {
       const warnings = Object.values(lastHealth).filter(item => item.missed || item.stale).length;
       if (warnings) { $('#activityBadge').textContent = `${warnings} Hinweis${warnings > 1 ? 'e' : ''}`; $('#activityBadge').className = 'badge busy'; }
     }
-    if (data.notification) $('#notificationResult').textContent = `${data.notification.message} (${date(data.notification.at)})`;
+    if (data.notification && !$('#notifyDetails').open) $('#notificationResult').textContent = `${data.notification.message} (${date(data.notification.at)})`;
     if (logFolder) await refreshLog();
   } catch (e) { if (authenticated) { $('#activityBadge').textContent = 'Verbindung unterbrochen'; $('#activityBadge').className = 'badge bad'; notice(e.message, true); } }
   finally { activityPolling = false; }
@@ -286,10 +285,44 @@ function renderPBS() {
   $('#pbsSummary').textContent = `${pbsData.checkedAt ? 'Stand: ' + date(pbsData.checkedAt) : 'Noch nicht abgerufen – „Vom PBS abrufen“ wählen.'} · ${snapshots.length} Snapshots${pbsData.error ? ' · ' + pbsData.error + ' (ggf. alter Bestand)' : ''}${snapshots.length > 200 ? ' · die neuesten 200 werden angezeigt' : ''}${pbsData.count > 5000 ? ' · Abruf auf 5000 Einträge begrenzt' : ''}`;
   for (const snapshot of snapshots.slice(0,200)) { const row = element('tr'), size = snapshot.size === null ? '—' : `${(snapshot.size / 1024 ** 3).toFixed(2)} GiB`; row.append(element('td', snapshot.group + (snapshot.protected ? ' 🔒' : '')), element('td',date(snapshot.time)), element('td',size), element('td',snapshot.files.join(', ') || '—')); $('#pbsRows').append(row); }
 }
+function fillNotifications(settings) {
+  const form = $('#notifyForm'); form.elements.enabled.checked = settings.enabled;
+  let server = 'https://ntfy.sh', topic = '';
+  if (settings.url) { const url = new URL(settings.url); const slash = url.pathname.lastIndexOf('/'); server = url.origin + url.pathname.slice(0,slash); try { topic = decodeURIComponent(url.pathname.slice(slash + 1)); } catch { topic = url.pathname.slice(slash + 1); } }
+  form.elements.server.value = server; form.elements.topic.value = topic; form.elements.token.value = '';
+  form.elements.token.placeholder = settings.hasToken ? 'Token gespeichert · leer lassen' : 'Optionaler ntfy-Token';
+  updateNotifyDestination();
+}
+function notificationPayload() {
+  const form = $('#notifyForm'), enabled = form.elements.enabled.checked, server = form.elements.server.value.trim().replace(/\/+$/, ''), topic = form.elements.topic.value.trim();
+  if (enabled && !topic) throw new Error('Bitte ein ntfy-Topic angeben, z. B. mein-backup-topic.');
+  return { enabled, url: topic ? `${server}/${encodeURIComponent(topic)}` : '', token: form.elements.token.value.trim() };
+}
+function updateNotifyDestination() {
+  try { const settings = notificationPayload(); $('#notifyDestination').textContent = settings.url ? `Ziel: ${settings.url}` : 'Server und Topic eintragen. ntfy wird separat gespeichert.'; }
+  catch (e) { $('#notifyDestination').textContent = e.message; }
+}
+$('#notifyForm').addEventListener('input', () => { updateNotifyDestination(); $('#notificationResult').textContent = ''; });
+$('#notifyForm').addEventListener('submit', async event => {
+  event.preventDefault(); const button = event.currentTarget.querySelector('[type=submit]'); button.disabled = true;
+  try { const payload = notificationPayload(); await api('/api/notifications', payload); $('#notifyForm').elements.token.value = ''; $('#notificationResult').textContent = payload.enabled ? 'ntfy aktiviert und gespeichert. Jetzt kannst du die Verbindung testen.' : 'ntfy deaktiviert und gespeichert.'; }
+  catch (e) { $('#notificationResult').textContent = e.message; }
+  finally { button.disabled = false; }
+});
+$('#authForm').addEventListener('submit', async event => {
+  event.preventDefault(); const button = event.currentTarget.querySelector('button'), enabled = event.currentTarget.elements.authEnabled.checked; button.disabled = true;
+  try { await api('/api/auth', { enabled }); $('#logout').hidden = !enabled; $('#authResult').textContent = enabled ? 'Passwortschutz eingeschaltet.' : 'Passwortschutz ausgeschaltet. Zugriff im Netzwerk ohne Anmeldung.'; }
+  catch (e) { $('#authResult').textContent = e.message; }
+  finally { button.disabled = false; }
+});
 $('#testNotification').addEventListener('click', async event => {
   const button = event.currentTarget; button.disabled = true;
   try { await api('/api/notifications/test', {}); $('#notificationResult').textContent = 'Testmeldung zugestellt.'; } catch (e) { $('#notificationResult').textContent = e.message; } finally { button.disabled = false; }
 });
-showLogin(); refresh();
+async function bootstrap() {
+  try { const session = await api('/api/session'); if (session.authenticated) { authenticated = true; document.body.classList.remove('locked'); $('#logout').hidden = !session.authEnabled; await refresh(); } else showLogin(); }
+  catch (e) { showLogin(); $('#loginError').textContent = e.message; }
+}
+bootstrap();
 setInterval(() => { if (authenticated && !polling) refresh(); }, 15000);
 setInterval(refreshActivity, 3000);

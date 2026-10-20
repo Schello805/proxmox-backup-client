@@ -59,7 +59,7 @@ install -m 600 deploy/qnap-backup.env.example /etc/qnap-backup.env
 nano /etc/qnap-backup.env
 ```
 
-In `/etc/qnap-backup.env` ein eigenes `APP_PASSWORD` mit mindestens sechs Zeichen setzen. Es wird kein Benutzername benötigt; ein vorhandenes `APP_USER` wird ignoriert. `HOST=0.0.0.0` macht die Oberfläche im LXC-Netz erreichbar. Zugriff über `http://<LXC-IP>:3000`. Passwort-Anmeldung über unverschlüsseltes HTTP nur im vertrauenswürdigen Netz einsetzen; für andere Netze HTTPS-Reverse-Proxy oder einen SSH-Tunnel verwenden. Keine direkte Internetfreigabe.
+Für Passwortschutz in `/etc/qnap-backup.env` ein eigenes `APP_PASSWORD` mit mindestens sechs Zeichen setzen. Ohne gesetztes Passwort startet eine neue Konfiguration ohne Anmeldung. Es wird kein Benutzername benötigt; ein vorhandenes `APP_USER` wird ignoriert. `HOST=0.0.0.0` macht die Oberfläche im LXC-Netz erreichbar. Zugriff über `http://<LXC-IP>:3000`. Passwort-Anmeldung über unverschlüsseltes HTTP nur im vertrauenswürdigen Netz einsetzen; für andere Netze HTTPS-Reverse-Proxy oder einen SSH-Tunnel verwenden. Keine direkte Internetfreigabe.
 
 Der Dienstbenutzer `qnap-backup` muss alle eingerichteten Quellverzeichnisse und deren Dateien lesen und Verzeichnisse betreten können. Bei einem unprivilegierten LXC die UID/GID-Zuordnung berücksichtigen. Berechtigungen und SMB-Optionen auf dem Proxmox-Host passend zur vorhandenen Konfiguration einstellen; keine pauschalen `chmod 777` verwenden.
 
@@ -121,7 +121,7 @@ Snapshot-Namen aus der Liste übernehmen. Bei älteren CLI-Sicherungen den tats�
 
 ## Anmeldung und Live-Status
 
-Die App öffnet ein eigenes Passwort-Modal, ohne Benutzername und ohne Browser-Anmeldefenster. `APP_PASSWORD` akzeptiert mindestens sechs Zeichen; längere bestehende Passwörter bleiben gültig. Die Anmeldung gilt zwölf Stunden und verwendet ein zufälliges HttpOnly-/SameSite-Cookie. „Sperren“ beendet die Sitzung; nach Dienstneustart ist eine erneute Anmeldung nötig. Nach zehn Fehlversuchen pro IP wird eine Minute lang begrenzt. Bei HTTPS-Reverse-Proxy `COOKIE_SECURE=true` in der Dienst-Umgebung setzen.
+Unter **Einstellungen → App mit Passwort schützen → Zugang speichern** lässt sich der App-Passwortschutz unabhängig von PBS-Zugang und Zeitplänen ein- oder ausschalten. Bei ausgeschaltetem Schutz ist die App für erreichbare Geräte im Netzwerk ohne Anmeldung bedienbar. Ein vorhandenes `APP_PASSWORD` kann für späteres Wiedereinschalten gesetzt bleiben. Bei eingeschaltetem Schutz öffnet die App ein eigenes Passwort-Modal, ohne Benutzername und ohne Browser-Anmeldefenster. `APP_PASSWORD` benötigt bei eingeschaltetem Schutz mindestens sechs Zeichen; längere bestehende Passwörter bleiben gültig. Die Auswahl wird als `authEnabled` in der Konfiguration gespeichert und bleibt beim Neustart erhalten. Für bestehende Konfigurationen mit gesetztem `APP_PASSWORD` bleibt der Schutz beim Update zunächst eingeschaltet. Ohne gesetztes Passwort ist Einschalten erst nach Setzen von `APP_PASSWORD` und Dienstneustart möglich. Die Anmeldung gilt zwölf Stunden und verwendet ein zufälliges HttpOnly-/SameSite-Cookie. „Sperren“ beendet die Sitzung; nach Dienstneustart ist eine erneute Anmeldung nötig. Nach zehn Fehlversuchen pro IP wird eine Minute lang begrenzt. Bei HTTPS-Reverse-Proxy `COOKIE_SECURE=true` in der Dienst-Umgebung setzen.
 
 Oben in der Übersicht stehen laufender Auftrag, Prüfschritt oder Backup-Phase, Startzeit, Laufzeit, Auslöser und Warteschlange. Das Live-Protokoll und die Auftragszustände aktualisieren sich alle drei Sekunden, die aufwendigere Mount-Prüfung alle 15 Sekunden. Es wird keine geschätzte Prozentanzeige erfunden. Separat in einer Shell gestartete Backups sind nicht Teil dieses Status.
 
@@ -148,7 +148,7 @@ APP_PASSWORD='lokales-testpasswort' npm start
 npm test
 ```
 
-Standard: `127.0.0.1:3000`, Anmeldung nur mit App-Passwort. Ohne Linux-Mountinfo und echte CIFS-Quellen werden alle Mounts als nicht verfügbar angezeigt und Backups gesperrt. Keine simulierten Erfolgsmeldungen. `config.json` und `data/` sind von Git ausgeschlossen. Getestet werden Mount-Erkennung, Validierung, Zeitpläne und die HTTP-Schnittstelle; der reale PBS-/QNAP-Betrieb muss im LXC geprüft werden.
+Standard: `127.0.0.1:3000`, optionaler App-Passwortschutz. Ohne Linux-Mountinfo und echte CIFS-Quellen werden alle Mounts als nicht verfügbar angezeigt und Backups gesperrt. Keine simulierten Erfolgsmeldungen. `config.json` und `data/` sind von Git ausgeschlossen. Getestet werden Mount-Erkennung, Validierung, Zeitpläne und die HTTP-Schnittstelle; der reale PBS-/QNAP-Betrieb muss im LXC geprüft werden.
 
 ## Wochenpläne
 
@@ -170,7 +170,7 @@ Unter **Einstellungen → Sicherungsplan → Zeitzone** eine IANA-Zeitzone wähl
 
 In jeder Quellenzeile steht der nächste konkrete Termin. Ein Klick auf den Quellennamen öffnet den Verlauf. Die App warnt nach zehn Minuten ohne erfolgreichen Lauf seit dem zuletzt fälligen Termin, außer der Auftrag läuft oder wartet noch. Nach einem Neustart werden verpasste Termine seit dem bisherigen Beobachtungsbeginn erkannt; beim ersten Update sowie nach Änderung von Plan, Pfad, Ziel oder Zeitzone beginnt die Beobachtung neu. Es werden keine historischen Warnungen für noch nie beobachtete Pläne erfunden. Ein manueller erfolgreicher Lauf nach dem fälligen Termin beseitigt die Warnung ebenfalls.
 
-Zusätzlich kann unter **Warnungen & Benachrichtigungen** die Grenze für einen zu alten letzten App-Erfolg gesetzt werden (Standard 14 Tage). PBS-Snapshots aus anderen Programmen werden separat angezeigt und ersetzen keinen App-Lauf oder App-Erfolg.
+Zusätzlich kann unter **Warnschwelle** die Grenze für einen zu alten letzten App-Erfolg gesetzt werden (Standard 14 Tage). PBS-Snapshots aus anderen Programmen werden separat angezeigt und ersetzen keinen App-Lauf oder App-Erfolg.
 
 ## PBS-Bestand und Historie
 
@@ -182,8 +182,12 @@ Der lokale Verlauf enthält bis zu zehn abgeschlossene App-Läufe mit Dauer, Erg
 
 ## Optionale ntfy-Fehlermeldungen
 
-Unter **Einstellungen → Warnungen & Benachrichtigungen** ntfy aktivieren, eine vollständige Topic-URL (z. B. `https://ntfy.example.de/qnap-backups`) und bei Bedarf einen Zugriffstoken eintragen. Das Topic anschließend mit der ntfy-App abonnieren. Es ist kein Dienst voreingestellt; ohne Aktivierung wird nichts versendet. Passende Topic-Zugriffsrechte im ntfy-Server einrichten. Ein eigener Server im lokalen Netz ist möglich.
+Unter **Einstellungen → Benachrichtigungen über ntfy** Server (z. B. `https://ntfy.example.de`), Topic (z. B. `qnap-backups`) und bei Bedarf einen Zugriffstoken eintragen, dann „Fehlermeldungen aktivieren“ auswählen und **ntfy speichern**. Daraus wird die vollständige Topic-URL gebildet. ntfy wird separat über `/api/notifications` gespeichert: Fehler in PBS-Feldern oder noch nicht fertigen Zeitplänen verhindern das Aktivieren nicht. Das Topic anschließend mit der ntfy-App abonnieren. Es ist kein Dienst voreingestellt; ohne Aktivierung wird nichts versendet. Passende Topic-Zugriffsrechte im ntfy-Server einrichten. Ein eigener Server im lokalen Netz ist möglich.
 
-Speichern und mit „Gespeicherte ntfy-Verbindung testen“ gezielt eine Testmeldung senden. Automatisch gemeldet werden fehlgeschlagene Backups, verpasste Termine und ein zu alter letzter Erfolg. Nachrichten enthalten Quellennamen und Fehlertyp, keine Kennwörter, Dateipfade oder vollständigen Protokolle. Versand erfolgt per HTTP POST gemäß [ntfy-Dokumentation](https://docs.ntfy.sh/publish/). Tokens werden nicht an den Browser zurückgegeben; ein leerer Token behält den bisherigen nur bei unveränderter URL.
+Mit „ntfy speichern“ speichern und danach über „Gespeicherte Verbindung testen“ gezielt eine Testmeldung senden. Das Ergebnis bzw. die konkrete Fehlermeldung bleibt direkt unter dem Formular sichtbar. Server und Topic sind beide erforderlich, wenn ntfy aktiviert wird; eine reine Serveradresse reicht als Ziel nicht aus. Automatisch gemeldet werden fehlgeschlagene Backups, verpasste Termine und ein zu alter letzter Erfolg. Nachrichten enthalten Quellennamen und Fehlertyp, keine Kennwörter, Dateipfade oder vollständigen Protokolle. Versand erfolgt per HTTP POST gemäß [ntfy-Dokumentation](https://docs.ntfy.sh/publish/). Tokens werden nicht an den Browser zurückgegeben; ein leerer Token behält den bisherigen nur bei unveränderter URL.
 
 Meldungen werden pro Ereignis dedupliziert. Fehlgeschlagene Zustellungen erscheinen in den Einstellungen und werden nicht endlos wiederholt; nach Behebung einen Test senden. Warnungen bleiben unabhängig von der Zustellung in der App sichtbar.
+
+### Fehlermeldung beim Speichern
+
+Ein HTTP-Status `400` in der Browser-Konsole allein zeigt nicht die Ursache. Der Server liefert zusätzlich JSON mit `error`; die App zeigt diese Meldung dauerhaft im betroffenen Formular. Passwortschutz und ntfy besitzen eigene Speichern-Schaltflächen und benötigen keine vollständigen PBS-Einstellungen. Allgemeine PBS-/Zeitplanfehler stehen direkt unter „Speichern & Verbindung prüfen“.
