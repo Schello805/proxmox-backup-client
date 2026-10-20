@@ -1,3 +1,4 @@
+import { installMaintenance } from '/js/maintenance.js';
 import { createAPI } from '/js/api.js';
 import { createViews, dayNames } from '/js/views.js';
 import { createFormState, clearFieldErrors, showFieldErrors, serverField, validateMainForm, validateNotifyForm, validateSourceForm } from '/js/forms.js';
@@ -185,8 +186,8 @@ async function refreshActivity() {
     if (data.active) {
       const job = data.jobs[data.active];
       $('#activityTitle').textContent = `${names[data.active]} · ${data.phase === 'checking' ? 'Quelle wird geprüft' : 'Backup läuft'}`;
-      $('#activityDescription').textContent = 'Der Auftrag läuft im LXC weiter, auch wenn du die Seite schließt.';
-      for (const [label, value] of [['Gestartet', date(job.startedAt)], ['Laufzeit', duration(job.startedAt)], ['Auslöser', job.source === 'schedule' ? 'Zeitplan' : 'Manuell']]) { const item = element('span'); item.append(element('strong', label), document.createTextNode(value)); $('#activityMeta').append(item); }
+      $('#activityDescription').textContent = job.progress ? `Messwert: ${date(job.progress.updatedAt)} · Upload zählt die vom Client gemeldeten Daten; Komprimierung und Deduplizierung beeinflussen den Netzverkehr.` : 'Warte auf Messwerte des Clients. Ältere Clients liefern eventuell erst am Ende Werte; das Live-Protokoll bleibt verfügbar.';
+      for (const [label, value] of [['Laufzeit', duration(job.startedAt)], ['Verarbeitet', formatBytes(job.progress?.processedBytes)], ['Upload (Client)', formatBytes(job.progress?.uploadedBytes)], ['Ø Verarbeitung', job.progress?.processingBytesPerSecond != null ? formatBytes(job.progress.processingBytesPerSecond) + '/s' : '—']]) { const item = element('span'); item.append(element('strong', label), document.createTextNode(value)); $('#activityMeta').append(item); }
       $('#liveDetails').hidden = false;
 
     } else {
@@ -337,3 +338,11 @@ async function bootstrap() {
 bootstrap();
 setInterval(() => { if (authenticated && !polling) refresh(); }, 15000);
 setInterval(refreshActivity, 3000);
+
+function formatBytes(bytes) {
+  if (bytes == null || !Number.isFinite(bytes)) return '—';
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
+  const index = bytes > 0 ? Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024))) : 0;
+  return new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 }).format(bytes / 1024 ** index) + ' ' + units[index];
+}
+installMaintenance({ api, element, date, isAuthenticated: () => authenticated, getEpoch: () => authEpoch });

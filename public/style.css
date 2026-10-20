@@ -1347,9 +1347,9 @@ body[data-page=overview] #notice {
 }
 
 #overview td {
-  padding: 8px 10px;
+  padding: 6px 10px;
   font-size: 10px;
-  height: 49px;
+  height: 45px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -1854,6 +1854,10 @@ form[data-dirty=true]::after {
 }
 
 .app-version {
+  border: 1px solid var(--line);
+  background: #ffffffb3;
+  border-radius: 6px;
+  padding: 4px 7px;
   font-size: 10px;
   color: var(--muted);
   letter-spacing: 0;
@@ -1889,3 +1893,15 @@ button:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid
 .stats strong { font-variant-numeric: tabular-nums; color: #1c5141; }
 .dot { box-shadow: 0 0 0 3px #58c18e15; }
 @media (prefers-reduced-motion: reduce) { button { transition: none; } }
+
+#systemDialog { width: min(720px, calc(100vw - 32px)); }
+.maintenance-section { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 16px; }
+.maintenance-section h3 { margin: 0; font-size: 14px; }
+.maintenance-section a { color: var(--green); font-size: 12px; }
+.diagnostic-checks { list-style: none; padding: 0; margin: 12px 0; }
+.diagnostic-checks li { display: flex; gap: 12px; align-items: start; border-top: 1px solid #edf2ef; padding: 10px 0; }
+.diagnostic-checks .badge { flex: 0 0 52px; text-align: center; }
+.diagnostic-checks strong { display: block; font-size: 12px; }
+.diagnostic-checks small { display: block; color: var(--muted); line-height: 1.5; margin-top: 3px; overflow-wrap: anywhere; }
+.update-command { display: block; background: #f2f7f4; border-radius: 6px; padding: 10px; white-space: normal; overflow-wrap: anywhere; font-size: 11px; }
+#overview .activity-meta { gap: 6px 22px; }

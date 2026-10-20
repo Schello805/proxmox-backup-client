@@ -15,6 +15,8 @@ const { createNotifier } = require('./lib/notifier');
 const { createInspector } = require('./lib/inspect');
 const { createSourceSizes } = require('./lib/source-sizes');
 const { createSystem } = require('./lib/system');
+const { createUpdates } = require('./lib/updates');
+const { createDiagnostics } = require('./lib/diagnostics');
 const { healthFor } = require('./lib/planning');
 const { sendNotification } = require('./notifications');
 const run = promisify(execFile);
@@ -46,6 +48,9 @@ backups = createBackups({ state, data: DATA, persist, getConfig, inspectPath, en
 const scheduler = createScheduler({ getConfig, state, persist, backups, log: history.log, notify: notifier.notify, isMaintenance });
 pbs = createPBS({ getConfig, environment, run, cacheFile: path.join(DATA, 'pbs.json'), save: saveJSON });
 const system = createSystem({ run, getConfig, storageChecks });
+const updates = createUpdates({ run, root: ROOT });
+void updates.installed();
+const diagnostics = createDiagnostics({ getConfig, system, inspectPath, pbs, storageChecks: () => checkRuntime({ data: DATA, configFile: CONFIG, port: PORT }) });
 const auth = createAuth({ getConfig, password: PASS, json });
 function json(res, code, data) { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(data)); }
 async function body(req) {
@@ -64,7 +69,7 @@ const server = http.createServer(async (req, res) => {
       if (req.headers['x-requested-with'] !== 'qnap-dashboard') return json(res, 403, { error: 'Anfrage-Header fehlt.' });
     }
     // Nur die App-Hülle ist öffentlich. Daten und Aktionen benötigen eine Sitzung.
-    const assets = { '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], ...Object.fromEntries(['api','views','forms'].map(name => ['/js/' + name + '.js', ['js/' + name + '.js', 'text/javascript']])) };
+    const assets = { '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], ...Object.fromEntries(['api','views','forms','maintenance'].map(name => ['/js/' + name + '.js', ['js/' + name + '.js', 'text/javascript']])) };
     if (req.method === 'GET' && assets[url.pathname]) {
       const [file, type] = assets[url.pathname]; res.writeHead(200, { 'Content-Type': `${type}; charset=utf-8`, 'Cache-Control': 'no-cache' });
       return res.end(fs.readFileSync(path.join(ROOT, 'public', file)));
@@ -73,6 +78,10 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/login') return auth.login(req, res, await body(req));
     if (!url.pathname.startsWith('/api/')) return json(res, 404, { error: 'Nicht gefunden.' });
     if (!auth.authorized(req)) return json(res, 401, { error: 'Bitte anmelden.' });
+    if (req.method === 'GET' && url.pathname === '/api/updates') return json(res, 200, { installed: await updates.installed(), result: updates.current() });
+    if (req.method === 'POST' && url.pathname === '/api/updates/check') return json(res, 200, await updates.check());
+    if (req.method === 'GET' && url.pathname === '/api/diagnostics') return json(res, 200, diagnostics.current());
+    if (req.method === 'POST' && url.pathname === '/api/diagnostics') return json(res, 202, diagnostics.start());
     if (req.method === 'POST' && url.pathname === '/api/auth') {
       const input = await body(req); configs.setAuth(input.enabled); auth.reset(req, res, configs.get().authEnabled);
       return json(res, 200, { success: true, authEnabled: configs.get().authEnabled });
