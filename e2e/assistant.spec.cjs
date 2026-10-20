@@ -1,0 +1,114 @@
+'use strict';
+const { test, expect, login } = require('./fixtures.cjs');
+const { spawnSync } = require('node:child_process');
+
+test('Quellen-Assistent: Kopierbefehle, freier Mount-Slot, Identitätsprüfung und Übernahme', async ({ page, app, context }, testInfo) => {
+  await login(page); await context.grantPermissions(['clipboard-read','clipboard-write']);
+  await page.getByRole('link', { name: '+ Hinzufügen', exact: true }).click();
+  const wizard = page.getByRole('region', { name: 'Einrichtungsassistent' });
+  await wizard.getByRole('textbox', { name: 'Quellenname', exact: true }).fill('Fotos');
+  await wizard.getByRole('textbox', { name: 'Backup-ID', exact: true }).fill('fotos');
+  await wizard.getByRole('textbox', { name: 'Pfad im LXC', exact: true }).fill('/mnt/Daten/Fotos');
+  await wizard.getByRole('textbox', { name: 'SMB-Freigabe', exact: true }).fill('//test-nas/fotos');
+  await wizard.getByRole('button', { name: 'Weiter', exact: true }).click();
+  await wizard.getByRole('spinbutton', { name: 'LXC-ID', exact: true }).fill('120');
+  const command = await wizard.locator('.command-card pre').first().textContent();
+  expect(command).toContain("ct='120'");
+  expect(spawnSync('bash', ['-n'], { input: command, encoding: 'utf8' }).status).toBe(0);
+  const stubs = `findmnt() { case "$*" in *SOURCE*) echo '//test-nas/fotos';; *FSTYPE*) echo cifs;; esac; }; pct() { if [ "$1" = config ]; then echo 'mp0: /old,mp=/mnt/Daten/Old'; else printf '%s\\n' "$*"; fi; }; export -f findmnt pct;\n`;
+  const simulated = spawnSync('bash', ['-c', stubs + command], { encoding: 'utf8' });
+  expect(simulated.status, simulated.stderr).toBe(0); expect(simulated.stdout).toContain('set 120 -mp1'); expect(simulated.stdout).toContain('mp=/mnt/Daten/Fotos,ro=1');
+  const wrong = spawnSync('bash', ['-c', stubs.replace('//test-nas/fotos','//test-nas/wrong') + command], { encoding: 'utf8' });
+  expect(wrong.status).toBe(1); expect(wrong.stdout).toContain('SMB-Freigabe am Host stimmt nicht');
+  await wizard.getByRole('button', { name: '1 · Proxmox-Host · Bash kopieren', exact: true }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(command);
+  await page.evaluate(() => Object.defineProperty(window, 'isSecureContext', { configurable: true, get: () => false }));
+  await wizard.getByRole('button', { name: '2 · LXC · Bash kopieren', exact: true }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain('runuser -u qnap-backup');
+  await page.screenshot({ path: testInfo.outputPath('source-assistant.png') });
+  await wizard.getByRole('button', { name: 'Weiter', exact: true }).click();
+  await app.setMount('/mnt/Daten/Fotos',{ source: '//test-nas/wrong' });
+  await wizard.getByRole('button', { name: 'Quelle prüfen & hinzufügen', exact: true }).click();
+  await expect(wizard.locator('#assistantResult')).toContainText(/SMB/); await expect(wizard).toBeVisible();
+  const before = await (await page.request.get('/api/status')).json(); expect(before.config.sources.some(source => source.id === 'fotos')).toBe(false);
+  await app.setMount('/mnt/Daten/Fotos',{ source: '//test-nas/fotos' });
+  await wizard.getByRole('button', { name: 'Quelle prüfen & hinzufügen', exact: true }).click();
+  await expect(page).toHaveURL(/#overview\/fotos\/edit$/); await expect(page.locator('#sourceDetail')).toContainText('Fotos');
+  const after = await (await page.request.get('/api/status')).json(); expect(after.config.schedules.fotos.days).toEqual([]); expect(after.config.sources.find(source => source.id === 'fotos').expectedSource).toBe('//test-nas/fotos');
+});
+
+test('PBS-Assistent: weiterer Datastore, kompakte Anleitung und direkte Verbindung', async ({ page }, testInfo) => {
+  await login(page); await page.goto('/#assistant/pbs');
+  const wizard = page.getByRole('region', { name: 'Einrichtungsassistent' });
+  await wizard.getByRole('textbox', { name: 'Neuer Datastore', exact: true }).fill('archive-store');
+  await wizard.getByRole('checkbox', { name: 'Datastore muss noch angelegt werden', exact: true }).check();
+  await wizard.getByRole('button', { name: 'Weiter', exact: true }).click();
+  await wizard.getByRole('textbox', { name: 'PBS-Datenträger · Mountpfad', exact: true }).fill('/mnt/archive');
+  const command = await wizard.locator('.command-card pre').first().textContent();
+  expect(command).toContain("mountpoint -q -- '/mnt/archive'"); expect(command).toContain("datastore create 'archive-store' '/mnt/archive/archive-store'");
+  expect(command).not.toContain('mkfs'); expect(command).not.toContain('e2e-pbs-secret');
+  await page.screenshot({ path: testInfo.outputPath('pbs-assistant.png') });
+  await wizard.getByRole('button', { name: 'Weiter', exact: true }).click();
+  await wizard.getByRole('button', { name: 'Ziel speichern & prüfen', exact: true }).click();
+  await expect(wizard.locator('#assistantResult')).toContainText('PBS erreichbar');
+  const data = await (await page.request.get('/api/status')).json(); expect(data.config.secondaryDatastore).toBe('archive-store'); expect(data.config.secondaryPBS).toBeNull(); expect(data.config.sources.every(source => source.target === 'primary')).toBe(true);
+});
+
+test('PBS-Assistent: eigener Server mit getrenntem Zugang, Backup und dauerhaft bearbeitbaren Einstellungen', async ({ page, app }) => {
+  await login(page); await page.goto('/#assistant/pbs');
+  const wizard = page.getByRole('region', { name: 'Einrichtungsassistent' });
+  await wizard.getByRole('checkbox', { name: 'Zusätzlicher PBS mit eigenem Zugang', exact: true }).check();
+  await wizard.getByRole('textbox', { name: 'Neuer Datastore', exact: true }).fill('test-store');
+  await wizard.getByRole('textbox', { name: 'PBS-Adresse', exact: true }).fill('pbs2.local');
+  await wizard.getByRole('textbox', { name: 'PBS-Benutzer', exact: true }).fill('archive@pbs');
+  await wizard.getByLabel('PBS-Passwort / Token', { exact: true }).fill('e2e-second-secret');
+  await wizard.getByRole('textbox', { name: 'Namespace (optional)', exact: true }).fill('archive');
+  await wizard.getByRole('button', { name: 'Weiter', exact: true }).click(); await wizard.getByRole('button', { name: 'Weiter', exact: true }).click();
+  await wizard.getByRole('button', { name: 'Ziel speichern & prüfen', exact: true }).click(); await expect(wizard.locator('#assistantResult')).toContainText('PBS erreichbar');
+  const data = await (await page.request.get('/api/status')).json(); expect(data.targets[1].repository).toBe('archive@pbs@pbs2.local:test-store'); expect(data.config.secondaryPBS.hasPassword).toBe(true); expect(JSON.stringify(data)).not.toContain('e2e-second-secret');
+  await page.getByRole('link', { name: 'Zur Übersicht', exact: true }).click();
+  await page.locator('tr[data-folder="software"]').getByRole('button', { name: 'Zeitplan Software bearbeiten' }).click();
+  const detail = page.locator('#sourceDetail'); await detail.getByRole('combobox', { name: 'Backup-Ziel', exact: true }).selectOption('secondary'); await detail.getByRole('button', { name: 'Quelle speichern', exact: true }).click(); await expect(detail.locator('#sourceResult')).toContainText('gespeichert');
+  await detail.getByRole('button', { name: 'Schließen', exact: true }).click();
+  await page.locator('tr[data-folder="software"]').getByRole('button', { name: '↗ Sichern', exact: true }).click(); await page.getByRole('button', { name: 'Live-Protokoll ↗' }).click();
+  await expect(page.locator('#logText')).toContainText('archive@pbs@pbs2.local:test-store'); await expect(page.locator('#logText')).toContainText('E2E namespace: archive'); await expect(page.locator('#logText')).toContainText('E2E credential match: true');
+  app.finish(); await expect(page.locator('tr[data-folder="software"] .job-state')).toContainText('Erfolgreich');
+  await page.getByRole('link', { name: /^⚙.*Einstellungen$/ }).click();
+  await expect(page.getByRole('textbox', { name: 'PBS-2-Adresse', exact: true })).toHaveValue('pbs2.local');
+  await page.getByRole('button', { name: 'Einstellungen speichern', exact: true }).click(); await expect(page.locator('#settingsResult')).toContainText('Gespeichert');
+  await page.reload(); await expect(page.getByRole('textbox', { name: 'PBS-2-Namespace (optional)', exact: true })).toHaveValue('archive');
+  const saved = await (await page.request.get('/api/status')).json(); expect(saved.config.secondaryPBS.hasPassword).toBe(true); expect(saved.targets[1].repository).toBe('archive@pbs@pbs2.local:test-store');
+});
+
+test('PBS-Assistent: erste Verbindung und fehlgeschlagene Prüfung ohne doppelte Einrichtung', async ({ page }) => {
+  await login(page);
+  const initial = (await (await page.request.get('/api/status')).json()).config;
+  const cleared = await page.request.post('/api/config', { headers: { 'X-Requested-With': 'qnap-dashboard' }, data: { ...initial, repository: '', password: '', secondaryDatastore: '', secondaryPBS: null } });
+  expect(cleared.ok()).toBe(true); await page.reload();
+  await page.goto('/#assistant/pbs'); const wizard = page.locator('#assistant');
+  await wizard.getByRole('textbox', { name: 'Neuer Datastore', exact: true }).fill('fresh');
+  await wizard.getByRole('button', { name: 'Weiter', exact: true }).click(); await expect(wizard.locator('#assistantResult')).toContainText('PBS-Adresse');
+  await wizard.getByRole('textbox', { name: 'PBS-Adresse', exact: true }).fill('pbs.local');
+  await wizard.getByRole('textbox', { name: 'PBS-Benutzer', exact: true }).fill('backup@pbs');
+  await wizard.getByLabel('PBS-Passwort / Token', { exact: true }).fill('fresh-secret');
+  await wizard.getByRole('button', { name: 'Weiter', exact: true }).click(); expect(await wizard.locator('pre').textContent()).not.toContain('fresh-secret');
+  await wizard.getByRole('button', { name: 'Weiter', exact: true }).click();
+  let saves = 0; page.on('request', request => { if (request.url().endsWith('/api/targets/setup')) saves++; });
+  await page.route('**/api/connection', route => route.fulfill({ json: { ok: false, message: 'Keine PBS-Rechte' } }));
+  await wizard.getByRole('button', { name: 'Ziel speichern & prüfen', exact: true }).click();
+  await expect(wizard.locator('#assistantResult')).toContainText('Ziel gespeichert, Prüfung fehlgeschlagen: Keine PBS-Rechte');
+  await page.unroute('**/api/connection'); await wizard.getByRole('button', { name: 'Verbindung erneut prüfen', exact: true }).click(); await expect(wizard.locator('#assistantResult')).toContainText('PBS erreichbar'); expect(saves).toBe(1);
+  const after = (await (await page.request.get('/api/status')).json()).config;
+  expect(after.repository).toBe('backup@pbs@pbs.local:fresh'); expect(after.hasPassword).toBe(true); expect(after.schedules).toEqual(initial.schedules);
+});
+
+test('Mobiler Quellen-Assistent: vorhandene LXC-Freigabe überspringt Host-Einrichtung', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 }); await login(page); await page.goto('/#assistant/source');
+  const wizard = page.locator('#assistant'); await wizard.getByRole('textbox', { name: 'Quellenname', exact: true }).fill('Fotos');
+  await expect(wizard.getByRole('textbox', { name: 'Backup-ID', exact: true })).toHaveValue('fotos');
+  await wizard.getByRole('checkbox', { name: 'Bereits im LXC eingebunden', exact: true }).check();
+  await wizard.getByRole('button', { name: 'Weiter', exact: true }).click();
+  await expect(wizard.locator('.command-card')).toHaveCount(1); await expect(wizard.getByRole('textbox', { name: 'Host-Mountpfad', exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await wizard.getByRole('button', { name: 'Zurück', exact: true }).click(); await expect(wizard.getByRole('textbox', { name: 'Quellenname', exact: true })).toHaveValue('Fotos');
+});

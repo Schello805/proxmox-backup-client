@@ -20,7 +20,7 @@ const { createUpdates } = require('./lib/updates');
 const { createDiagnostics } = require('./lib/diagnostics');
 const { healthFor } = require('./lib/planning');
 const { estimateProgress } = require('./lib/progress');
-const { repositoryFor, targetsFor } = require('./lib/targets');
+const { repositoryFor, targetConfig, targetsFor } = require('./lib/targets');
 const { sendNotification } = require('./notifications');
 const run = promisify(execFile);
 const ROOT = __dirname, DATA = process.env.DATA_DIR || path.join(ROOT, 'data');
@@ -35,7 +35,7 @@ const STATE = path.join(DATA, 'state.json'), state = loadState(STATE);
 const persist = () => saveJSON(STATE, state);
 for (const source of initial.sources) state.watchSince[source.id] ||= new Date().toISOString();
 let backups, pbs;
-const configs = createConfigService({ initial, state, write: value => saveJSON(CONFIG, value), persist, password: PASS, isBusy: () => backups?.busy || pbs?.busy, onChange: (previous, next) => { if (['repository','secondaryDatastore','password','fingerprint','namespace'].some(key => previous[key] !== next[key])) pbs.invalidate(); } });
+const configs = createConfigService({ initial, state, write: value => saveJSON(CONFIG, value), persist, password: PASS, isBusy: () => backups?.busy || pbs?.busy, onChange: (previous, next) => { if (['repository','secondaryDatastore','password','fingerprint','namespace','secondaryPBS'].some(key => JSON.stringify(previous[key]) !== JSON.stringify(next[key]))) pbs.invalidate(); } });
 const getConfig = configs.get;
 const isMaintenance = () => fs.existsSync(path.join(DATA, 'maintenance'));
 const history = createHistory({ state, data: DATA, persist, getConfig, password: PASS });
@@ -44,9 +44,9 @@ const inspectPath = createInspector(run);
 const discovery = createDiscovery({ getConfig });
 const sourceSizes = createSourceSizes({ run, inspectPath, isBusy: () => backups?.busy || isMaintenance() });
 function environment(target = 'primary') {
-  const env = { ...process.env }, config = getConfig();
+  const env = { ...process.env }, config = targetConfig(getConfig(), target);
   for (const key of Object.keys(env)) if (key.startsWith('PBS_')) delete env[key];
-  return { ...env, PBS_REPOSITORY: repositoryFor(config, target), PBS_PASSWORD: config.password, PBS_FINGERPRINT: config.fingerprint, PBS_NAMESPACE: config.namespace };
+  return { ...env, PBS_REPOSITORY: config.repository, PBS_PASSWORD: config.password, PBS_FINGERPRINT: config.fingerprint, PBS_NAMESPACE: config.namespace };
 }
 backups = createBackups({ state, data: DATA, persist, getConfig, inspectPath, environment, log: history.log, archive: history.archive, notify: notifier.notify, isMaintenance, getSourceSize: source => sourceSizes.peek(source) });
 const scheduler = createScheduler({ getConfig, state, persist, backups, log: history.log, notify: notifier.notify, isMaintenance });
@@ -73,7 +73,7 @@ const server = http.createServer(async (req, res) => {
       if (req.headers['x-requested-with'] !== 'qnap-dashboard') return json(res, 403, { error: 'Anfrage-Header fehlt.' });
     }
     // Nur die App-Hülle ist öffentlich. Daten und Aktionen benötigen eine Sitzung.
-    const assets = { '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], ...Object.fromEntries(['api','views','forms','maintenance'].map(name => ['/js/' + name + '.js', ['js/' + name + '.js', 'text/javascript']])) };
+    const assets = { '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], ...Object.fromEntries(['api','views','forms','maintenance','assistant'].map(name => ['/js/' + name + '.js', ['js/' + name + '.js', 'text/javascript']])) };
     if (req.method === 'GET' && assets[url.pathname]) {
       const [file, type] = assets[url.pathname]; res.writeHead(200, { 'Content-Type': `${type}; charset=utf-8`, 'Cache-Control': 'no-cache' });
       return res.end(fs.readFileSync(path.join(ROOT, 'public', file)));
@@ -112,6 +112,19 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/config') {
       configs.apply(await body(req));
       return json(res, 200, { success: true });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/targets/setup') {
+      const input = await body(req), current = configs.get();
+      if (typeof input.datastore !== 'string' || !/^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,63}$/.test(input.datastore)) throw new Error('Ungültiger Datastore-Name.');
+      let target;
+      if (current.repository) {
+        if (current.secondaryDatastore) throw new Error('Beide Datastores sind bereits eingerichtet. Ziele unter Einstellungen bearbeiten.');
+        configs.apply({ ...current, secondaryDatastore: input.datastore, secondaryPBS: input.ownServer ? { server: input.server, authId: input.authId, password: input.password, fingerprint: input.fingerprint || '', namespace: input.namespace || '' } : null }); target = 'secondary';
+      } else {
+        if (typeof input.server !== 'string' || !/^[a-zA-Z0-9.-]+$/.test(input.server) || typeof input.authId !== 'string' || !/^[^\s@]+@[^\s@]+$/.test(input.authId) || typeof input.password !== 'string' || !input.password) throw new Error('PBS-Adresse, Benutzer und Passwort oder Token fehlen.');
+        configs.apply({ ...current, repository: `${input.authId}@${input.server}:${input.datastore}`, password: input.password, fingerprint: input.fingerprint || '', namespace: input.namespace || '' }); target = 'primary';
+      }
+      return json(res, 200, { success: true, target });
     }
     if (req.method === 'POST' && url.pathname === '/api/sources/probe') {
       const input = await body(req); return json(res, 200, await inspectPath(input.path, input.expectedSource || ''));

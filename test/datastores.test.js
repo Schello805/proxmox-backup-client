@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { EventEmitter } = require('node:events');
-const { repositoryFor, targetsFor } = require('../lib/targets');
+const { repositoryFor, targetConfig, targetsFor } = require('../lib/targets');
 const { validateConfig } = require('../lib/validation');
 const { migrateConfig, loadConfig } = require('../lib/storage');
 const { createPBS } = require('../lib/pbs');
@@ -32,9 +32,9 @@ test('Schema-2-Migration sichert Konfiguration und erhält bisherige Datastore-Z
   const old = config(); old.schemaVersion = 2; delete old.secondaryDatastore; for (const source of old.sources) delete source.target;
   const file = path.join(directory, 'config.json'), raw = JSON.stringify(old); fs.writeFileSync(file, raw);
   const migrated = loadConfig(file, path.join(__dirname, '..', 'config.example.json'), '');
-  assert.equal(migrated.schemaVersion, 3); assert.equal(migrated.repository, old.repository); assert.equal(migrated.password, 'secret');
+  assert.equal(migrated.schemaVersion, 4); assert.equal(migrated.repository, old.repository); assert.equal(migrated.password, 'secret');
   assert.equal(migrated.secondaryDatastore, ''); assert.ok(migrated.sources.every(source => source.target === 'primary'));
-  const backup = fs.readdirSync(directory).find(name => name.includes('pre-v3-')); assert.ok(backup); assert.equal(fs.readFileSync(path.join(directory, backup), 'utf8'), raw);
+  const backup = fs.readdirSync(directory).find(name => name.includes('pre-v4-')); assert.ok(backup); assert.equal(fs.readFileSync(path.join(directory, backup), 'utf8'), raw);
   assert.equal(migrateConfig(migrated).repository, old.repository);
 });
 
@@ -82,4 +82,29 @@ test('Diagnose prüft beide konfigurierten Datastores mit getrennten Ergebnissen
   const report = diagnostics.current(); assert.equal(report.running, false); assert.deepEqual(calls, ['primary', 'secondary']);
   assert.ok(report.checks.some(check => check.name.includes('pbs2') && check.status === 'error'));
   assert.ok(report.checks.some(check => check.name === 'PBS-Verbindung' && check.status === 'ok'));
+});
+
+test('Eigener PBS hält Zugang, Namespace, Fingerprint und Passwort vom ersten Server getrennt', async () => {
+  const base = config();
+  const separate = validateConfig({ ...base, secondaryDatastore: 'pbs1', secondaryPBS: { server: 'pbs2.local', authId: 'other@pbs!token', password: 'second-secret', fingerprint: 'ab:'.repeat(31) + 'ab', namespace: 'archive' } }, base);
+  assert.deepEqual(targetConfig(separate, 'secondary'), { repository: 'other@pbs!token@pbs2.local:pbs1', password: 'second-secret', fingerprint: 'ab:'.repeat(31) + 'ab', namespace: 'archive' });
+  assert.equal(targetConfig(separate).password, 'secret');
+  const preserved = validateConfig({ ...separate, secondaryPBS: { ...separate.secondaryPBS, password: '' } }, separate);
+  assert.equal(preserved.secondaryPBS.password, 'second-secret');
+  assert.throws(() => validateConfig({ ...separate, secondaryPBS: { ...separate.secondaryPBS, server: 'different.local', password: '' } }, separate), /Passwort/);
+  assert.throws(() => validateConfig({ ...separate, secondaryPBS: { ...separate.secondaryPBS, fingerprint: 'invalid' } }, separate), /Fingerprint/);
+  const calls = [], pbs = createPBS({ getConfig: () => separate, environment: target => targetConfig(separate, target), cacheFile: '/tmp/no-pbs-assistant-cache.json', save() {}, run: async (_, args, options) => { calls.push(options.env); return { stdout: '[]' }; } });
+  await pbs.refresh('secondary'); assert.equal(calls[0].password, 'second-secret');
+  separate.namespace = 'primary-changed'; assert.ok(pbs.current('secondary').checkedAt);
+  separate.secondaryPBS.namespace = 'new-secondary'; assert.equal(pbs.current('secondary').checkedAt,null);
+  const service = createConfigService({ initial: preserved, state: { jobs: {}, watchSince: {} }, write() {}, persist() {}, isBusy: () => false, onChange() {}, password: '' });
+  assert.equal(service.safe().secondaryPBS.password, ''); assert.equal(service.safe().secondaryPBS.hasPassword,true);
+});
+
+test('Schema 3 wird mit bestehenden Quellen und beiden gemeinsamen Datastores erhalten', () => {
+  const previous = { ...config(), schemaVersion: 3 };
+  const migrated = migrateConfig(previous);
+  assert.equal(migrated.schemaVersion,4); assert.equal(migrated.secondaryPBS,null);
+  assert.equal(repositoryFor(migrated,'secondary'),'backup@pbs!token@pbs-host:pbs2');
+  assert.deepEqual(migrated.sources,previous.sources); assert.deepEqual(migrated.schedules,previous.schedules);
 });

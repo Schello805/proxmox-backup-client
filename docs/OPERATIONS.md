@@ -50,7 +50,7 @@ Die Vorprüfung ist automatisiert getestet. Das produktive systemd-Update muss a
 
 Die App zeigt ihre Version im Kopfbereich. Unter „Aufbau & Systemdetails“ stehen Node-Version, Backup Client und Betriebsprüfungen. Fehlender Client oder fehlende PBS-Einstellungen werden als Hinweis angezeigt; ungültige Konfiguration, nicht beschreibbare Speicherpfade oder ungültiger Port verhindern den Start.
 
-Konfigurationen ohne `schemaVersion` werden als Version 1 verstanden. Das aktuelle Schema 3 übernimmt Zugangsdaten, Auth-Auswahl, Quellen und Zeitpläne aus Schema 1 oder 2 und erstellt vor dem Schreiben eine geschützte Datei `config.json.pre-v3-<Zeitstempel>.json` neben dem Original. Bestehende Quellen erhalten das Ziel `primary` (bisheriger Datastore). Weitere Starts legen keine zusätzlichen Migrationskopien an. Kaputtes JSON und unbekannte neuere Schemaversionen werden nicht überschrieben. `npm run check` prüft schreibfrei.
+Konfigurationen ohne `schemaVersion` werden als Version 1 verstanden. Das aktuelle Schema 4 übernimmt Zugangsdaten, Auth-Auswahl, Quellen und Zeitpläne aus Schema 1, 2 oder 3 und erstellt vor dem Schreiben eine geschützte Datei `config.json.pre-v4-<Zeitstempel>.json` neben dem Original. Bestehende Quellen erhalten das Ziel `primary` (bisheriger Datastore). Weitere Starts legen keine zusätzlichen Migrationskopien an. Kaputtes JSON und unbekannte neuere Schemaversionen werden nicht überschrieben. `npm run check` prüft schreibfrei.
 
 ## Rückweg nach fehlgeschlagenem Update
 
@@ -175,3 +175,14 @@ Stimmt die aktuelle SMB-Quelle nicht mehr mit der hinterlegten Erwartung überei
 Die Navigation im Kopfbereich öffnet Quellen, PBS-Bestand und Diagnose als normale App-Ansichten. Browser-Zurück und direkte Links funktionieren auch für Quellendetails. Nur die Anmeldung verwendet ein Modal.
 
 In der Übersicht den Quellennamen für den Verlauf oder den Zeitplan zum Bearbeiten anklicken. Der Detailbereich bleibt unter der Quellentabelle. Dort lassen sich Name, Pfad, erwartete SMB-Freigabe, Datastore und Wochenplan ändern sowie Verlauf und Protokoll ansehen. „Quelle speichern“ speichert Quelle und Wochenplan gemeinsam; die Zeitzone gilt weiterhin zentral für alle Quellen. „Schließen“ kehrt zur kompakten Übersicht zurück.
+
+
+## Kompakter Einrichtungsassistent
+
+„+ Hinzufügen“ in der Übersicht öffnet den Quellen-Assistenten. Drei Schritte: Angaben → Host/LXC vorbereiten → SMB prüfen und hinzufügen. Name, Backup-ID und LXC-Pfad werden vorgeschlagen; vorhandene Angaben lassen sich ändern. Bereits im LXC sichtbare Quellen überspringen die Host-Einrichtung. Jeder Befehlsblock nennt den Rechner und besitzt eine Kopiertaste, auch beim Zugriff per HTTP im LAN.
+
+Der Host-Befehl prüft die erwartete SMB-Freigabe, verwendet einen freien `mp`-Slot und reicht ihn schreibgeschützt durch. Er legt keine SMB-Verbindung an und stoppt keinen LXC. Fehlende SMB-Freigaben zuerst über Proxmox → Rechenzentrum → Storage → Hinzufügen → SMB/CIFS anlegen. Nach Änderungen gegebenenfalls den LXC herunterfahren und wieder starten; den App-Dienst erst nach Ende laufender Backups neu starten. Die abschließende App-Prüfung muss die erwartete Freigabe bestätigen. Neue Quellen starten ohne Automatik; den Wochenplan anschließend im Detailbereich wählen.
+
+„PBS-Ziel“ unterstützt einen weiteren Datastore mit gemeinsamem Zugang oder einen zweiten PBS mit eigener Adresse, Benutzer, Passwort/Token, Fingerprint und Namespace. Insgesamt sind zwei Ziele möglich; jede Quelle verwendet eines davon. Ein neuer Datastore kann mit dem vorbereiteten Befehl auf einem bereits gemounteten PBS-Datenträger angelegt werden. Die App formatiert keine Datenträger und führt die Kopierbefehle nicht selbst aus. Nach dem Speichern wird der Zugriff geprüft; bei einem Verbindungsfehler bleibt das Ziel gespeichert und kann korrigiert werden. Zweiten Zugang unter Einstellungen → Eigener Zugang für Datastore 2 bearbeiten. Leeres Passwort behält das Secret nur bei gleicher Serveradresse und Auth-ID.
+
+Befehlsreferenzen: [LXC Bind-Mounts](https://pve.proxmox.com/pve-docs/pct.1.html), [PBS-Datastore und Zertifikat](https://pbs.proxmox.com/docs/proxmox-backup-manager/man1.html).

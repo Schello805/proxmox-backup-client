@@ -38,7 +38,7 @@ require('../lib/backups').createBackups = options => realBackups({ ...options, s
   const child = new EventEmitter(); child.stdout = new EventEmitter(); child.stderr = new EventEmitter();
   child.kill = signal => { if (activeChild === child) { activeChild = null; child.emit('close', null, signal); } };
   activeChild = child;
-  setImmediate(() => child.stdout.emit('data', Buffer.from(`E2E repository: ${spawnOptions.env.PBS_REPOSITORY}\nprocessed 5 GiB in 2min, uploaded 1 GiB\n`)));
+  setImmediate(() => child.stdout.emit('data', Buffer.from(`E2E repository: ${spawnOptions.env.PBS_REPOSITORY}\nE2E namespace: ${spawnOptions.env.PBS_NAMESPACE}\nE2E credential match: ${spawnOptions.env.PBS_PASSWORD === (spawnOptions.env.PBS_REPOSITORY.includes('pbs2.local') ? 'e2e-second-secret' : 'e2e-pbs-secret')}\nprocessed 5 GiB in 2min, uploaded 1 GiB\n`)));
   return child;
 } });
 process.on('message', message => { if (message?.type === 'finish' && activeChild) { const child = activeChild; activeChild = null; child.emit('close', message.code, null); } });

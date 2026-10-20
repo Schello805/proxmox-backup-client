@@ -25,7 +25,7 @@ test('HTTP: Auth, Secret-Schutz, persistente Konfiguration und fehlende Mounts',
  assert.equal(unauth.status, 401); assert.equal(unauth.headers.get('www-authenticate'), null);
  assert.equal((await fetch(url + '/api/activity')).status, 401);
  for (const route of ['/api/updates','/api/diagnostics']) assert.equal((await fetch(url + route)).status,401);
- for (const route of ['/api/updates/check','/api/diagnostics','/api/refresh']) assert.equal((await fetch(url + route,{method:'POST',headers:{'X-Requested-With':'qnap-dashboard'}})).status,401);
+ for (const route of ['/api/updates/check','/api/diagnostics','/api/refresh','/api/targets/setup']) assert.equal((await fetch(url + route,{method:'POST',headers:{'X-Requested-With':'qnap-dashboard'}})).status,401);
  assert.equal((await login('wrong')).status, 401);
  assert.equal((await login('123456', { Origin: 'https://evil.example' })).status, 403);
  const loggedIn = await login('123456'); assert.equal(loggedIn.status, 200);
@@ -40,6 +40,8 @@ test('HTTP: Auth, Secret-Schutz, persistente Konfiguration und fehlende Mounts',
  assert.equal((await fetch(url + '/api/activity', { headers })).status, 200);
  const initial = await (await fetch(url + '/api/status', { headers })).json();
  assert.equal(initial.system.version,require('../package.json').version); assert.ok(initial.system.checks.length>=4); assert.equal(initial.folders.length, 6); assert.equal(initial.folders.find(source => source.id === 'daten').path, '/mnt/Daten/Daten'); assert.equal(initial.config.password, '');
+ assert.equal((await post('/api/targets/setup',{datastore:'first',server:'pbs.local',authId:'backup@pbs',password:'first-secret',fingerprint:''})).status,200);
+ assert.equal((await post('/api/targets/setup',{datastore:'../invalid'})).status,400);
  const config = { ...initial.config, repository: 'backup@pbs@localhost:store', password: 'test-secret', timezone: 'UTC', notifications: { enabled: false, url: 'http://127.0.0.1/test-topic', token: 'notify-secret' }, schedules: { ...initial.config.schedules, software: { days: [1,3,5], time: '02:30' } } };
  assert.equal((await post('/api/config', config, { Origin: 'https://evil.example' })).status, 403);
  assert.equal((await post('/api/config', config)).status, 200);
@@ -47,6 +49,15 @@ test('HTTP: Auth, Secret-Schutz, persistente Konfiguration und fehlende Mounts',
  const statusText = await (await fetch(url + '/api/status', { headers })).text();
  assert.ok(!statusText.includes('test-secret')); assert.ok(!statusText.includes('notify-secret')); assert.equal(JSON.parse(statusText).config.timezone,'UTC'); assert.equal(JSON.parse(statusText).config.hasPassword, true);
  assert.deepEqual(JSON.parse(statusText).config.schedules.software, { days: [1,3,5], time: '02:30' });
+ const setup = await post('/api/targets/setup',{datastore:'store',ownServer:true,server:'pbs2.local',authId:'archive@pbs',password:'second-private',fingerprint:'',namespace:'other'});
+ assert.equal(setup.status,200); assert.equal((await setup.json()).target,'secondary');
+ const separate = (await (await fetch(url + '/api/status',{headers})).json());
+ assert.equal(separate.targets[1].repository,'archive@pbs@pbs2.local:store');
+ assert.equal(separate.config.secondaryPBS.password,''); assert.equal(separate.config.secondaryPBS.hasPassword,true);
+ assert.equal(JSON.stringify(separate).includes('second-private'),false);
+ assert.deepEqual(separate.config.schedules,config.schedules); assert.equal(separate.config.timezone,'UTC');
+ assert.equal((await post('/api/targets/setup',{datastore:'third'})).status,400);
+ assert.equal((await post('/api/config',{...config,secondaryDatastore:'',secondaryPBS:null})).status,200);
  assert.equal((await post('/api/backup/unknown', {})).status, 400);
  const sources = [...initial.config.sources, { id:'testquelle',name:'Testquelle',path:'/mnt/Daten/Fehlt-' + Date.now(),expectedSource:'' }];
  assert.equal((await post('/api/sources', { sources })).status,200);

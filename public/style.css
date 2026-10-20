@@ -1957,3 +1957,30 @@ a.nav { display: block; text-decoration: none; box-sizing: border-box; }
 .workspace-link { padding: 7px 9px; }
 @media(min-width:761px) and (max-width:1300px) { header>span { font-size: 8px; letter-spacing: 1px; } #updated { display: none; } }
 @media(max-width:760px) { .header-actions { flex-wrap: wrap; } .workspace-nav { order: 3; width: 100%; } }
+
+.assistant-choices { display: flex; gap: 8px; margin-bottom: 14px; }
+.assistant-choices a { padding: 9px 14px; color: var(--muted); text-decoration: none; border-radius: 6px; background: #fff; border: 1px solid var(--line); font-size: 12px; }
+.assistant-choices a.active { color: var(--green); border-color: var(--green); background: #edf6f1; }
+.assistant-panel { padding: 20px; }
+.assistant-steps { display: flex; list-style: none; gap: 24px; padding: 0 0 14px; margin: 0 0 18px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+.assistant-steps [aria-current=step] { color: var(--green); font-weight: 700; }
+.assistant-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px 18px; }
+.assistant-panel label { display: block; font-size: 12px; font-weight: 600; }
+.assistant-panel input:not([type=checkbox]), .assistant-panel select { display: block; width: 100%; box-sizing: border-box; margin-top: 5px; padding: 9px; border: 1px solid var(--line); border-radius: 5px; font: inherit; background: #fbfdfb; }
+.assistant-panel input[type=checkbox] { margin-left: 10px; }
+.command-card { border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin: 12px 0; }
+.command-card strong { font-size: 12px; }
+.command-card pre { margin: 8px 0 0; max-height: 150px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; padding: 12px; }
+.assistant-summary { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+.copy-buffer { position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; }
+#assistantResult { font-size: 12px; overflow-wrap: anywhere; }
+.add-assistant, #assistant a.secondary, #settings a.secondary, #sourcesDialog a.secondary { text-decoration: none; font-size: 12px; }
+@media(max-width:760px) { .assistant-fields { grid-template-columns: 1fr; } .assistant-steps { gap: 10px; font-size: 10px; } .assistant-panel { padding: 14px; } }
+#assistant .page-heading { margin: 14px 0 12px; }
+#assistant .page-heading h1 { font-size: 25px; margin: 0; }
+#assistant .page-heading .eyebrow, #assistant .page-heading p { display: none; }
+.assistant-panel { padding: 16px; }
+.assistant-steps { margin-bottom: 12px; padding-bottom: 12px; }
+.assistant-commands { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,350px),1fr)); gap: 12px; }
+.assistant-commands .command-card { margin: 10px 0 0; min-width: 0; }
+.assistant-commands pre { max-height: 130px; white-space: pre; }

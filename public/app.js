@@ -1,8 +1,10 @@
+import { installAssistant } from '/js/assistant.js';
 import { installMaintenance } from '/js/maintenance.js';
 import { createAPI } from '/js/api.js';
 import { createViews, dayNames } from '/js/views.js';
 import { createFormState, clearFieldErrors, showFieldErrors, serverField, validateMainForm, validateNotifyForm, validateSourceForm } from '/js/forms.js';
 'use strict';
+let assistant;
 const refreshWaiters = [];
 const $ = selector => document.querySelector(selector);
 const names = { software: 'Software', filme: 'Filme', serien: 'Serien', hoerspiele: 'Hörspiele', musik: 'Musik', daten: 'Daten' };
@@ -53,7 +55,7 @@ function buildSchedule(id, name, schedule) {
   row.append(title, mode, time, days, hint); $('#schedules').append(row); paint();
 }
 function fillForm(config) {
-  const mainSnapshot = JSON.stringify([config.repository, config.secondaryDatastore, config.fingerprint, config.namespace, config.timezone, config.staleAfterDays, config.sources, config.schedules, config.hasPassword]);
+  const mainSnapshot = JSON.stringify([config.repository, config.secondaryDatastore, config.secondaryPBS, config.fingerprint, config.namespace, config.timezone, config.staleAfterDays, config.sources, config.schedules, config.hasPassword]);
   if (!formState.dirty('configForm') && mainSnapshot !== lastMainSnapshot) {
   lastMainSnapshot = mainSnapshot;
   const form = $('#configForm');
@@ -62,6 +64,9 @@ function fillForm(config) {
   form.elements.server.value = at > 0 && colon > at ? config.repository.slice(at + 1, colon) : '';
   form.elements.datastore.value = colon > at ? config.repository.slice(colon + 1) : 'pbs1';
   form.elements.secondaryDatastore.value = config.secondaryDatastore || '';
+  form.elements.secondaryOwnServer.checked = Boolean(config.secondaryPBS); $('#secondaryFields').hidden = !config.secondaryPBS; $('#secondaryAccess').open = Boolean(config.secondaryPBS);
+  for (const [field, key] of [['secondaryServer','server'],['secondaryAuthId','authId'],['secondaryFingerprint','fingerprint'],['secondaryNamespace','namespace']]) form.elements[field].value = config.secondaryPBS?.[key] || '';
+  form.elements.secondaryPassword.value = '';
   for (const key of ['fingerprint', 'namespace']) form.elements[key].value = config[key];
   $('#repositoryPreview').textContent = config.repository || 'Noch nicht gespeichert';
   form.elements.password.value = '';
@@ -121,8 +126,9 @@ async function refresh() {
       row.append(plan, element('td', date(folder.job.lastSuccess)));
       const state = element('td'); state.className = 'job-state'; renderJob(state, folder.job, folder.health); row.append(state); const status = folder.job.status;
       const actions = element('td'), start = element('button', '↗ Sichern', 'row-action'), logs = element('button', 'Protokoll', 'row-action');
-      start.dataset.start = folder.id; start.dataset.available = String(Boolean(folder.ok && folder.targetRepository && data.config.hasPassword));
-      start.disabled = !folder.ok || !folder.targetRepository || !data.config.hasPassword || ['running', 'queued'].includes(status);
+      const targetReady = data.targets?.find(target => target.id === (folder.target || 'primary'))?.hasPassword ?? data.config.hasPassword;
+      start.dataset.start = folder.id; start.dataset.available = String(Boolean(folder.ok && folder.targetRepository && targetReady));
+      start.disabled = !folder.ok || !folder.targetRepository || !targetReady || ['running', 'queued'].includes(status);
       start.addEventListener('click', async () => { start.disabled = true; try { await api(`/api/backup/${folder.id}`, {}); notice(`${names[folder.id]} zur Sicherung vorgemerkt.`); await refresh(); } catch (e) { notice(e.message, true); start.disabled = false; } });
       logs.addEventListener('click', () => openLog(folder.id)); actions.append(start, logs); row.append(actions); $('#folders').append(row);
     }
@@ -160,12 +166,13 @@ function showContext(view, id) {
 function navigate() {
   restoreContext();
   const [requested, id, tab] = location.hash.slice(1).split('/');
-  const page = ['overview','settings','guide','sourcesDialog','pbsDialog','systemDialog'].includes(requested) ? requested : 'overview';
+  const page = ['overview','settings','guide','sourcesDialog','pbsDialog','systemDialog','assistant'].includes(requested) ? requested : 'overview';
   document.body.dataset.page = page;
-  if (!id) window.scrollTo({ top: 0, behavior: 'instant' });
+  if (!id || page === 'assistant') window.scrollTo({ top: 0, behavior: 'instant' });
   document.querySelectorAll('.page').forEach(el => el.hidden = el.id !== page);
   document.querySelectorAll('[data-page]').forEach(el => { const active = el.dataset.page === page; el.classList.toggle('active', active); if (active) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current'); });
   if (!savedConfig) return;
+  if (page === 'assistant') assistant?.open(id);
   if (page === 'sourcesDialog') renderSources();
   if (page === 'pbsDialog') openPBS();
   if (page === 'systemDialog') document.dispatchEvent(new Event('open-system'));
@@ -196,6 +203,7 @@ $('#configForm').addEventListener('submit', async event => {
   const target = Object.fromEntries(['server','authId','datastore'].map(key => [key, form.elements[key].value.trim()]));
   data.repository = target.server || target.authId || form.elements.password.value ? `${target.authId}@${target.server}:${target.datastore}` : '';
   for (const key of ['password', 'fingerprint', 'namespace', 'timezone', 'secondaryDatastore']) data[key] = form.elements[key].value;
+  data.secondaryPBS = form.elements.secondaryOwnServer.checked ? Object.fromEntries([['server','secondaryServer'],['authId','secondaryAuthId'],['password','secondaryPassword'],['fingerprint','secondaryFingerprint'],['namespace','secondaryNamespace']].map(([key, field]) => [key, form.elements[field].value])) : null;
   data.staleAfterDays = Number(form.elements.staleAfterDays.value);
   data.sources = savedConfig.sources;
   for (const id of Object.keys(names)) { const control = scheduleControls.get(id); data.schedules[id] = { days: control.mode.value === 'manual' ? [] : control.days, time: control.mode.value === 'manual' ? '' : control.time.value }; }
@@ -286,7 +294,7 @@ function resetSource() {
   sourceEditing = null; clearFieldErrors($('#sourceForm')); $('#sourceForm').reset(); $('#sourceForm').elements.id.readOnly = false; $('#sourceFormTitle').textContent = 'Quelle hinzufügen'; $('#sourceResult').textContent = ''; fillSourcePlan({ days: [], time: '' });
 }
 function backupTargets() {
-  return [{ id: 'primary', name: savedConfig?.repository?.split(':').at(-1) || 'Datastore 1' }, ...(savedConfig?.secondaryDatastore ? [{ id: 'secondary', name: savedConfig.secondaryDatastore }] : [])];
+  return [{ id: 'primary', name: savedConfig?.repository?.split(':').at(-1) || 'Datastore 1' }, ...(savedConfig?.secondaryDatastore ? [{ id: 'secondary', name: savedConfig.secondaryDatastore + (savedConfig.secondaryPBS ? ' · ' + savedConfig.secondaryPBS.server : '') }] : [])];
 }
 function renderSources() {
   const selected = $('#sourceForm').elements.target.value || 'primary';
@@ -457,3 +465,7 @@ function editSource(id, inline = false) {
   if (inline) showContext('sourceForm', id); else form.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 fillSourcePlan({ days: [], time: '' });
+
+assistant = installAssistant({ api, getConfig: () => savedConfig, refresh, openSource: id => editSource(id, true) });
+
+$('#configForm').elements.secondaryOwnServer.addEventListener('change', event => { $('#secondaryFields').hidden = !event.target.checked; });
