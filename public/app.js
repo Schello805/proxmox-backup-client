@@ -87,8 +87,9 @@ async function refresh() {
     for (const folder of data.folders) {
       const row = element('tr'); row.dataset.folder = folder.id; const source = element('td'); source.append(element('strong', names[folder.id]), element('code', folder.path)); row.append(source);
       const mount = element('td'), badge = element('span', folder.ok ? '● Eingebunden' : '● Nicht verfügbar', `badge ${folder.ok ? 'ok' : 'bad'}`); badge.title = folder.ok ? `${folder.mount.source} → ${folder.mount.target} (${folder.mount.type})` : folder.error; mount.append(badge); row.append(mount);
-      row.append(element('td', scheduleText(folder.schedule)), element('td', date(folder.job.lastSuccess)));
-      const state = element('td'), status = folder.job.status; const statusBadge = element('span', statuses[status] || status, `badge ${status === 'success' ? 'ok' : ['running', 'queued'].includes(status) ? 'busy' : ['failed', 'interrupted'].includes(status) ? 'bad' : ''}`); statusBadge.title = folder.job.error || ''; state.className = 'job-state'; state.append(statusBadge); if (folder.job.error) state.append(element('small', folder.job.error, 'row-error')); row.append(state);
+      const plan = element('td', scheduleText(folder.schedule)); plan.title = plan.textContent;
+      row.append(plan, element('td', date(folder.job.lastSuccess)));
+      const state = element('td'), status = folder.job.status; const statusBadge = element('span', statuses[status] || status, `badge ${status === 'success' ? 'ok' : ['running', 'queued'].includes(status) ? 'busy' : ['failed', 'interrupted'].includes(status) ? 'bad' : ''}`); statusBadge.title = folder.job.error || ''; state.className = 'job-state'; state.append(statusBadge); if (folder.job.error) { const error = element('small', folder.job.error, 'row-error'); error.title = folder.job.error; state.append(error); } row.append(state);
       const actions = element('td'), start = element('button', '↗ Sichern', 'row-action'), logs = element('button', 'Protokoll', 'row-action');
       start.dataset.start = folder.id; start.dataset.available = String(Boolean(folder.ok && data.config.repository && data.config.hasPassword));
       start.disabled = !folder.ok || !data.config.repository || !data.config.hasPassword || ['running', 'queued'].includes(status);
@@ -104,8 +105,9 @@ async function refresh() {
 }
 async function refreshLog() { try { const data = await api(`/api/logs/${logFolder}`); const pre = $('#logText'), bottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 40; pre.textContent = data.log; if (bottom) pre.scrollTop = pre.scrollHeight; } catch (e) { notice(e.message, true); } }
 async function openLog(id) { logFolder = id; $('#logTitle').textContent = `Protokoll · ${names[id]}`; $('#logText').textContent = 'Wird geladen …'; $('#logDialog').showModal(); await refreshLog(); }
+$('#liveDetails').addEventListener('click', () => { if (previousActive) openLog(previousActive); });
 $('#closeLog').addEventListener('click', () => $('#logDialog').close()); $('#logDialog').addEventListener('close', () => logFolder = null);
-function navigate(page) { if (!['overview', 'settings', 'guide'].includes(page)) page = 'overview'; document.querySelectorAll('.page').forEach(el => el.hidden = el.id !== page); document.querySelectorAll('.nav').forEach(el => el.classList.toggle('active', el.dataset.page === page)); }
+function navigate(page) { if (!['overview', 'settings', 'guide'].includes(page)) page = 'overview'; document.body.dataset.page = page; document.querySelectorAll('.page').forEach(el => el.hidden = el.id !== page); document.querySelectorAll('.nav').forEach(el => el.classList.toggle('active', el.dataset.page === page)); }
 document.querySelectorAll('.nav').forEach(button => button.addEventListener('click', () => { location.hash = button.dataset.page; })); window.addEventListener('hashchange', () => navigate(location.hash.slice(1))); navigate(location.hash.slice(1));
 $('#refresh').addEventListener('click', refresh);
 $('#configForm').addEventListener('submit', async event => {
@@ -156,9 +158,7 @@ async function refreshActivity() {
       $('#activityDescription').textContent = 'Der Auftrag läuft im LXC weiter, auch wenn du die Seite schließt.';
       for (const [label, value] of [['Gestartet', date(job.startedAt)], ['Laufzeit', duration(job.startedAt)], ['Auslöser', job.source === 'schedule' ? 'Zeitplan' : 'Manuell']]) { const item = element('span'); item.append(element('strong', label), document.createTextNode(value)); $('#activityMeta').append(item); }
       $('#liveDetails').hidden = false;
-      if (previousActive !== data.active) $('#liveDetails').open = true;
-      const pre = $('#liveLog'), bottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 40;
-      pre.textContent = data.log || 'Der Auftrag wird vorbereitet …'; if (bottom) pre.scrollTop = pre.scrollHeight;
+
     } else {
       $('#activityTitle').textContent = 'Gerade läuft kein Backup';
       const latest = Object.entries(data.jobs).filter(([, job]) => job.endedAt).sort((a, b) => b[1].endedAt.localeCompare(a[1].endedAt))[0];
@@ -166,12 +166,13 @@ async function refreshActivity() {
       $('#activityDescription').textContent = latest ? `Letzter Lauf: ${names[latest[0]]} · ${statuses[latest[1].status]} · ${date(latest[1].endedAt)}${latest[1].error ? ' · ' + latest[1].error : ''}` : 'Starte unten eine Sicherung oder hinterlege einen Wochenplan in den Einstellungen.';
       $('#liveDetails').hidden = true;
     }
+    $('#activityDescription').title = $('#activityDescription').textContent;
     previousActive = data.active;
     $('#queueInfo').textContent = data.queue.length ? `Danach: ${data.queue.map(id => names[id]).join(' → ')}` : 'Keine weiteren Aufträge in der Warteschlange.';
     for (const row of document.querySelectorAll('[data-folder]')) {
       const job = data.jobs[row.dataset.folder] || { status: 'idle' }, state = row.querySelector('.job-state');
       state.replaceChildren(element('span', statuses[job.status], `badge ${job.status === 'success' ? 'ok' : ['running', 'queued'].includes(job.status) ? 'busy' : ['failed', 'interrupted'].includes(job.status) ? 'bad' : ''}`));
-      if (job.error) state.append(element('small', job.error, 'row-error'));
+      if (job.error) { const error = element('small', job.error, 'row-error'); error.title = job.error; state.append(error); }
       row.children[3].textContent = date(job.lastSuccess);
       const start = row.querySelector('[data-start]'); start.disabled = start.dataset.available !== 'true' || ['running', 'queued'].includes(job.status);
     }
