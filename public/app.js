@@ -53,7 +53,7 @@ function buildSchedule(id, name, schedule) {
   row.append(title, mode, time, days, hint); $('#schedules').append(row); paint();
 }
 function fillForm(config) {
-  const mainSnapshot = JSON.stringify([config.repository, config.fingerprint, config.namespace, config.timezone, config.staleAfterDays, config.sources, config.schedules, config.hasPassword]);
+  const mainSnapshot = JSON.stringify([config.repository, config.secondaryDatastore, config.fingerprint, config.namespace, config.timezone, config.staleAfterDays, config.sources, config.schedules, config.hasPassword]);
   if (!formState.dirty('configForm') && mainSnapshot !== lastMainSnapshot) {
   lastMainSnapshot = mainSnapshot;
   const form = $('#configForm');
@@ -61,6 +61,7 @@ function fillForm(config) {
   form.elements.authId.value = at > 0 ? config.repository.slice(0, at) : '';
   form.elements.server.value = at > 0 && colon > at ? config.repository.slice(at + 1, colon) : '';
   form.elements.datastore.value = colon > at ? config.repository.slice(colon + 1) : 'pbs1';
+  form.elements.secondaryDatastore.value = config.secondaryDatastore || '';
   for (const key of ['fingerprint', 'namespace']) form.elements[key].value = config[key];
   $('#repositoryPreview').textContent = config.repository || 'Noch nicht gespeichert';
   form.elements.password.value = '';
@@ -97,13 +98,16 @@ async function refresh() {
     $('#runningCount').textContent = data.folders.filter(f => ['running', 'queued'].includes(f.job.status)).length;
     $('#successCount').textContent = `${data.folders.filter(f => f.job.status === 'success').length} / ${data.folders.length}`;
     $('#targetStatus').textContent = data.connection ? (data.connection.ok ? 'Verbunden' : 'Prüfung fehlgeschlagen') : 'Ungeprüft';
-    $('#targetName').textContent = data.config.repository || 'Noch kein Repository'; $('#flowTarget').textContent = data.config.repository || 'Ziel noch nicht konfiguriert';
+    $('#targetName').textContent = data.targets?.map(target => target.name).join(' · ') || data.config.repository || 'Noch kein Repository';
+    $('#targetName').title = (data.targets || []).map(target => target.repository).join(' · ');
+    const checks = Object.values(data.connections || {}).filter(Boolean);
+    if (data.targets?.length > 1) $('#targetStatus').textContent = checks.length ? `${checks.filter(check => check.ok).length} / ${data.targets.length} geprüft OK` : 'Ungeprüft'; $('#flowTarget').textContent = data.config.repository || 'Ziel noch nicht konfiguriert';
     $('#folders').replaceChildren();
     sourcePage = Math.max(0, Math.min(sourcePage, Math.ceil(data.folders.length / 6) - 1));
     $('#overviewPager').hidden = data.folders.length <= 6; $('#sourcePage').textContent = `Seite ${sourcePage + 1} / ${Math.ceil(data.folders.length / 6)}`;
     $('#previousSources').disabled = sourcePage === 0; $('#nextSources').disabled = (sourcePage + 1) * 6 >= data.folders.length;
     for (const folder of data.folders.slice(sourcePage * 6, (sourcePage + 1) * 6)) {
-      const row = element('tr'); row.dataset.folder = folder.id; const source = element('td'); const sourceButton = element('button', names[folder.id], 'source-link'); sourceButton.title = 'Verlauf und Details öffnen'; sourceButton.addEventListener('click', () => openHistory(folder.id)); source.append(sourceButton, element('code', folder.path)); row.append(source);
+      const row = element('tr'); row.dataset.folder = folder.id; const source = element('td'); const sourceButton = element('button', names[folder.id], 'source-link'); sourceButton.title = 'Verlauf und Details öffnen'; sourceButton.addEventListener('click', () => openHistory(folder.id)); const path = element('code', folder.path); path.title = folder.path; const target = element('small', folder.targetRepository?.split(':').at(-1) || 'Ziel fehlt', 'source-target'); target.title = folder.targetRepository || 'PBS-Ziel noch nicht konfiguriert'; const heading = element('div', undefined, 'source-heading'); heading.append(sourceButton, target); source.append(heading, path); row.append(source);
       const mount = element('td'), badge = element('span', folder.ok ? '● Eingebunden' : '● Nicht verfügbar', `badge ${folder.ok ? 'ok' : 'bad'}`); badge.title = folder.ok ? `${folder.mount.source} → ${folder.mount.target} (${folder.mount.type}) · ${folder.identityConfirmed ? 'SMB-Identität bestätigt' : 'SMB-Quelle noch nicht festgelegt: unter Quellen bestätigen'}` : folder.error; mount.append(badge);
       const size = folder.size;
       const sizeLabel = size?.bytes != null ? new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 }).format(size.bytes / 1024 ** 3) + ' GiB' : ({ scanning: 'Größe wird ermittelt …', pending: 'Größe vorgemerkt …', error: 'Größe nicht verfügbar' }[size?.status] || 'Größe: —');
@@ -114,15 +118,16 @@ async function refresh() {
       row.append(plan, element('td', date(folder.job.lastSuccess)));
       const state = element('td'); state.className = 'job-state'; renderJob(state, folder.job, folder.health); row.append(state); const status = folder.job.status;
       const actions = element('td'), start = element('button', '↗ Sichern', 'row-action'), logs = element('button', 'Protokoll', 'row-action');
-      start.dataset.start = folder.id; start.dataset.available = String(Boolean(folder.ok && data.config.repository && data.config.hasPassword));
-      start.disabled = !folder.ok || !data.config.repository || !data.config.hasPassword || ['running', 'queued'].includes(status);
+      start.dataset.start = folder.id; start.dataset.available = String(Boolean(folder.ok && folder.targetRepository && data.config.hasPassword));
+      start.disabled = !folder.ok || !folder.targetRepository || !data.config.hasPassword || ['running', 'queued'].includes(status);
       start.addEventListener('click', async () => { start.disabled = true; try { await api(`/api/backup/${folder.id}`, {}); notice(`${names[folder.id]} zur Sicherung vorgemerkt.`); await refresh(); } catch (e) { notice(e.message, true); start.disabled = false; } });
       logs.addEventListener('click', () => openLog(folder.id)); actions.append(start, logs); row.append(actions); $('#folders').append(row);
     }
     $('#systemInfo').replaceChildren();
     for (const [label, value] of [['Host', data.system.hostname], ['System', data.system.platform], ['Backup Client', data.system.client], ['Zeitpläne', data.system.timezone]]) { const item = element('span'); item.append(element('strong', label), document.createTextNode(value)); $('#systemInfo').append(item); }
     fillForm(data.config); loaded = true;
-    if (data.connection) $('#connectionResult').textContent = `${data.connection.message} (${date(data.connection.checkedAt)})`;
+    const connectionMessages = (data.targets || []).filter(target => data.connections?.[target.id]).map(target => `${target.name}: ${data.connections[target.id].message} (${date(data.connections[target.id].checkedAt)})`);
+    $('#connectionResult').textContent = connectionMessages.join(' · ');
     await refreshActivity();
   } catch (e) { $('#updated').textContent = 'Aktualisierung fehlgeschlagen'; if (authenticated) notice(e.message, true); } finally { polling = false; if (refreshWaiters.length) { const waiters = refreshWaiters.splice(0); await refresh(); for (const resolve of waiters) resolve(); } }
 }
@@ -140,7 +145,7 @@ $('#configForm').addEventListener('submit', async event => {
   const form = event.currentTarget, button = form.querySelector('[type=submit]'), data = { schedules: {} };
   const target = Object.fromEntries(['server','authId','datastore'].map(key => [key, form.elements[key].value.trim()]));
   data.repository = target.server || target.authId || form.elements.password.value ? `${target.authId}@${target.server}:${target.datastore}` : '';
-  for (const key of ['password', 'fingerprint', 'namespace', 'timezone']) data[key] = form.elements[key].value;
+  for (const key of ['password', 'fingerprint', 'namespace', 'timezone', 'secondaryDatastore']) data[key] = form.elements[key].value;
   data.staleAfterDays = Number(form.elements.staleAfterDays.value);
   data.sources = savedConfig.sources;
   for (const id of Object.keys(names)) { const control = scheduleControls.get(id); data.schedules[id] = { days: control.mode.value === 'manual' ? [] : control.days, time: control.mode.value === 'manual' ? '' : control.time.value }; }
@@ -152,7 +157,7 @@ $('#configForm').addEventListener('submit', async event => {
 });
 $('#testConnection').addEventListener('click', async event => {
   const button = event.currentTarget; button.disabled = true; $('#connectionResult').textContent = 'Verbindung wird geprüft …';
-  try { const data = await api('/api/connection', {}); $('#connectionResult').textContent = data.message; notice(data.message, !data.ok); await refresh(); } catch (e) { notice(e.message, true); } finally { button.disabled = false; }
+  try { const results = []; for (const target of backupTargets()) { const data = await api('/api/connection', { target: target.id }); results.push(`${target.name}: ${data.message}`); } await refresh(); $('#connectionResult').textContent = results.join(' · '); } catch (e) { notice(e.message, true); } finally { button.disabled = false; }
 });
 function showLogin() {
   authEpoch++; authenticated = false; loaded = false;
@@ -186,7 +191,7 @@ async function refreshActivity() {
     let estimateJob = data.active ? data.jobs[data.active] : null;
     if (data.active) {
       const job = data.jobs[data.active];
-      $('#activityTitle').textContent = `${names[data.active]} · ${data.phase === 'checking' ? 'Quelle wird geprüft' : 'Backup läuft'}`;
+      $('#activityTitle').textContent = `${names[data.active]} · ${job.repository?.split(':').at(-1) || 'Ziel wird geprüft'} · ${data.phase === 'checking' ? 'Quelle wird geprüft' : 'Backup läuft'}`;
       $('#activityDescription').textContent = job.progress ? `Messwert: ${date(job.progress.updatedAt)} · Upload zählt die vom Client gemeldeten Daten; Komprimierung und Deduplizierung beeinflussen den Netzverkehr.` : 'Warte auf Messwerte des Clients. Ältere Clients liefern eventuell erst am Ende Werte; das Live-Protokoll bleibt verfügbar.';
       for (const [label, value] of [['Laufzeit', duration(job.startedAt)], ['Verarbeitet', formatBytes(job.progress?.processedBytes)], ['Upload (Client)', formatBytes(job.progress?.uploadedBytes)], ['Ø Verarbeitung', job.progress?.processingBytesPerSecond != null ? formatBytes(job.progress.processingBytesPerSecond) + '/s' : '—']]) { const item = element('span'); item.append(element('strong', label), document.createTextNode(value)); $('#activityMeta').append(item); }
       $('#liveDetails').hidden = false;
@@ -199,6 +204,7 @@ async function refreshActivity() {
       $('#activityDescription').textContent = latest ? `Letzter Lauf: ${names[latest[0]]} · ${statuses[latest[1].status]} · ${date(latest[1].endedAt)}${latest[1].error ? ' · ' + latest[1].error : ''}` : 'Starte unten eine Sicherung oder hinterlege einen Wochenplan in den Einstellungen.';
       $('#liveDetails').hidden = true;
     }
+    $('#activityTitle').title = $('#activityTitle').textContent;
     $('#activityDescription').title = $('#activityDescription').textContent;
     previousActive = data.active;
     renderEstimate($('#queueInfo'), estimateJob, data.queue.length ? `Danach: ${data.queue.map(id => names[id]).join(' → ')}` : estimateJob ? '' : 'Keine weiteren Aufträge in der Warteschlange.');
@@ -229,15 +235,22 @@ $('#manageSources').addEventListener('click', () => { if (!savedConfig) return; 
 function resetSource() {
   sourceEditing = null; clearFieldErrors($('#sourceForm')); $('#sourceForm').reset(); $('#sourceForm').elements.id.readOnly = false; $('#sourceFormTitle').textContent = 'Quelle hinzufügen'; $('#sourceResult').textContent = '';
 }
+function backupTargets() {
+  return [{ id: 'primary', name: savedConfig?.repository?.split(':').at(-1) || 'Datastore 1' }, ...(savedConfig?.secondaryDatastore ? [{ id: 'secondary', name: savedConfig.secondaryDatastore }] : [])];
+}
 function renderSources() {
+  const selected = $('#sourceForm').elements.target.value || 'primary';
+  $('#sourceForm').elements.target.replaceChildren(...backupTargets().map(target => { const option = element('option', target.name); option.value = target.id; return option; }));
+  $('#sourceForm').elements.target.value = selected;
   $('#sourceList').replaceChildren();
   for (const source of savedConfig.sources) {
     const row = element('div', undefined, 'source-editor-row'), info = element('div');
     info.append(element('strong', source.name), element('code', source.path), element('small', source.expectedSource || 'SMB-Identität noch nicht festgelegt', 'hint'));
+    info.append(element('small', 'Ziel: ' + (backupTargets().find(target => target.id === (source.target || 'primary'))?.name || 'Nicht konfiguriert'), 'hint'));
     const detected = folderData.find(item => item.id === source.id)?.mount?.source; if (detected) info.append(element('small', `Aktuell erkannt: ${detected}`, 'hint'));
     const actions = element('div', undefined, 'source-editor-actions');
     const edit = element('button', 'Bearbeiten', 'row-action'); edit.addEventListener('click', () => {
-      sourceEditing = source.id; const form = $('#sourceForm'); clearFieldErrors(form); for (const key of ['id','name','path','expectedSource']) form.elements[key].value = source[key]; form.elements.id.readOnly = true; $('#sourceFormTitle').textContent = `Quelle bearbeiten · ${source.name}`; $('#sourceResult').textContent = '';
+      sourceEditing = source.id; const form = $('#sourceForm'); clearFieldErrors(form); for (const key of ['id','name','path','expectedSource']) form.elements[key].value = source[key]; form.elements.target.value = source.target || 'primary'; form.elements.id.readOnly = true; $('#sourceFormTitle').textContent = `Quelle bearbeiten · ${source.name}`; $('#sourceResult').textContent = '';
     });
     const pin = element('button', 'SMB bestätigen', 'row-action'); pin.addEventListener('click', async () => {
       pin.disabled = true;
@@ -261,7 +274,7 @@ $('#probeSource').addEventListener('click', async event => {
 $('#sourceForm').addEventListener('submit', async event => {
   event.preventDefault(); const form = event.currentTarget, button = form.querySelector('[type=submit]'); button.disabled = true;
   try {
-    const source = {}; for (const key of ['id','name','path','expectedSource']) source[key] = form.elements[key].value.trim();
+    const source = {}; for (const key of ['id','name','path','expectedSource','target']) source[key] = form.elements[key].value.trim();
     const errors = validateSourceForm(source, savedConfig.sources, sourceEditing); showFieldErrors(form, errors);
     if (Object.keys(errors).length) throw new Error('Bitte die markierten Quellenfelder korrigieren.');
     const sources = sourceEditing ? savedConfig.sources.map(item => item.id === sourceEditing ? source : item) : [...savedConfig.sources, source];
@@ -272,24 +285,29 @@ async function openHistory(id) {
   $('#historyTitle').textContent = `Verlauf · ${names[id]}`; $('#historySummary').textContent = 'Wird geladen …'; $('#historyRows').replaceChildren(); $('#historyDialog').showModal();
   try {
     const data = await api(`/api/history/${id}`), folder = folderData.find(item => item.id === id), health = lastHealth[id] || folder.health;
-    $('#historySummary').textContent = `${folder.path} · ${nextText(health)} (${activeTimezone})${health?.message ? ' · ' + health.message : ''}`;
+    $('#historySummary').textContent = `${folder.path} · Ziel: ${folder.targetRepository || 'Noch nicht konfiguriert'} · ${nextText(health)} (${activeTimezone})${health?.message ? ' · ' + health.message : ''}`;
     if (!data.entries.length) { const row = element('tr'), cell = element('td', 'Noch keine abgeschlossenen App-Läufe.'); cell.colSpan = 5; row.append(cell); $('#historyRows').append(row); }
     for (const entry of data.entries) {
       const row = element('tr'); row.append(element('td', entry.startedAt ? date(entry.startedAt) : 'Unbekannt'), element('td', statuses[entry.status]), element('td', entry.durationSeconds === null ? '—' : `${Math.floor(entry.durationSeconds / 60)} min ${entry.durationSeconds % 60} s`), element('td', entry.source === 'schedule' ? 'Zeitplan' : entry.source === 'manual' ? 'Manuell' : 'Altbestand'));
-      const cell = element('td'), button = element('button','Öffnen','row-action'); button.addEventListener('click', () => openLog(id, entry.runId)); cell.append(button); row.append(cell); row.title = entry.error || ''; $('#historyRows').append(row);
+      const cell = element('td'), button = element('button','Öffnen','row-action'); button.addEventListener('click', () => openLog(id, entry.runId)); cell.append(button); row.append(cell); row.title = [entry.repository && 'Ziel: ' + entry.repository, entry.error].filter(Boolean).join(' · '); const target = element('small', entry.repository || 'Ziel unbekannt', 'history-target'); row.firstElementChild.append(target); $('#historyRows').append(row);
     }
   } catch (e) { $('#historySummary').textContent = e.message; }
 }
 $('#showPBS').addEventListener('click', async () => {
   $('#pbsFilter').replaceChildren(); const all = element('option','Alle Gruppen'); all.value = ''; $('#pbsFilter').append(all);
   for (const [id,name] of Object.entries(names)) { const option = element('option',name); option.value = id; $('#pbsFilter').append(option); }
-  $('#pbsDialog').showModal(); $('#pbsSummary').textContent = 'Bestand wird geladen …';
-  try { pbsData = await api('/api/pbs'); renderPBS(); } catch (e) { $('#pbsSummary').textContent = e.message; }
+  $('#pbsTarget').replaceChildren(...backupTargets().map(target => { const option = element('option', target.name); option.value = target.id; return option; }));
+  $('#pbsDialog').showModal(); await loadPBS();
 });
-$('#refreshPBS').addEventListener('click', async event => {
-  const button = event.currentTarget; button.disabled = true; $('#pbsSummary').textContent = 'PBS wird abgefragt …';
-  try { pbsData = await api('/api/pbs/refresh', {}); renderPBS(); } catch (e) { $('#pbsSummary').textContent = e.message; } finally { button.disabled = false; }
-});
+async function loadPBS(force = false) {
+  $('#refreshPBS').disabled = true; $('#pbsTarget').disabled = true; $('#pbsSummary').textContent = 'PBS-Bestand wird geladen …';
+  $('#pbsRows').replaceChildren(); pbsData = null;
+  try { const target = $('#pbsTarget').value; pbsData = await api(`/api/pbs${force ? '/refresh' : ''}?target=${encodeURIComponent(target)}`, force ? {} : undefined); renderPBS(); }
+  catch (e) { $('#pbsSummary').textContent = e.message; }
+  finally { $('#refreshPBS').disabled = false; $('#pbsTarget').disabled = false; }
+}
+$('#refreshPBS').addEventListener('click', () => loadPBS(true));
+$('#pbsTarget').addEventListener('change', () => loadPBS());
 $('#pbsFilter').addEventListener('change', renderPBS);
 function renderPBS() {
   if (!pbsData) return;

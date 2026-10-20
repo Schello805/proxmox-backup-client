@@ -8,37 +8,43 @@
       "id": "software",
       "name": "Software",
       "path": "/mnt/Daten/Software",
-      "expectedSource": ""
+      "expectedSource": "",
+      "target": "primary"
     },
     {
       "id": "filme",
       "name": "Filme",
       "path": "/mnt/Daten/Filme",
-      "expectedSource": ""
+      "expectedSource": "",
+      "target": "primary"
     },
     {
       "id": "serien",
       "name": "Serien",
       "path": "/mnt/Daten/Serien",
-      "expectedSource": ""
+      "expectedSource": "",
+      "target": "primary"
     },
     {
       "id": "hoerspiele",
       "name": "Hörspiele",
       "path": "/mnt/Daten/Hoerspiele",
-      "expectedSource": ""
+      "expectedSource": "",
+      "target": "primary"
     },
     {
       "id": "musik",
       "name": "Musik",
       "path": "/mnt/Daten/Musik",
-      "expectedSource": ""
+      "expectedSource": "",
+      "target": "primary"
     },
     {
       "id": "daten",
       "name": "Daten",
       "path": "/mnt/Daten/Daten",
-      "expectedSource": ""
+      "expectedSource": "",
+      "target": "primary"
     }
   ],
   "timezone": "Europe/Berlin",
@@ -73,5 +79,7 @@
       "days": [],
       "time": ""
     }
-  }
+  },
+  "secondaryDatastore": "",
+  "schemaVersion": 3
 }

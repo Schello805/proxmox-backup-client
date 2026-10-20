@@ -1,8 +1,14 @@
 # QNAP → Proxmox Backup Control
 
-Version 2.2.0 · [Betrieb, sichere Updates und Fehlerbehebung](docs/OPERATIONS.md)
+Version 2.3.0 · [Betrieb, sichere Updates und Fehlerbehebung](docs/OPERATIONS.md)
 
 Eine lokale Web-App für einen bestehenden Debian-12-LXC. Zeigt durchgereichte QNAP-SMB-Freigaben, startet den Proxmox Backup Client und dokumentiert den Aufbau. Ohne npm-Abhängigkeiten; Node.js ab Version 18.
+
+## Neu in 2.3.0
+
+- Zwei Datastores auf demselben PBS mit gemeinsamem Zugang, Zertifikat und Namespace. In den Einstellungen „Datastore 2“ eintragen und unter „Quellen → Bearbeiten → Backup-Ziel“ auswählen.
+- Zielkennzeichnung in Übersicht, laufendem Backup, Protokoll und Verlauf. PBS-Bestand und Verbindungsprüfung je Datastore getrennt.
+- Bestehende Quellen bleiben bei Datastore 1. Schema-3-Migration mit Sicherung der bisherigen Konfiguration; bestehende PBS-Snapshots werden nicht verschoben.
 
 ## Neu in 2.2.0
 

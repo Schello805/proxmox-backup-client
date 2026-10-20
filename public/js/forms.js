@@ -36,6 +36,7 @@ export function validateMainForm(values) {
   if (values.server && /[\s/@]/.test(values.server)) errors.server = 'Nur Hostname/IP und optional Port angeben, ohne https://.';
   if (needsTarget && !/^[^\s@]+@[^\s@]+$/.test(values.authId)) errors.authId = 'Benutzer mit Realm angeben, z. B. backup@pbs oder root@pam.';
   if (needsTarget && (!values.datastore || /[\s:]/.test(values.datastore))) errors.datastore = 'Datastore ohne Leerzeichen oder Doppelpunkt angeben.';
+  if (values.secondaryDatastore && (!/^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,63}$/.test(values.secondaryDatastore) || values.secondaryDatastore === values.datastore || !values.server)) errors.secondaryDatastore = 'Anderen Datastore-Namen auf demselben PBS angeben.';
   if (values.fingerprint && !/^([a-f\d]{2}:){31}[a-f\d]{2}$/i.test(values.fingerprint)) errors.fingerprint = 'SHA-256-Fingerprint: 32 durch Doppelpunkte getrennte Hex-Paare.';
   if (values.namespace && !values.namespace.split('/').every(part => /^[\w-]+$/.test(part))) errors.namespace = 'Nur Buchstaben, Ziffern, _ und -; Ebenen mit / trennen.';
   try { if (!values.timezone) throw new Error(); new Intl.DateTimeFormat('de', { timeZone: values.timezone }); } catch { errors.timezone = 'Gültige Zeitzone wählen, z. B. Europe/Berlin.'; }

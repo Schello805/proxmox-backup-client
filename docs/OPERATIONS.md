@@ -50,7 +50,7 @@ Die Vorprüfung ist automatisiert getestet. Das produktive systemd-Update muss a
 
 Die App zeigt ihre Version im Kopfbereich. Unter „Aufbau & Systemdetails“ stehen Node-Version, Backup Client und Betriebsprüfungen. Fehlender Client oder fehlende PBS-Einstellungen werden als Hinweis angezeigt; ungültige Konfiguration, nicht beschreibbare Speicherpfade oder ungültiger Port verhindern den Start.
 
-Konfigurationen ohne `schemaVersion` werden als Version 1 verstanden. Version 2 übernimmt Zugangsdaten, Auth-Auswahl, Quellen und Zeitpläne und erstellt vor dem Schreiben eine geschützte Datei `config.json.pre-v2-<Zeitstempel>.json` neben dem Original. Weitere Starts legen keine zusätzlichen Migrationskopien an. Kaputtes JSON und unbekannte neuere Schemaversionen werden nicht überschrieben. `npm run check` prüft schreibfrei.
+Konfigurationen ohne `schemaVersion` werden als Version 1 verstanden. Das aktuelle Schema 3 übernimmt Zugangsdaten, Auth-Auswahl, Quellen und Zeitpläne aus Schema 1 oder 2 und erstellt vor dem Schreiben eine geschützte Datei `config.json.pre-v3-<Zeitstempel>.json` neben dem Original. Bestehende Quellen erhalten das Ziel `primary` (bisheriger Datastore). Weitere Starts legen keine zusätzlichen Migrationskopien an. Kaputtes JSON und unbekannte neuere Schemaversionen werden nicht überschrieben. `npm run check` prüft schreibfrei.
 
 ## Rückweg nach fehlgeschlagenem Update
 
@@ -138,8 +138,23 @@ npm run test:all
 
 Auf Linux kann die Browserinstallation zusätzlich Systembibliotheken benötigen: `npx playwright install --with-deps chromium`. Nur Backendtests: `npm test`. Nur Browserprüfungen: `npm run test:browser`. Den Bericht öffnet `npx playwright show-report`.
 
-Die elf Chromium-Abläufe prüfen Passwort-Modal und Fehlermeldung, optionalen Passwortschutz, Zeitzonen-Dropdown und Mehrtagespläne samt Entwurfsschutz bei Statusaktualisierungen, ntfy-Validierung/Speichern/Testmeldung, Quellenverwaltung, Backup-Start mit Prozent/Restzeit/Live-Protokoll/Verlauf, fehlgeschlagenen Lauf, Diagnose/Update-Anzeige, fehlende Größenmessung, PBS-Filter und mobile Navigation. Zusätzlich wird die Übersicht mit sechs Quellen bei 1280 × 720 Pixeln auf vertikales Scrollen geprüft. Unbehandelte JavaScript-Fehler lassen die Browserprüfung fehlschlagen.
+Die zwölf Chromium-Abläufe prüfen Passwort-Modal und Fehlermeldung, optionalen Passwortschutz, Zeitzonen-Dropdown und Mehrtagespläne samt Entwurfsschutz bei Statusaktualisierungen, ntfy-Validierung/Speichern/Testmeldung, Quellenverwaltung, Backup-Start mit Prozent/Restzeit/Live-Protokoll/Verlauf, fehlgeschlagenen Lauf, Diagnose/Update-Anzeige, fehlende Größenmessung, PBS-Filter und mobile Navigation. Zusätzlich wird die Übersicht mit sechs Quellen bei 1280 × 720 Pixeln auf vertikales Scrollen geprüft. Unbehandelte JavaScript-Fehler lassen die Browserprüfung fehlschlagen.
 
 Jeder Ablauf startet eine eigene App-Instanz auf einem zufälligen lokalen Port mit temporärer Konfiguration. NAS-Zugriff, Backup-Prozess, PBS-Antworten, ntfy-Versand und GitHub-Vergleich sind ausschließlich im Test-Einstiegspunkt `e2e/server.cjs` simuliert. Der Produktionsserver importiert diesen Einstiegspunkt nicht. Die Tests kontaktieren keinen echten PBS, keine QNAP und keinen Benachrichtigungsdienst; sie ersetzen keinen echten Backup-/Restore-Test.
 
 GitHub Actions führt Backend- und Browserprüfungen bei Pushes und Pull Requests aus. Bei Fehlern stehen Screenshots und Playwright-Traces als Artefakt für sieben Tage bereit. Lokale Berichte unter `playwright-report/` und `test-results/` sind von Git ausgeschlossen.
+
+
+### Zwei Datastores auf demselben PBS (ab 2.3.0)
+
+1. Den zweiten Datastore auf dem vorhandenen PBS bereitstellen. Der in der App hinterlegte Benutzer/API-Token braucht dort die passenden Backup-Rechte und für die Bestands-/Verbindungsprüfung Leserechte. Ein verwendeter Namespace muss im jeweiligen Datastore verfügbar sein.
+2. In den App-Einstellungen den bisherigen Datastore unter „Datastore 1“ belassen und den exakten Namen des zweiten unter „Datastore 2 (optional)“ eintragen. Speichern und die Verbindung prüfen. Server, Zugangsdaten, Fingerprint und Namespace gelten gemeinsam für beide Datastores.
+3. Unter „Quellen“ die betreffende Quelle bearbeiten, im Dropdown „Backup-Ziel“ den zweiten Datastore wählen und speichern. Der bestehende Wochenplan gilt weiter für dieses Ziel. Alle nicht geänderten Quellen bleiben beim bisherigen Datastore.
+
+Die App erstellt keine PBS-Datastores und verschiebt oder löscht keine alten Snapshots. Jede Quelle hat genau ein Ziel; es erfolgt keine gleichzeitige Kopie auf beide Datastores. Die globale Warteschlange führt weiterhin nur ein Backup gleichzeitig aus und verwendet für jeden Auftrag die tatsächliche Ziel-Repository-Zeichenfolge. Ein unbekanntes oder unkonfiguriertes Ziel wird abgewiesen, statt auf Datastore 1 zurückzufallen.
+
+Die Übersicht zeigt das Ziel neben dem Quellnamen. Der laufende Auftrag, das Protokoll und archivierte Läufe dokumentieren den tatsächlichen Datastore. Nach einer Zieländerung wird der aktuelle Erfolgsstatus der betroffenen Quelle zurückgesetzt; ältere Einträge bleiben im Verlauf mit ihrem ursprünglichen Ziel erhalten. Der erfolgreiche Lauf auf Datastore 1 gilt dadurch nicht fälschlich als Erfolg auf Datastore 2.
+
+Im Dialog „PBS-Bestand“ bestimmt das Dropdown „Datastore auswählen“, welcher Bestand gelesen wird. Beide Bestände, Prüfresultate und Cache-Dateien sind getrennt. Die Verbindungsschaltfläche in den Einstellungen und die Diagnose prüfen beide konfigurierten Datastores. Zum Entfernen von Datastore 2 zuerst alle zugeordneten Quellen wieder Datastore 1 zuweisen. Während laufender oder vorgemerkter Backups sowie PBS-Abfragen sind Konfigurationsänderungen gesperrt.
+
+Die zusätzlichen automatischen Prüfungen decken die Schema-2-Migration, Zielvalidierung, getrennte PBS-Caches bei Fehlern, Warteschlangen-Routing und das Zurücksetzen betroffener Laufzustände ab. Der Browserablauf konfiguriert Datastore 2, weist eine Quelle zu, prüft das tatsächliche Repository im Testprozess und Verlauf, wechselt den PBS-Bestand und kontrolliert die Persistenz nach Neuladen.

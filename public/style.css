@@ -1914,3 +1914,13 @@ button:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid
 #progressEstimate { flex-shrink: 0; }
 .progress-line .queue-text { overflow: hidden; text-overflow: ellipsis; }
 @media(max-width:760px) { #overview #queueInfo.progress-line { flex-wrap: wrap; white-space: normal; } }
+
+.second-target { display: flex; align-items: center; gap: 16px; margin-top: 10px; }
+.second-target label { flex: 0 1 200px; }
+.second-target small { color: var(--muted); font-size: 11px; }
+.source-heading { display: flex; gap: 7px; align-items: center; min-width: 0; margin-bottom: 3px; }
+.source-heading .source-link { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source-target { flex: 0 0 auto; max-width: 75px; overflow: hidden; text-overflow: ellipsis; font-size: 9px; color: var(--green); background: #edf5f0; padding: 2px 5px; border-radius: 4px; }
+.history-target { display: block; font-size: 10px; color: var(--muted); margin-top: 4px; }
+.source-inputs select { font: inherit; font-size: 12px; padding: 9px; min-width: 0; border: 1px solid #d7e2d9; border-radius: 5px; color: #243e30; background: #fbfdfb; }
+@media(max-width:760px) { .second-target { align-items: start; flex-direction: column; gap: 6px; } .second-target label { flex-basis: auto; width: 100%; } }

@@ -126,3 +126,37 @@ test('Mobile Navigation und Einstellungen ohne horizontales Seiten-Scrollen', as
   await expect(page.getByRole('combobox', { name: 'Zeitzone', exact: true })).toBeVisible();
   await page.getByRole('button', { name: /Anleitung/ }).click(); await expect(page.locator('#guide')).toBeVisible();
 });
+
+
+test('Zweiten Datastore einrichten, Quelle zuweisen und getrennten PBS-Bestand prüfen', async ({ page, app }, testInfo) => {
+  await login(page); await page.getByRole('button', { name: /^⚙.*Einstellungen$/ }).click();
+  await page.getByRole('textbox', { name: /^Datastore 2/ }).fill('archive-store');
+  await page.getByRole('button', { name: 'Einstellungen speichern' }).click(); await expect(page.locator('#settingsResult')).toContainText(/gespeichert/i);
+  await page.getByRole('button', { name: 'Verbindung prüfen', exact: true }).click();
+  await expect(page.locator('#connectionResult')).toContainText('archive-store: PBS erreichbar');
+  await expect(page.locator('#connectionResult')).toContainText('test-store: PBS erreichbar');
+  await page.getByRole('button', { name: /Übersicht/ }).click(); await page.getByRole('button', { name: 'Quellen', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Backup-Quellen' });
+  await dialog.locator('.source-editor-row').filter({ has: page.getByText('Software', { exact: true }) }).getByRole('button', { name: 'Bearbeiten' }).click();
+  await dialog.getByRole('combobox', { name: 'Backup-Ziel', exact: true }).selectOption('secondary');
+  await dialog.getByRole('button', { name: 'Quelle speichern' }).click(); await expect(dialog.locator('#sourceResult')).toContainText('Quelle gespeichert');
+  await dialog.getByRole('button', { name: 'Schließen', exact: true }).click();
+  const row = page.locator('tr[data-folder="software"]'); await expect(row.locator('.source-target')).toHaveText('archive-store');
+  await row.getByRole('button', { name: '↗ Sichern', exact: true }).click(); await page.getByRole('button', { name: 'Live-Protokoll ↗' }).click();
+  await expect(page.locator('#logText')).toContainText('E2E repository: test@pbs@localhost:archive-store');
+  await page.getByRole('dialog', { name: /Protokoll/ }).getByRole('button', { name: 'Schließen' }).click();
+  app.finish(); await expect(row.locator('.job-state')).toContainText('Erfolgreich');
+  await row.getByRole('button', { name: 'Software', exact: true }).click(); await expect(page.locator('#historyRows')).toContainText('test@pbs@localhost:archive-store');
+  await page.getByRole('dialog', { name: /Verlauf/ }).getByRole('button', { name: 'Schließen' }).click();
+  await page.getByRole('button', { name: 'PBS-Bestand', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Datastore auswählen' }).selectOption('secondary');
+  await page.getByRole('button', { name: 'Vom PBS abrufen', exact: true }).click(); await expect(page.locator('#pbsRows')).toContainText('host/daten');
+  await page.getByRole('combobox', { name: 'Datastore auswählen' }).selectOption('primary');
+  await expect(page.locator('#pbsRows')).not.toContainText('host/daten');
+  await page.getByRole('dialog', { name: 'Sicherungen auf dem PBS' }).getByRole('button', { name: 'Schließen' }).click();
+  await page.screenshot({ path: testInfo.outputPath('two-datastores.png') });
+  await page.reload(); await expect(page.locator('tr[data-folder="software"] .source-target')).toHaveText('archive-store');
+  await page.getByRole('button', { name: /^⚙.*Einstellungen$/ }).click();
+  await page.getByRole('textbox', { name: /^Datastore 2/ }).fill(''); await page.getByRole('button', { name: 'Einstellungen speichern' }).click();
+  await expect(page.locator('#settingsResult')).toContainText('noch von Quellen verwendet');
+});

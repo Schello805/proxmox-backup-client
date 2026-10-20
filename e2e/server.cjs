@@ -13,18 +13,18 @@ const cp = require('node:child_process');
 const realExecFile = cp.execFile;
 cp.execFile = (file, args, options, callback) => {
   if (file === 'du') return setImmediate(() => process.env.E2E_SOURCE_SIZE === 'false' ? callback(new Error('Size unavailable')) : callback(null, `10737418240\t${args.at(-1)}\n`, ''));
-  if (file === 'proxmox-backup-client') return setImmediate(() => callback(null, args[0] === 'version' ? 'test-client' : JSON.stringify([{ 'backup-type': 'host', 'backup-id': 'software', 'backup-time': 1792454400, files: ['qnap-software.pxar.didx'], size: 1024 }]), ''));
+  if (file === 'proxmox-backup-client') return setImmediate(() => callback(null, args[0] === 'version' ? 'test-client' : JSON.stringify([{ 'backup-type': 'host', 'backup-id': options.env?.PBS_REPOSITORY?.endsWith(':archive-store') ? 'daten' : 'software', 'backup-time': 1792454400, files: ['qnap-software.pxar.didx'], size: 1024 }]), ''));
   return realExecFile(file, args, options, callback);
 };
 cp.execFile[require('node:util').promisify.custom] = (...args) => new Promise((resolve, reject) => cp.execFile(...args, (error, stdout, stderr) => error ? reject(error) : resolve({ stdout, stderr })));
 require('../lib/inspect').createInspector = () => async (target, expectedSource) => ({ ok: true, path: target, identityConfirmed: Boolean(expectedSource), error: '', mount: { source: expectedSource || '//test-nas/' + target.split('/').pop().toLowerCase(), target, type: 'cifs' } });
 const realBackups = require('../lib/backups').createBackups;
 let activeChild;
-require('../lib/backups').createBackups = options => realBackups({ ...options, spawnProcess: () => {
+require('../lib/backups').createBackups = options => realBackups({ ...options, spawnProcess: (_, args, spawnOptions) => {
   const child = new EventEmitter(); child.stdout = new EventEmitter(); child.stderr = new EventEmitter();
   child.kill = signal => { if (activeChild === child) { activeChild = null; child.emit('close', null, signal); } };
   activeChild = child;
-  setImmediate(() => child.stdout.emit('data', Buffer.from('processed 5 GiB in 2min, uploaded 1 GiB\n')));
+  setImmediate(() => child.stdout.emit('data', Buffer.from(`E2E repository: ${spawnOptions.env.PBS_REPOSITORY}\nprocessed 5 GiB in 2min, uploaded 1 GiB\n`)));
   return child;
 } });
 process.on('message', message => { if (message?.type === 'finish' && activeChild) { const child = activeChild; activeChild = null; child.emit('close', message.code, null); } });

@@ -19,6 +19,7 @@ const { createUpdates } = require('./lib/updates');
 const { createDiagnostics } = require('./lib/diagnostics');
 const { healthFor } = require('./lib/planning');
 const { estimateProgress } = require('./lib/progress');
+const { repositoryFor, targetsFor } = require('./lib/targets');
 const { sendNotification } = require('./notifications');
 const run = promisify(execFile);
 const ROOT = __dirname, DATA = process.env.DATA_DIR || path.join(ROOT, 'data');
@@ -33,17 +34,17 @@ const STATE = path.join(DATA, 'state.json'), state = loadState(STATE);
 const persist = () => saveJSON(STATE, state);
 for (const source of initial.sources) state.watchSince[source.id] ||= new Date().toISOString();
 let backups, pbs;
-const configs = createConfigService({ initial, state, write: value => saveJSON(CONFIG, value), persist, password: PASS, isBusy: () => backups?.busy || pbs?.busy, onChange: () => pbs.invalidate() });
+const configs = createConfigService({ initial, state, write: value => saveJSON(CONFIG, value), persist, password: PASS, isBusy: () => backups?.busy || pbs?.busy, onChange: (previous, next) => { if (['repository','secondaryDatastore','password','fingerprint','namespace'].some(key => previous[key] !== next[key])) pbs.invalidate(); } });
 const getConfig = configs.get;
 const isMaintenance = () => fs.existsSync(path.join(DATA, 'maintenance'));
 const history = createHistory({ state, data: DATA, persist, getConfig, password: PASS });
 const notifier = createNotifier({ getConfig, state, persist });
 const inspectPath = createInspector(run);
 const sourceSizes = createSourceSizes({ run, inspectPath, isBusy: () => backups?.busy || isMaintenance() });
-function environment() {
+function environment(target = 'primary') {
   const env = { ...process.env }, config = getConfig();
   for (const key of Object.keys(env)) if (key.startsWith('PBS_')) delete env[key];
-  return { ...env, PBS_REPOSITORY: config.repository, PBS_PASSWORD: config.password, PBS_FINGERPRINT: config.fingerprint, PBS_NAMESPACE: config.namespace };
+  return { ...env, PBS_REPOSITORY: repositoryFor(config, target), PBS_PASSWORD: config.password, PBS_FINGERPRINT: config.fingerprint, PBS_NAMESPACE: config.namespace };
 }
 backups = createBackups({ state, data: DATA, persist, getConfig, inspectPath, environment, log: history.log, archive: history.archive, notify: notifier.notify, isMaintenance, getSourceSize: source => sourceSizes.peek(source) });
 const scheduler = createScheduler({ getConfig, state, persist, backups, log: history.log, notify: notifier.notify, isMaintenance });
@@ -97,9 +98,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/api/status') {
       const snapshot = configs.get();
-      const folders = await Promise.all(snapshot.sources.map(async source => ({ ...source, ...(await inspectPath(source.path, source.expectedSource)), job: state.jobs[source.id] || { status: 'idle' }, schedule: snapshot.schedules[source.id], health: healthFor(snapshot.schedules[source.id], snapshot.timezone, new Date(), state.watchSince[source.id], state.jobs[source.id], snapshot.staleAfterDays, state.triggered[source.id]) })));
+      const folders = await Promise.all(snapshot.sources.map(async source => ({ ...source, targetRepository: repositoryFor(snapshot, source.target), ...(await inspectPath(source.path, source.expectedSource)), job: state.jobs[source.id] || { status: 'idle' }, schedule: snapshot.schedules[source.id], health: healthFor(snapshot.schedules[source.id], snapshot.timezone, new Date(), state.watchSince[source.id], state.jobs[source.id], snapshot.staleAfterDays, state.triggered[source.id]) })));
       for (const folder of folders) folder.size = sourceSizes.read(folder, folder.ok);
-      return json(res, 200, { system: { ...await system.inspect(), timezone: snapshot.timezone }, folders, connection: pbs.lastConnection, config: configs.safe(snapshot), pbs: { checkedAt: pbs.current().checkedAt, count: pbs.current().count || 0, error: pbs.current().error || '' } });
+      return json(res, 200, { system: { ...await system.inspect(), timezone: snapshot.timezone }, folders, targets: targetsFor(snapshot), connections: pbs.connections(), connection: pbs.lastConnection, config: configs.safe(snapshot), pbs: { checkedAt: pbs.current().checkedAt, count: pbs.current().count || 0, error: pbs.current().error || '' } });
     }
     if (req.method === 'POST' && url.pathname === '/api/config') {
       configs.apply(await body(req));
@@ -111,8 +112,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/sources') {
       const input = await body(req); configs.apply({ ...configs.get(), sources: input.sources }); return json(res, 200, { success: true });
     }
-    if (req.method === 'GET' && url.pathname === '/api/pbs') return json(res, 200, pbs.current());
-    if (req.method === 'POST' && url.pathname === '/api/pbs/refresh') return json(res, 200, await pbs.refresh());
+    if (req.method === 'GET' && url.pathname === '/api/pbs') return json(res, 200, pbs.current(url.searchParams.get('target') || 'primary'));
+    if (req.method === 'POST' && url.pathname === '/api/pbs/refresh') return json(res, 200, await pbs.refresh(url.searchParams.get('target') || 'primary'));
     if (req.method === 'POST' && url.pathname === '/api/notifications/test') {
       await sendNotification(configs.get().notifications, 'Test von QNAP Backup Control: Benachrichtigungen funktionieren.');
       state.notification = { ok: true, at: new Date().toISOString(), message: 'Test zugestellt.' }; persist(); return json(res, 200, { success: true });
@@ -124,7 +125,7 @@ const server = http.createServer(async (req, res) => {
       if (!entries.some(entry => entry.runId === history[2])) return json(res, 404, { error: 'Protokoll nicht mehr im Verlauf.' });
       return json(res, 200, { log: fs.readFileSync(path.join(DATA, 'history', history[1], history[2] + '.log'), 'utf8') });
     }
-    if (req.method === 'POST' && url.pathname === '/api/connection') return json(res, 200, await pbs.connection());
+    if (req.method === 'POST' && url.pathname === '/api/connection') return json(res, 200, await pbs.connection((await body(req)).target || 'primary'));
     const backup = url.pathname.match(/^\/api\/backup\/([a-z][a-z0-9_-]{0,39})$/);
     if (req.method === 'POST' && backup) { backups.enqueue(backup[1], 'manual'); return json(res, 202, { success: true }); }
     const logs = url.pathname.match(/^\/api\/logs\/([a-z][a-z0-9_-]{0,39})$/);
