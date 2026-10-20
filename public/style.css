@@ -1563,7 +1563,12 @@ body[data-page=overview] #notice {
   gap: 8px;
 }
 
-#configForm .schedule-settings input {
+#configForm .schedule-settings select {
+  font: inherit;
+  border: 1px solid #d7e2d9;
+  background: #fbfdfb;
+  color: #243e30;
+  border-radius: 5px;
   width: 190px;
   min-height: 30px;
   padding: 5px 8px;

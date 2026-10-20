@@ -63,6 +63,11 @@ function fillForm(config) {
   for (const key of ['fingerprint', 'namespace']) form.elements[key].value = config[key];
   $('#repositoryPreview').textContent = config.repository || 'Noch nicht gespeichert';
   form.elements.password.value = '';
+  if (![...form.elements.timezone.options].some(option => option.value === config.timezone)) {
+    const option = element('option');
+    option.value = option.textContent = config.timezone;
+    form.elements.timezone.append(option);
+  }
   form.elements.timezone.value = config.timezone;
   form.elements.staleAfterDays.value = config.staleAfterDays;
   $('#passwordHint').textContent = config.hasPassword ? 'PBS-Passwort gespeichert · leer lassen zum Beibehalten.' : 'PBS-Passwort noch nicht hinterlegt.';
@@ -208,8 +213,9 @@ async function refreshActivity() {
   } catch (e) { if (authenticated) { $('#activityBadge').textContent = 'Verbindung unterbrochen'; $('#activityBadge').className = 'badge bad'; notice(e.message, true); } }
   finally { activityPolling = false; }
 }
-const timezones = ['UTC', ...((Intl.supportedValuesOf && Intl.supportedValuesOf('timeZone')) || ['Europe/Berlin','Europe/London','America/New_York'])];
-for (const zone of timezones) { const option = element('option'); option.value = zone; $('#timezones').append(option); }
+const timezones = new Set(['Europe/Berlin', 'UTC', ...((Intl.supportedValuesOf && Intl.supportedValuesOf('timeZone')) || ['Europe/London','America/New_York'])]);
+$('#timezones').replaceChildren();
+for (const zone of timezones) { const option = element('option'); option.value = option.textContent = zone; $('#timezones').append(option); }
 document.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click', () => $('#' + button.dataset.close).close()));
 $('#manageSources').addEventListener('click', () => { if (!savedConfig) return; renderSources(); resetSource(); $('#sourcesDialog').showModal(); });
 function resetSource() {
