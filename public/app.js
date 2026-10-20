@@ -1,20 +1,28 @@
 'use strict';
+const refreshWaiters = [];
 const $ = selector => document.querySelector(selector);
-const names = { software: 'Software', filme: 'Filme', serien: 'Serien', hoerspiele: 'Hörspiele', musik: 'Musik' };
+const names = { software: 'Software', filme: 'Filme', serien: 'Serien', hoerspiele: 'Hörspiele', musik: 'Musik', daten: 'Daten' };
 const statuses = { idle: 'Noch kein Lauf', queued: 'Wartet', running: 'Läuft', success: 'Erfolgreich', failed: 'Fehler', interrupted: 'Unterbrochen' };
-let loaded = false, polling = false, logFolder = null, noticeTimer, authenticated = false, activityPolling = false, previousActive = null, authEpoch = 0;
-const date = value => value ? new Intl.DateTimeFormat('de-DE', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Berlin' }).format(new Date(value)) : 'Noch kein Erfolg';
+let loaded = false, polling = false, logFolder = null, noticeTimer, authenticated = false, activityPolling = false, previousActive = null, authEpoch = 0, activeTimezone = 'Europe/Berlin', savedConfig = null, folderData = [], lastHealth = {}, logRun = null, sourceEditing = null, pbsData = null, sourcePage = 0;
+const date = value => value ? new Intl.DateTimeFormat('de-DE', { dateStyle: 'short', timeStyle: 'short', timeZone: activeTimezone }).format(new Date(value)) : 'Noch kein Erfolg';
 function notice(message, error = false) {
   $('#notice').textContent = message; $('#notice').classList.toggle('error', error); $('#notice').hidden = false;
   clearTimeout(noticeTimer); noticeTimer = setTimeout(() => $('#notice').hidden = true, 12000);
 }
 async function api(url, data) {
-  const res = await fetch(url, data === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'qnap-dashboard' }, body: JSON.stringify(data) });
+  const res = await fetch(url, data === undefined ? { signal: AbortSignal.timeout(25000) } : { signal: AbortSignal.timeout(25000), method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'qnap-dashboard' }, body: JSON.stringify(data) });
   const result = await res.json();
   if (res.status === 401 && url !== '/api/login') { showLogin(); throw new Error('Bitte anmelden.'); }
   if (!res.ok) throw new Error(result.error || 'Anfrage fehlgeschlagen.'); return result;
 }
 function element(tag, text, className) { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; if (className) el.className = className; return el; }
+function nextText(health) { return health?.nextAt ? `Nächster: ${date(health.nextAt)}` : 'Kein automatischer Termin'; }
+function renderJob(cell, job, health) {
+  const warning = health?.message, label = warning && !['running','queued','failed','interrupted'].includes(job.status) ? (health.missed ? 'Überfällig' : 'Erfolg zu alt') : statuses[job.status];
+  cell.replaceChildren(element('span', label, `badge ${['failed','interrupted'].includes(job.status) ? 'bad' : ['running','queued'].includes(job.status) || warning ? 'busy' : job.status === 'success' ? 'ok' : ''}`));
+  const error = job.error || warning;
+  if (error) { const text = element('small', error, 'row-error'); text.title = error; cell.append(text); }
+}
 const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 const presets = { manual: [], daily: [1,2,3,4,5,6,7], weekdays: [1,2,3,4,5], weekend: [6,7] };
 const scheduleControls = new Map();
@@ -67,29 +75,41 @@ function fillForm(config) {
   for (const key of ['fingerprint', 'namespace']) form.elements[key].value = config[key];
   $('#repositoryPreview').textContent = config.repository || 'Noch nicht gespeichert';
   form.elements.password.value = '';
+  form.elements.timezone.value = config.timezone;
+  form.elements.staleAfterDays.value = config.staleAfterDays;
+  form.elements.notifyEnabled.checked = config.notifications.enabled;
+  form.elements.notifyURL.value = config.notifications.url;
+  form.elements.notifyToken.value = '';
+  form.elements.notifyToken.placeholder = config.notifications.hasToken ? 'Token gespeichert · leer lassen' : 'Optionaler ntfy-Token';
   $('#passwordHint').textContent = config.hasPassword ? 'PBS-Passwort gespeichert · leer lassen zum Beibehalten.' : 'PBS-Passwort noch nicht hinterlegt.';
   $('#schedules').replaceChildren(); scheduleControls.clear();
   for (const [id, name] of Object.entries(names)) buildSchedule(id, name, config.schedules[id]);
 }
 async function refresh() {
-  if (polling) return; polling = true; const epoch = authEpoch;
+  if (polling) return new Promise(resolve => refreshWaiters.push(resolve)); polling = true; const epoch = authEpoch;
   try {
     const data = await api('/api/status');
     if (epoch !== authEpoch) return;
+    savedConfig = data.config; activeTimezone = data.config.timezone; folderData = data.folders;
+    for (const key of Object.keys(names)) delete names[key]; for (const source of data.config.sources) names[source.id] = source.name;
+    $('#sidebarTimezone').textContent = activeTimezone; $('#sourceCount').textContent = data.folders.length;
     authenticated = true; document.body.classList.remove('locked'); if ($('#loginDialog').open) $('#loginDialog').close();
-    $('#updated').textContent = `Aktualisiert ${new Date().toLocaleTimeString('de-DE')} · live`;
-    $('#mountCount').textContent = `${data.folders.filter(f => f.ok).length} / 5`;
+    $('#updated').textContent = `Aktualisiert ${new Date().toLocaleTimeString('de-DE', { timeZone: activeTimezone })} · live`;
+    $('#mountCount').textContent = `${data.folders.filter(f => f.ok).length} / ${data.folders.length}`;
     $('#runningCount').textContent = data.folders.filter(f => ['running', 'queued'].includes(f.job.status)).length;
-    $('#successCount').textContent = `${data.folders.filter(f => f.job.status === 'success').length} / 5`;
+    $('#successCount').textContent = `${data.folders.filter(f => f.job.status === 'success').length} / ${data.folders.length}`;
     $('#targetStatus').textContent = data.connection ? (data.connection.ok ? 'Verbunden' : 'Prüfung fehlgeschlagen') : 'Ungeprüft';
     $('#targetName').textContent = data.config.repository || 'Noch kein Repository'; $('#flowTarget').textContent = data.config.repository || 'Ziel noch nicht konfiguriert';
     $('#folders').replaceChildren();
-    for (const folder of data.folders) {
-      const row = element('tr'); row.dataset.folder = folder.id; const source = element('td'); source.append(element('strong', names[folder.id]), element('code', folder.path)); row.append(source);
-      const mount = element('td'), badge = element('span', folder.ok ? '● Eingebunden' : '● Nicht verfügbar', `badge ${folder.ok ? 'ok' : 'bad'}`); badge.title = folder.ok ? `${folder.mount.source} → ${folder.mount.target} (${folder.mount.type})` : folder.error; mount.append(badge); row.append(mount);
-      const plan = element('td', scheduleText(folder.schedule)); plan.title = plan.textContent;
+    sourcePage = Math.max(0, Math.min(sourcePage, Math.ceil(data.folders.length / 6) - 1));
+    $('#overviewPager').hidden = data.folders.length <= 6; $('#sourcePage').textContent = `Seite ${sourcePage + 1} / ${Math.ceil(data.folders.length / 6)}`;
+    $('#previousSources').disabled = sourcePage === 0; $('#nextSources').disabled = (sourcePage + 1) * 6 >= data.folders.length;
+    for (const folder of data.folders.slice(sourcePage * 6, (sourcePage + 1) * 6)) {
+      const row = element('tr'); row.dataset.folder = folder.id; const source = element('td'); const sourceButton = element('button', names[folder.id], 'source-link'); sourceButton.title = 'Verlauf und Details öffnen'; sourceButton.addEventListener('click', () => openHistory(folder.id)); source.append(sourceButton, element('code', folder.path)); row.append(source);
+      const mount = element('td'), badge = element('span', folder.ok ? '● Eingebunden' : '● Nicht verfügbar', `badge ${folder.ok ? 'ok' : 'bad'}`); badge.title = folder.ok ? `${folder.mount.source} → ${folder.mount.target} (${folder.mount.type}) · ${folder.identityConfirmed ? 'SMB-Identität bestätigt' : 'SMB-Quelle noch nicht festgelegt: unter Quellen bestätigen'}` : folder.error; mount.append(badge); row.append(mount);
+      const plan = element('td'); plan.append(element('span', scheduleText(folder.schedule)), element('small', nextText(folder.health), 'next-run')); plan.title = `${scheduleText(folder.schedule)} · ${nextText(folder.health)} (${activeTimezone})`;
       row.append(plan, element('td', date(folder.job.lastSuccess)));
-      const state = element('td'), status = folder.job.status; const statusBadge = element('span', statuses[status] || status, `badge ${status === 'success' ? 'ok' : ['running', 'queued'].includes(status) ? 'busy' : ['failed', 'interrupted'].includes(status) ? 'bad' : ''}`); statusBadge.title = folder.job.error || ''; state.className = 'job-state'; state.append(statusBadge); if (folder.job.error) { const error = element('small', folder.job.error, 'row-error'); error.title = folder.job.error; state.append(error); } row.append(state);
+      const state = element('td'); state.className = 'job-state'; renderJob(state, folder.job, folder.health); row.append(state); const status = folder.job.status;
       const actions = element('td'), start = element('button', '↗ Sichern', 'row-action'), logs = element('button', 'Protokoll', 'row-action');
       start.dataset.start = folder.id; start.dataset.available = String(Boolean(folder.ok && data.config.repository && data.config.hasPassword));
       start.disabled = !folder.ok || !data.config.repository || !data.config.hasPassword || ['running', 'queued'].includes(status);
@@ -101,20 +121,25 @@ async function refresh() {
     if (!loaded) { fillForm(data.config); loaded = true; }
     if (data.connection) $('#connectionResult').textContent = `${data.connection.message} (${date(data.connection.checkedAt)})`;
     await refreshActivity();
-  } catch (e) { $('#updated').textContent = 'Aktualisierung fehlgeschlagen'; if (authenticated) notice(e.message, true); } finally { polling = false; }
+  } catch (e) { $('#updated').textContent = 'Aktualisierung fehlgeschlagen'; if (authenticated) notice(e.message, true); } finally { polling = false; if (refreshWaiters.length) { const waiters = refreshWaiters.splice(0); await refresh(); for (const resolve of waiters) resolve(); } }
 }
-async function refreshLog() { try { const data = await api(`/api/logs/${logFolder}`); const pre = $('#logText'), bottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 40; pre.textContent = data.log; if (bottom) pre.scrollTop = pre.scrollHeight; } catch (e) { notice(e.message, true); } }
-async function openLog(id) { logFolder = id; $('#logTitle').textContent = `Protokoll · ${names[id]}`; $('#logText').textContent = 'Wird geladen …'; $('#logDialog').showModal(); await refreshLog(); }
+async function refreshLog() { try { const data = await api(logRun ? `/api/history/${logFolder}/${logRun}` : `/api/logs/${logFolder}`); const pre = $('#logText'), bottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 40; pre.textContent = data.log; if (bottom) pre.scrollTop = pre.scrollHeight; } catch (e) { notice(e.message, true); } }
+async function openLog(id, runId = null) { logFolder = id; logRun = runId; $('#logTitle').textContent = `Protokoll · ${names[id]}`; $('#logText').textContent = 'Wird geladen …'; $('#logDialog').showModal(); await refreshLog(); }
 $('#liveDetails').addEventListener('click', () => { if (previousActive) openLog(previousActive); });
-$('#closeLog').addEventListener('click', () => $('#logDialog').close()); $('#logDialog').addEventListener('close', () => logFolder = null);
+$('#closeLog').addEventListener('click', () => $('#logDialog').close()); $('#logDialog').addEventListener('close', () => { logFolder = null; logRun = null; });
 function navigate(page) { if (!['overview', 'settings', 'guide'].includes(page)) page = 'overview'; document.body.dataset.page = page; document.querySelectorAll('.page').forEach(el => el.hidden = el.id !== page); document.querySelectorAll('.nav').forEach(el => el.classList.toggle('active', el.dataset.page === page)); }
 document.querySelectorAll('.nav').forEach(button => button.addEventListener('click', () => { location.hash = button.dataset.page; })); window.addEventListener('hashchange', () => navigate(location.hash.slice(1))); navigate(location.hash.slice(1));
 $('#refresh').addEventListener('click', refresh);
+$('#previousSources').addEventListener('click', () => { sourcePage = Math.max(0, sourcePage - 1); void refresh(); });
+$('#nextSources').addEventListener('click', () => { sourcePage++; void refresh(); });
 $('#configForm').addEventListener('submit', async event => {
   event.preventDefault(); if (!loaded) return notice('Konfiguration zuerst laden.', true);
   const form = event.currentTarget, button = form.querySelector('[type=submit]'), data = { schedules: {} };
   data.repository = `${form.elements.authId.value.trim()}@${form.elements.server.value.trim()}:${form.elements.datastore.value.trim()}`;
-  for (const key of ['password', 'fingerprint', 'namespace']) data[key] = form.elements[key].value;
+  for (const key of ['password', 'fingerprint', 'namespace', 'timezone']) data[key] = form.elements[key].value;
+  data.staleAfterDays = Number(form.elements.staleAfterDays.value);
+  data.notifications = { enabled: form.elements.notifyEnabled.checked, url: form.elements.notifyURL.value.trim(), token: form.elements.notifyToken.value };
+  data.sources = savedConfig.sources;
   for (const id of Object.keys(names)) { const control = scheduleControls.get(id); data.schedules[id] = { days: control.mode.value === 'manual' ? [] : control.days, time: control.mode.value === 'manual' ? '' : control.time.value }; }
   button.disabled = true;
   try { await api('/api/config', data); loaded = false; notice('Einstellungen gespeichert.'); $('#connectionResult').textContent = 'Verbindung nach Änderung erneut prüfen.'; await refresh(); const result = await api('/api/connection', {}); $('#connectionResult').textContent = result.message; notice(result.message, !result.ok); } catch (e) { notice(e.message, true); } finally { button.disabled = false; }
@@ -125,7 +150,7 @@ $('#testConnection').addEventListener('click', async event => {
 });
 function showLogin() {
   authEpoch++; authenticated = false; loaded = false;
-  if ($('#logDialog').open) $('#logDialog').close();
+  for (const dialog of document.querySelectorAll('dialog[open]')) if (dialog.id !== 'loginDialog') dialog.close();
   document.body.classList.add('locked');
   if (!$('#loginDialog').open) { $('#loginPassword').value = ''; $('#loginError').textContent = ''; $('#loginDialog').showModal(); }
 }
@@ -169,18 +194,102 @@ async function refreshActivity() {
     $('#activityDescription').title = $('#activityDescription').textContent;
     previousActive = data.active;
     $('#queueInfo').textContent = data.queue.length ? `Danach: ${data.queue.map(id => names[id]).join(' → ')}` : 'Keine weiteren Aufträge in der Warteschlange.';
+    lastHealth = data.health || {};
     for (const row of document.querySelectorAll('[data-folder]')) {
       const job = data.jobs[row.dataset.folder] || { status: 'idle' }, state = row.querySelector('.job-state');
-      state.replaceChildren(element('span', statuses[job.status], `badge ${job.status === 'success' ? 'ok' : ['running', 'queued'].includes(job.status) ? 'busy' : ['failed', 'interrupted'].includes(job.status) ? 'bad' : ''}`));
-      if (job.error) { const error = element('small', job.error, 'row-error'); error.title = job.error; state.append(error); }
+      renderJob(state, job, lastHealth[row.dataset.folder]);
+      const next = row.querySelector('.next-run'); if (next) next.textContent = nextText(lastHealth[row.dataset.folder]);
       row.children[3].textContent = date(job.lastSuccess);
       const start = row.querySelector('[data-start]'); start.disabled = start.dataset.available !== 'true' || ['running', 'queued'].includes(job.status);
     }
-    $('#successCount').textContent = `${Object.values(data.jobs).filter(job => job.status === 'success').length} / 5`;
+    $('#successCount').textContent = `${Object.values(data.jobs).filter(job => job.status === 'success').length} / ${Object.keys(names).length}`;
+    if (!data.active) {
+      const warnings = Object.values(lastHealth).filter(item => item.missed || item.stale).length;
+      if (warnings) { $('#activityBadge').textContent = `${warnings} Hinweis${warnings > 1 ? 'e' : ''}`; $('#activityBadge').className = 'badge busy'; }
+    }
+    if (data.notification) $('#notificationResult').textContent = `${data.notification.message} (${date(data.notification.at)})`;
     if (logFolder) await refreshLog();
-  } catch (e) { if (authenticated) { $('#activityBadge').textContent = 'Verbindung unterbrochen'; notice(e.message, true); } }
+  } catch (e) { if (authenticated) { $('#activityBadge').textContent = 'Verbindung unterbrochen'; $('#activityBadge').className = 'badge bad'; notice(e.message, true); } }
   finally { activityPolling = false; }
 }
+const timezones = ['UTC', ...((Intl.supportedValuesOf && Intl.supportedValuesOf('timeZone')) || ['Europe/Berlin','Europe/London','America/New_York'])];
+for (const zone of timezones) { const option = element('option'); option.value = zone; $('#timezones').append(option); }
+document.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click', () => $('#' + button.dataset.close).close()));
+$('#manageSources').addEventListener('click', () => { if (!savedConfig) return; renderSources(); resetSource(); $('#sourcesDialog').showModal(); });
+function resetSource() {
+  sourceEditing = null; $('#sourceForm').reset(); $('#sourceForm').elements.id.readOnly = false; $('#sourceFormTitle').textContent = 'Quelle hinzufügen'; $('#sourceResult').textContent = '';
+}
+function renderSources() {
+  $('#sourceList').replaceChildren();
+  for (const source of savedConfig.sources) {
+    const row = element('div', undefined, 'source-editor-row'), info = element('div');
+    info.append(element('strong', source.name), element('code', source.path), element('small', source.expectedSource || 'SMB-Identität noch nicht festgelegt', 'hint'));
+    const detected = folderData.find(item => item.id === source.id)?.mount?.source; if (detected) info.append(element('small', `Aktuell erkannt: ${detected}`, 'hint'));
+    const actions = element('div', undefined, 'source-editor-actions');
+    const edit = element('button', 'Bearbeiten', 'row-action'); edit.addEventListener('click', () => {
+      sourceEditing = source.id; const form = $('#sourceForm'); for (const key of ['id','name','path','expectedSource']) form.elements[key].value = source[key]; form.elements.id.readOnly = true; $('#sourceFormTitle').textContent = `Quelle bearbeiten · ${source.name}`; $('#sourceResult').textContent = '';
+    });
+    const pin = element('button', 'SMB bestätigen', 'row-action'); pin.addEventListener('click', async () => {
+      pin.disabled = true;
+      try { const check = await api('/api/sources/probe', { path: source.path }); if (!check.ok) throw new Error(check.error); await api('/api/sources', { sources: savedConfig.sources.map(item => item.id === source.id ? { ...item, expectedSource: check.mount.source } : item) }); loaded = false; await refresh(); renderSources(); $('#sourceResult').textContent = `Bestätigt: ${check.mount.source}`; }
+      catch (e) { $('#sourceResult').textContent = e.message; } finally { pin.disabled = false; }
+    });
+    const remove = element('button', 'Abmelden', 'row-action'); remove.addEventListener('click', async () => {
+      remove.disabled = true;
+      try { await api('/api/sources', { sources: savedConfig.sources.filter(item => item.id !== source.id) }); loaded = false; await refresh(); renderSources(); if (sourceEditing === source.id) resetSource(); $('#sourceResult').textContent = 'Quelle aus der App entfernt. Dateien und Sicherungen bleiben erhalten.'; }
+      catch (e) { $('#sourceResult').textContent = e.message; remove.disabled = false; }
+    });
+    actions.append(edit,pin,remove); row.append(info,actions); $('#sourceList').append(row);
+  }
+}
+$('#resetSource').addEventListener('click', resetSource);
+$('#probeSource').addEventListener('click', async event => {
+  const button = event.currentTarget; button.disabled = true;
+  try { const check = await api('/api/sources/probe', { path: $('#sourceForm').elements.path.value }); if (!check.ok) throw new Error(check.error); $('#sourceForm').elements.expectedSource.value = check.mount.source; $('#sourceResult').textContent = `Erkannt: ${check.mount.source} · zum Bestätigen Quelle speichern.`; }
+  catch (e) { $('#sourceResult').textContent = e.message; } finally { button.disabled = false; }
+});
+$('#sourceForm').addEventListener('submit', async event => {
+  event.preventDefault(); const form = event.currentTarget, button = form.querySelector('[type=submit]'); button.disabled = true;
+  try {
+    const source = {}; for (const key of ['id','name','path','expectedSource']) source[key] = form.elements[key].value.trim();
+    const sources = sourceEditing ? savedConfig.sources.map(item => item.id === sourceEditing ? source : item) : [...savedConfig.sources, source];
+    await api('/api/sources', { sources }); loaded = false; await refresh(); renderSources(); resetSource(); $('#sourceResult').textContent = 'Quelle gespeichert. Zeitplan unter Einstellungen festlegen.';
+  } catch (e) { $('#sourceResult').textContent = e.message; } finally { button.disabled = false; }
+});
+async function openHistory(id) {
+  $('#historyTitle').textContent = `Verlauf · ${names[id]}`; $('#historySummary').textContent = 'Wird geladen …'; $('#historyRows').replaceChildren(); $('#historyDialog').showModal();
+  try {
+    const data = await api(`/api/history/${id}`), folder = folderData.find(item => item.id === id), health = lastHealth[id] || folder.health;
+    $('#historySummary').textContent = `${folder.path} · ${nextText(health)} (${activeTimezone})${health?.message ? ' · ' + health.message : ''}`;
+    if (!data.entries.length) { const row = element('tr'), cell = element('td', 'Noch keine abgeschlossenen App-Läufe.'); cell.colSpan = 5; row.append(cell); $('#historyRows').append(row); }
+    for (const entry of data.entries) {
+      const row = element('tr'); row.append(element('td', entry.startedAt ? date(entry.startedAt) : 'Unbekannt'), element('td', statuses[entry.status]), element('td', entry.durationSeconds === null ? '—' : `${Math.floor(entry.durationSeconds / 60)} min ${entry.durationSeconds % 60} s`), element('td', entry.source === 'schedule' ? 'Zeitplan' : entry.source === 'manual' ? 'Manuell' : 'Altbestand'));
+      const cell = element('td'), button = element('button','Öffnen','row-action'); button.addEventListener('click', () => openLog(id, entry.runId)); cell.append(button); row.append(cell); row.title = entry.error || ''; $('#historyRows').append(row);
+    }
+  } catch (e) { $('#historySummary').textContent = e.message; }
+}
+$('#showPBS').addEventListener('click', async () => {
+  $('#pbsFilter').replaceChildren(); const all = element('option','Alle Gruppen'); all.value = ''; $('#pbsFilter').append(all);
+  for (const [id,name] of Object.entries(names)) { const option = element('option',name); option.value = id; $('#pbsFilter').append(option); }
+  $('#pbsDialog').showModal(); $('#pbsSummary').textContent = 'Bestand wird geladen …';
+  try { pbsData = await api('/api/pbs'); renderPBS(); } catch (e) { $('#pbsSummary').textContent = e.message; }
+});
+$('#refreshPBS').addEventListener('click', async event => {
+  const button = event.currentTarget; button.disabled = true; $('#pbsSummary').textContent = 'PBS wird abgefragt …';
+  try { pbsData = await api('/api/pbs/refresh', {}); renderPBS(); } catch (e) { $('#pbsSummary').textContent = e.message; } finally { button.disabled = false; }
+});
+$('#pbsFilter').addEventListener('change', renderPBS);
+function renderPBS() {
+  if (!pbsData) return;
+  $('#pbsRows').replaceChildren(); const filter = $('#pbsFilter').value;
+  const snapshots = (pbsData.snapshots || []).filter(snapshot => !filter || [filter,`qnap-${filter}`].includes(snapshot.id));
+  $('#pbsSummary').textContent = `${pbsData.checkedAt ? 'Stand: ' + date(pbsData.checkedAt) : 'Noch nicht abgerufen – „Vom PBS abrufen“ wählen.'} · ${snapshots.length} Snapshots${pbsData.error ? ' · ' + pbsData.error + ' (ggf. alter Bestand)' : ''}${snapshots.length > 200 ? ' · die neuesten 200 werden angezeigt' : ''}${pbsData.count > 5000 ? ' · Abruf auf 5000 Einträge begrenzt' : ''}`;
+  for (const snapshot of snapshots.slice(0,200)) { const row = element('tr'), size = snapshot.size === null ? '—' : `${(snapshot.size / 1024 ** 3).toFixed(2)} GiB`; row.append(element('td', snapshot.group + (snapshot.protected ? ' 🔒' : '')), element('td',date(snapshot.time)), element('td',size), element('td',snapshot.files.join(', ') || '—')); $('#pbsRows').append(row); }
+}
+$('#testNotification').addEventListener('click', async event => {
+  const button = event.currentTarget; button.disabled = true;
+  try { await api('/api/notifications/test', {}); $('#notificationResult').textContent = 'Testmeldung zugestellt.'; } catch (e) { $('#notificationResult').textContent = e.message; } finally { button.disabled = false; }
+});
 showLogin(); refresh();
-setInterval(() => { if (authenticated) refresh(); }, 15000);
+setInterval(() => { if (authenticated && !polling) refresh(); }, 15000);
 setInterval(refreshActivity, 3000);

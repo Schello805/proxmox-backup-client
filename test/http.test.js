@@ -8,7 +8,10 @@ const path = require('node:path');
 const { once } = require('node:events');
 test('HTTP: Auth, Secret-Schutz, persistente Konfiguration und fehlende Mounts', async t => {
  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'qnap-test-'));
- const child = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], { env: { ...process.env, APP_PASSWORD: '123456', HOST: '127.0.0.1', PORT: '0', CONFIG_FILE: path.join(tmp, 'config.json'), DATA_DIR: tmp }, stdio: ['ignore', 'pipe', 'pipe'] });
+ const bin = path.join(tmp,'bin'), snapshotsFile = path.join(tmp,'snapshots.json');
+ fs.mkdirSync(bin); fs.writeFileSync(snapshotsFile, JSON.stringify([{'backup-type':'host','backup-id':'software','backup-time':1792454400,files:['software.pxar.didx'],size:1024}]));
+ fs.writeFileSync(path.join(bin,'proxmox-backup-client'), '#!/usr/bin/env node\nif(process.argv[2]==="snapshot") process.stdout.write(require("fs").readFileSync(process.env.QNAP_TEST_SNAPSHOTS)); else console.log("test-client");\n', {mode:0o700});
+ const child = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], { env: { ...process.env, PATH: bin + path.delimiter + process.env.PATH, QNAP_TEST_SNAPSHOTS: snapshotsFile, APP_PASSWORD: '123456', HOST: '127.0.0.1', PORT: '0', CONFIG_FILE: path.join(tmp, 'config.json'), DATA_DIR: tmp }, stdio: ['ignore', 'pipe', 'pipe'] });
  t.after(async () => { child.kill('SIGTERM'); if (child.exitCode === null) await once(child, 'exit'); fs.rmSync(tmp, { recursive: true, force: true }); });
  const url = await new Promise((resolve, reject) => {
    const timer = setTimeout(() => reject(new Error('Serverstart überschritten')), 5000);
@@ -33,21 +36,38 @@ test('HTTP: Auth, Secret-Schutz, persistente Konfiguration und fehlende Mounts',
  assert.equal((await fetch(url + '/', { headers })).status, 200);
  assert.equal((await fetch(url + '/api/activity', { headers })).status, 200);
  const initial = await (await fetch(url + '/api/status', { headers })).json();
- assert.equal(initial.folders.length, 5); assert.equal(initial.config.password, '');
- const config = { ...initial.config, repository: 'backup@pbs@localhost:store', password: 'test-secret', schedules: { ...initial.config.schedules, software: { days: [1,3,5], time: '02:30' } } };
+ assert.equal(initial.folders.length, 6); assert.equal(initial.folders.find(source => source.id === 'daten').path, '/mnt/Daten/Daten'); assert.equal(initial.config.password, '');
+ const config = { ...initial.config, repository: 'backup@pbs@localhost:store', password: 'test-secret', timezone: 'UTC', notifications: { enabled: false, url: 'http://127.0.0.1/test-topic', token: 'notify-secret' }, schedules: { ...initial.config.schedules, software: { days: [1,3,5], time: '02:30' } } };
  assert.equal((await post('/api/config', config, { Origin: 'https://evil.example' })).status, 403);
  assert.equal((await post('/api/config', config)).status, 200);
  assert.equal(JSON.parse(fs.readFileSync(path.join(tmp, 'config.json'))).password, 'test-secret');
  const statusText = await (await fetch(url + '/api/status', { headers })).text();
- assert.ok(!statusText.includes('test-secret')); assert.equal(JSON.parse(statusText).config.hasPassword, true);
+ assert.ok(!statusText.includes('test-secret')); assert.ok(!statusText.includes('notify-secret')); assert.equal(JSON.parse(statusText).config.timezone,'UTC'); assert.equal(JSON.parse(statusText).config.hasPassword, true);
  assert.deepEqual(JSON.parse(statusText).config.schedules.software, { days: [1,3,5], time: '02:30' });
  assert.equal((await post('/api/backup/unknown', {})).status, 400);
- if (os.platform() !== 'linux') {
-   assert.equal((await post('/api/backup/software', {})).status, 202);
-   let state;
-   for (let n = 0; n < 30; n++) { state = JSON.parse(fs.readFileSync(path.join(tmp, 'state.json'))); if (state.jobs.software?.status === 'failed') break; await new Promise(resolve => setTimeout(resolve, 30)); }
-   assert.equal(state.jobs.software.status, 'failed'); assert.ok(state.jobs.software.error.includes('Mount'));
+ const sources = [...initial.config.sources, { id:'testquelle',name:'Testquelle',path:'/mnt/Daten/Fehlt-' + Date.now(),expectedSource:'' }];
+ assert.equal((await post('/api/sources', { sources })).status,200);
+ assert.equal((await post('/api/sources/probe', {path:'/etc'})).status,400);
+ for (let n=0;n<12;n++) {
+   assert.equal((await post('/api/backup/testquelle',{})).status,202);
+   let job;
+   for (let poll=0;poll<100;poll++) { job=JSON.parse(fs.readFileSync(path.join(tmp,'state.json'))).jobs.testquelle; if(job.status==='failed')break; await new Promise(resolve=>setTimeout(resolve,20)); }
+   assert.equal(job.status,'failed');
  }
+ const history = await (await fetch(url+'/api/history/testquelle',{headers})).json();
+ assert.equal(history.entries.length,10); assert.ok(history.entries[0].durationSeconds>=0);
+ assert.equal(fs.readdirSync(path.join(tmp,'history','testquelle')).length,10);
+ const archived = await (await fetch(url+'/api/history/testquelle/'+history.entries[0].runId,{headers})).json();
+ assert.match(archived.log,/Mount-Prüfung/);
+ assert.equal((await fetch(url+'/api/history/testquelle/00000000-0000-0000-0000-000000000000',{headers})).status,404);
+ assert.equal((await post('/api/sources',{sources:initial.config.sources})).status,200);
+ assert.ok(fs.existsSync(path.join(tmp,'history','testquelle')));
+ assert.equal((await fetch(url+'/api/pbs',{headers})).status,200);
+ const pbs = await (await post('/api/pbs/refresh',{})).json();
+ assert.equal(pbs.snapshots[0].group,'host/software'); assert.equal(pbs.snapshots[0].files[0],'software.pxar.didx'); assert.ok(pbs.checkedAt);
+ fs.writeFileSync(snapshotsFile,'invalid JSON');
+ const stalePBS = await (await post('/api/pbs/refresh',{})).json(); assert.ok(stalePBS.error); assert.equal(stalePBS.snapshots.length,1); assert.equal(stalePBS.checkedAt,pbs.checkedAt);
+
  assert.equal((await post('/api/logout', {})).status, 200);
  assert.equal((await fetch(url + '/api/status', { headers })).status, 401);
  for (let n = 0; n < 10; n++) assert.equal((await login('wrong')).status, 401);

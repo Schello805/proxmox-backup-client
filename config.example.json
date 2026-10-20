@@ -3,6 +3,51 @@
   "password": "",
   "fingerprint": "",
   "namespace": "",
+  "sources": [
+    {
+      "id": "software",
+      "name": "Software",
+      "path": "/mnt/Daten/Software",
+      "expectedSource": ""
+    },
+    {
+      "id": "filme",
+      "name": "Filme",
+      "path": "/mnt/Daten/Filme",
+      "expectedSource": ""
+    },
+    {
+      "id": "serien",
+      "name": "Serien",
+      "path": "/mnt/Daten/Serien",
+      "expectedSource": ""
+    },
+    {
+      "id": "hoerspiele",
+      "name": "Hörspiele",
+      "path": "/mnt/Daten/Hoerspiele",
+      "expectedSource": ""
+    },
+    {
+      "id": "musik",
+      "name": "Musik",
+      "path": "/mnt/Daten/Musik",
+      "expectedSource": ""
+    },
+    {
+      "id": "daten",
+      "name": "Daten",
+      "path": "/mnt/Daten/Daten",
+      "expectedSource": ""
+    }
+  ],
+  "timezone": "Europe/Berlin",
+  "staleAfterDays": 14,
+  "notifications": {
+    "enabled": false,
+    "url": "",
+    "token": ""
+  },
   "schedules": {
     "software": {
       "days": [],
@@ -21,6 +66,10 @@
       "time": ""
     },
     "musik": {
+      "days": [],
+      "time": ""
+    },
+    "daten": {
       "days": [],
       "time": ""
     }
