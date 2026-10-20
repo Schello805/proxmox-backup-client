@@ -169,3 +169,9 @@ Der Größen-Cache berücksichtigt neben Quellpfad und erwarteter Freigabe auch 
 Zusätzlich liest der Button die im LXC sichtbaren SMB/CIFS-Mountpunkte unter `/mnt/Daten/`. Noch nicht registrierte, nicht mit vorhandenen Quellen überlappende Mounts erscheinen unter „Neue SMB-Freigaben (N)“. Dort eine Freigabe auswählen, vorgeschlagenen Namen/Pfad und Backup-Ziel prüfen und „Quelle speichern“ drücken. Der neue Auftrag bleibt zunächst manuell. Mounts oder Unterordner auf dem Proxmox-Host, die noch nicht in diesen LXC durchgereicht wurden, kann die App nicht erkennen. Sie legt keine Host-Mounts an und startet durch Erkennung keine Sicherung.
 
 Stimmt die aktuelle SMB-Quelle nicht mehr mit der hinterlegten Erwartung überein, erscheint „SMB geändert“. Der erkannte UNC-Pfad steht in der Zeile und im Tooltip; der Backup-Start bleibt gesperrt. Unter „Quellen“ die angezeigte tatsächliche Quelle prüfen und bei korrekter Zuordnung „SMB bestätigen“ wählen. Die Aktualisierung überschreibt diese Bestätigung nicht automatisch. Das verhindert insbesondere, dass ein irrtümlich nach `/mnt/Daten/Daten` gebundener Software-Mount unbemerkt als Daten-Backup behandelt wird.
+
+## Navigation und Quellen bearbeiten
+
+Die Navigation im Kopfbereich öffnet Quellen, PBS-Bestand und Diagnose als normale App-Ansichten. Browser-Zurück und direkte Links funktionieren auch für Quellendetails. Nur die Anmeldung verwendet ein Modal.
+
+In der Übersicht den Quellennamen für den Verlauf oder den Zeitplan zum Bearbeiten anklicken. Der Detailbereich bleibt unter der Quellentabelle. Dort lassen sich Name, Pfad, erwartete SMB-Freigabe, Datastore und Wochenplan ändern sowie Verlauf und Protokoll ansehen. „Quelle speichern“ speichert Quelle und Wochenplan gemeinsam; die Zeitzone gilt weiterhin zentral für alle Quellen. „Schließen“ kehrt zur kompakten Übersicht zurück.

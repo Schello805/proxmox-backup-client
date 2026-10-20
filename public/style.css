@@ -1932,3 +1932,28 @@ button:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid
 .discovered-mount code, .discovered-mount small { font-size: 10px; color: var(--muted); margin-top: 4px; }
 .discovered-mount button { flex-shrink: 0; }
 #discoveredSources { border: 1px solid #c5dfd2; border-radius: 8px; padding: 12px; background: #f6fbf8; margin: 14px 0; }
+
+/* Navigation and contextual source details stay in the document flow. */
+a.nav { display: block; text-decoration: none; box-sizing: border-box; }
+.workspace-nav { display: flex; justify-content: flex-end; gap: 4px; margin: -5px 0 14px; border-bottom: 1px solid var(--line); }
+.workspace-link { padding: 10px 14px; text-decoration: none; font-size: 12px; color: var(--muted); border-bottom: 2px solid transparent; }
+.workspace-link:hover, .workspace-link.active { color: var(--green); border-bottom-color: var(--green); background: #eaf3ee; }
+.workspace-page { width: auto !important; max-width: none; padding: 22px; margin-top: 18px; }
+.datastore-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+.source-detail { padding: 20px; margin-top: 16px; border-top: 3px solid var(--green); scroll-margin-top: 20px; }
+.detail-tabs { display: flex; gap: 8px; padding: 14px 0; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
+.detail-tabs button { background: none; color: var(--muted); border: 0; padding: 8px 12px; border-radius: 5px; cursor: pointer; }
+.detail-tabs button.active { color: var(--green); background: #eaf3ee; }
+.source-detail .workspace-page { border: 0; padding: 0; margin: 0; box-shadow: none; background: transparent; }
+.source-detail [data-close], .source-detail #closeLog { display: none; }
+.plan-link { cursor: pointer; }
+.plan-link:hover { background: #eaf3ee; }
+#sourceSchedule { border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin: 16px 0; }
+#sourceSchedule legend { font-size: 12px; font-weight: 600; }
+.source-plan { display: flex; align-items: end; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+.source-plan select, .source-plan input { padding: 8px; border: 1px solid var(--line); border-radius: 5px; font: inherit; }
+@media(max-width:760px) { .workspace-nav { justify-content: flex-start; } .workspace-link { flex: 1; text-align: center; padding: 10px 6px; } .workspace-page, .source-detail { padding: 14px; } }
+ .workspace-nav { margin: 0; border: 0; flex-shrink: 0; }
+.workspace-link { padding: 7px 9px; }
+@media(min-width:761px) and (max-width:1300px) { header>span { font-size: 8px; letter-spacing: 1px; } #updated { display: none; } }
+@media(max-width:760px) { .header-actions { flex-wrap: wrap; } .workspace-nav { order: 3; width: 100%; } }

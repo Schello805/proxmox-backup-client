@@ -50,6 +50,13 @@ test('HTTP: Auth, Secret-Schutz, persistente Konfiguration und fehlende Mounts',
  assert.equal((await post('/api/backup/unknown', {})).status, 400);
  const sources = [...initial.config.sources, { id:'testquelle',name:'Testquelle',path:'/mnt/Daten/Fehlt-' + Date.now(),expectedSource:'' }];
  assert.equal((await post('/api/sources', { sources })).status,200);
+ assert.equal((await post('/api/sources', { sources, schedule: { id: 'testquelle', value: { days: [2,4], time: '04:25' } } })).status,200);
+ const scoped = (await (await fetch(url + '/api/status', { headers })).json()).config;
+ assert.deepEqual(scoped.schedules.testquelle, { days: [2,4], time: '04:25' });
+ assert.deepEqual(scoped.schedules.software, config.schedules.software);
+ assert.equal(scoped.repository, config.repository); assert.equal(scoped.hasPassword, true);
+ assert.equal((await post('/api/sources', { sources, schedule: { id: 'unknown', value: { days: [2], time: '04:25' } } })).status,400);
+ assert.equal((await post('/api/sources', { sources, schedule: { id: 'testquelle', value: { days: [2], time: 'bad' } } })).status,400);
  fs.writeFileSync(path.join(tmp,'maintenance'),'');assert.equal((await post('/api/backup/testquelle',{})).status,409);fs.unlinkSync(path.join(tmp,'maintenance'));
  assert.equal((await post('/api/sources/probe', {path:'/etc'})).status,400);
  for (let n=0;n<12;n++) {

@@ -117,7 +117,9 @@ const server = http.createServer(async (req, res) => {
       const input = await body(req); return json(res, 200, await inspectPath(input.path, input.expectedSource || ''));
     }
     if (req.method === 'POST' && url.pathname === '/api/sources') {
-      const input = await body(req); configs.apply({ ...configs.get(), sources: input.sources }); return json(res, 200, { success: true });
+      const input = await body(req); const current = configs.get();
+      if (input.schedule && !input.sources?.some(source => source.id === input.schedule.id)) throw new Error('Zeitplan gehört zu keiner Quelle.');
+      configs.apply({ ...current, sources: input.sources, schedules: input.schedule ? { ...current.schedules, [input.schedule.id]: input.schedule.value } : current.schedules }); return json(res, 200, { success: true });
     }
     if (req.method === 'GET' && url.pathname === '/api/pbs') return json(res, 200, pbs.current(url.searchParams.get('target') || 'primary'));
     if (req.method === 'POST' && url.pathname === '/api/pbs/refresh') return json(res, 200, await pbs.refresh(url.searchParams.get('target') || 'primary'));

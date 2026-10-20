@@ -110,14 +110,14 @@ async function refresh() {
     $('#overviewPager').hidden = data.folders.length <= 6; $('#sourcePage').textContent = `Seite ${sourcePage + 1} / ${Math.ceil(data.folders.length / 6)}`;
     $('#previousSources').disabled = sourcePage === 0; $('#nextSources').disabled = (sourcePage + 1) * 6 >= data.folders.length;
     for (const folder of data.folders.slice(sourcePage * 6, (sourcePage + 1) * 6)) {
-      const row = element('tr'); row.dataset.folder = folder.id; const source = element('td'); const sourceButton = element('button', names[folder.id], 'source-link'); sourceButton.title = 'Verlauf und Details öffnen'; sourceButton.addEventListener('click', () => openHistory(folder.id)); const path = element('code', folder.path); path.title = folder.path; const target = element('small', folder.targetRepository?.split(':').at(-1) || 'Ziel fehlt', 'source-target'); target.title = folder.targetRepository || 'PBS-Ziel noch nicht konfiguriert'; const heading = element('div', undefined, 'source-heading'); heading.append(sourceButton, target); source.append(heading, path); row.append(source);
+      const row = element('tr'); row.dataset.folder = folder.id; const source = element('td'); const sourceButton = element('button', names[folder.id], 'source-link'); sourceButton.title = 'Details, Zeitplan und Verlauf öffnen'; sourceButton.addEventListener('click', () => openHistory(folder.id)); const path = element('code', folder.path); path.title = folder.path; const target = element('small', folder.targetRepository?.split(':').at(-1) || 'Ziel fehlt', 'source-target'); target.title = folder.targetRepository || 'PBS-Ziel noch nicht konfiguriert'; const heading = element('div', undefined, 'source-heading'); heading.append(sourceButton, target); source.append(heading, path); row.append(source);
       const mount = element('td'), badge = element('span', folder.ok ? '● Eingebunden' : folder.mount?.source && folder.expectedSource && folder.mount.source !== folder.expectedSource ? '● SMB geändert' : '● Nicht verfügbar', `badge ${folder.ok ? 'ok' : 'bad'}`); badge.title = folder.ok ? `${folder.mount.source} → ${folder.mount.target} (${folder.mount.type}) · ${folder.identityConfirmed ? 'SMB-Identität bestätigt' : 'SMB-Quelle noch nicht festgelegt: unter Quellen bestätigen'}` : `${folder.error}${folder.mount?.source ? ' Erkannt: ' + folder.mount.source : ''}`; mount.append(badge);
       const size = folder.size;
       const sizeLabel = size?.bytes != null ? new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 }).format(size.bytes / 1024 ** 3) + ' GiB' : ({ scanning: 'Größe wird ermittelt …', pending: 'Größe vorgemerkt …', error: 'Größe nicht verfügbar' }[size?.status] || (folder.mount?.source && !folder.ok ? 'Erkannt: ' + folder.mount.source : 'Größe: —'));
       const sizeInfo = element('small', sizeLabel, 'source-size');
       sizeInfo.title = size?.error || `Dateigröße der Quelle (unkomprimiert)${size?.checkedAt ? ' · Stand: ' + date(size.checkedAt) : ''} · Automatisch alle 6 Stunden oder über „Aktualisieren“. Große Freigaben können länger dauern.`;
       mount.append(sizeInfo); row.append(mount);
-      const plan = element('td'); plan.append(element('span', scheduleText(folder.schedule)), element('small', nextText(folder.health), 'next-run')); plan.title = `${scheduleText(folder.schedule)} · ${nextText(folder.health)} (${activeTimezone})`;
+      const plan = element('td'); plan.append(element('span', scheduleText(folder.schedule)), element('small', nextText(folder.health), 'next-run')); plan.classList.add('plan-link'); plan.tabIndex = 0; plan.setAttribute('role', 'button'); plan.setAttribute('aria-label', `Zeitplan ${names[folder.id]} bearbeiten`); plan.addEventListener('click', () => editSource(folder.id, true)); plan.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); editSource(folder.id, true); } }); plan.title = `${scheduleText(folder.schedule)} · ${nextText(folder.health)} (${activeTimezone})`;
       row.append(plan, element('td', date(folder.job.lastSuccess)));
       const state = element('td'); state.className = 'job-state'; renderJob(state, folder.job, folder.health); row.append(state); const status = folder.job.status;
       const actions = element('td'), start = element('button', '↗ Sichern', 'row-action'), logs = element('button', 'Protokoll', 'row-action');
@@ -135,11 +135,49 @@ async function refresh() {
   } catch (e) { $('#updated').textContent = 'Aktualisierung fehlgeschlagen'; if (authenticated) notice(e.message, true); } finally { polling = false; if (refreshWaiters.length) { const waiters = refreshWaiters.splice(0); await refresh(); for (const resolve of waiters) resolve(); } }
 }
 async function refreshLog() { try { const data = await api(logRun ? `/api/history/${logFolder}/${logRun}` : `/api/logs/${logFolder}`); const pre = $('#logText'), bottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 40; pre.textContent = data.log; if (bottom) pre.scrollTop = pre.scrollHeight; } catch (e) { notice(e.message, true); } }
-async function openLog(id, runId = null) { logFolder = id; logRun = runId; $('#logTitle').textContent = `Protokoll · ${names[id]}`; $('#logText').textContent = 'Wird geladen …'; $('#logDialog').showModal(); await refreshLog(); }
+async function openLog(id, runId = null) { logFolder = id; logRun = runId; $('#logTitle').textContent = `Protokoll · ${names[id]}`; $('#logText').textContent = 'Wird geladen …'; showContext('logDialog', id); await refreshLog(); }
 $('#liveDetails').addEventListener('click', () => { if (previousActive) openLog(previousActive); });
-$('#closeLog').addEventListener('click', () => $('#logDialog').close()); $('#logDialog').addEventListener('close', () => { logFolder = null; logRun = null; });
-function navigate(page) { if (!['overview', 'settings', 'guide'].includes(page)) page = 'overview'; document.body.dataset.page = page; document.querySelectorAll('.page').forEach(el => el.hidden = el.id !== page); document.querySelectorAll('.nav').forEach(el => el.classList.toggle('active', el.dataset.page === page)); }
-document.querySelectorAll('.nav').forEach(button => button.addEventListener('click', () => { location.hash = button.dataset.page; })); window.addEventListener('hashchange', () => navigate(location.hash.slice(1))); navigate(location.hash.slice(1));
+$('#closeLog').addEventListener('click', closeContext);
+let detailId = null;
+const homes = new Map(['sourceForm','historyDialog','logDialog'].map(id => [id, { parent: $('#' + id).parentNode, next: $('#' + id).nextSibling }]));
+function restoreContext() {
+  for (const [id, home] of homes) home.parent.insertBefore($('#' + id), home.next?.parentNode === home.parent ? home.next : null);
+  $('#sourceDetail').hidden = true; $('#historyDialog').hidden = true; $('#logDialog').hidden = true;
+  logFolder = null; logRun = null; detailId = null;
+}
+function closeContext() { location.hash = '#overview'; }
+function showContext(view, id) {
+  const route = `overview/${id}/${view === 'logDialog' ? 'log' : view === 'historyDialog' ? 'history' : 'edit'}`;
+  if (location.hash.slice(1) !== route) history.pushState(null, '', '#' + route);
+  document.querySelectorAll('.page').forEach(el => el.hidden = el.id !== 'overview');
+  $('#sourceDetail').hidden = false; detailId = id; $('#detailTitle').textContent = names[id] || id;
+  const slots = { sourceForm: 'detailEditor', historyDialog: 'detailHistorySlot', logDialog: 'detailLogSlot' };
+  for (const [key, slot] of Object.entries(slots)) { $('#' + slot).hidden = key !== view; if (key === view) { $('#' + slot).append($('#' + key)); $('#' + key).hidden = false; } }
+  if (view !== 'logDialog') { logFolder = null; logRun = null; }
+  document.querySelectorAll('.detail-tabs button').forEach(button => button.classList.toggle('active', button.id === ({ sourceForm: 'detailEdit', historyDialog: 'detailHistory', logDialog: 'detailLog' })[view]));
+  $('#sourceDetail').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+function navigate() {
+  restoreContext();
+  const [requested, id, tab] = location.hash.slice(1).split('/');
+  const page = ['overview','settings','guide','sourcesDialog','pbsDialog','systemDialog'].includes(requested) ? requested : 'overview';
+  document.body.dataset.page = page;
+  if (!id) window.scrollTo({ top: 0, behavior: 'instant' });
+  document.querySelectorAll('.page').forEach(el => el.hidden = el.id !== page);
+  document.querySelectorAll('[data-page]').forEach(el => { const active = el.dataset.page === page; el.classList.toggle('active', active); if (active) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current'); });
+  if (!savedConfig) return;
+  if (page === 'sourcesDialog') renderSources();
+  if (page === 'pbsDialog') openPBS();
+  if (page === 'systemDialog') document.dispatchEvent(new Event('open-system'));
+  if (page === 'overview' && names[id]) { if (tab === 'log') void openLog(id); else if (tab === 'history') void openHistory(id); else editSource(id, true); }
+}
+window.addEventListener('hashchange', navigate); window.addEventListener('popstate', navigate);
+$('#closeDetail').addEventListener('click', closeContext);
+$('#detailEdit').addEventListener('click', () => editSource(detailId, true));
+$('#detailHistory').addEventListener('click', () => openHistory(detailId));
+$('#detailLog').addEventListener('click', () => openLog(detailId));
+$('#appVersion').addEventListener('click', () => { location.hash = 'systemDialog'; });
+navigate();
 $('#refresh').addEventListener('click', async () => {
   const button = $('#refresh'); button.disabled = true; button.textContent = '↻ Prüfe Mounts …';
   try {
@@ -180,7 +218,7 @@ function showLogin() {
 $('#loginDialog').addEventListener('cancel', event => event.preventDefault());
 $('#loginForm').addEventListener('submit', async event => {
   event.preventDefault(); const button = event.currentTarget.querySelector('button'); button.disabled = true;
-  try { await api('/api/login', { password: $('#loginPassword').value }); authenticated = true; $('#loginPassword').value = ''; $('#loginDialog').close(); document.body.classList.remove('locked'); await refresh(); }
+  try { await api('/api/login', { password: $('#loginPassword').value }); authenticated = true; $('#loginPassword').value = ''; $('#loginDialog').close(); document.body.classList.remove('locked'); await refresh(); navigate(); }
   catch (e) { $('#loginError').textContent = e.message; }
   finally { button.disabled = false; }
 });
@@ -242,10 +280,10 @@ async function refreshActivity() {
 const timezones = new Set(['Europe/Berlin', 'UTC', ...((Intl.supportedValuesOf && Intl.supportedValuesOf('timeZone')) || ['Europe/London','America/New_York'])]);
 $('#timezones').replaceChildren();
 for (const zone of timezones) { const option = element('option'); option.value = option.textContent = zone; $('#timezones').append(option); }
-document.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click', () => $('#' + button.dataset.close).close()));
-$('#manageSources').addEventListener('click', () => { if (!savedConfig) return; renderSources(); resetSource(); $('#sourcesDialog').showModal(); });
+document.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click', closeContext));
+
 function resetSource() {
-  sourceEditing = null; clearFieldErrors($('#sourceForm')); $('#sourceForm').reset(); $('#sourceForm').elements.id.readOnly = false; $('#sourceFormTitle').textContent = 'Quelle hinzufügen'; $('#sourceResult').textContent = '';
+  sourceEditing = null; clearFieldErrors($('#sourceForm')); $('#sourceForm').reset(); $('#sourceForm').elements.id.readOnly = false; $('#sourceFormTitle').textContent = 'Quelle hinzufügen'; $('#sourceResult').textContent = ''; fillSourcePlan({ days: [], time: '' });
 }
 function backupTargets() {
   return [{ id: 'primary', name: savedConfig?.repository?.split(':').at(-1) || 'Datastore 1' }, ...(savedConfig?.secondaryDatastore ? [{ id: 'secondary', name: savedConfig.secondaryDatastore }] : [])];
@@ -263,7 +301,7 @@ function renderSources() {
     const detected = folderData.find(item => item.id === source.id)?.mount?.source; if (detected) info.append(element('small', `Aktuell erkannt: ${detected}`, 'hint'));
     const actions = element('div', undefined, 'source-editor-actions');
     const edit = element('button', 'Bearbeiten', 'row-action'); edit.addEventListener('click', () => {
-      sourceEditing = source.id; const form = $('#sourceForm'); clearFieldErrors(form); for (const key of ['id','name','path','expectedSource']) form.elements[key].value = source[key]; form.elements.target.value = source.target || 'primary'; form.elements.id.readOnly = true; $('#sourceFormTitle').textContent = `Quelle bearbeiten · ${source.name}`; $('#sourceResult').textContent = '';
+      editSource(source.id);
     });
     const pin = element('button', 'SMB bestätigen', 'row-action'); pin.addEventListener('click', async () => {
       pin.disabled = true;
@@ -291,11 +329,12 @@ $('#sourceForm').addEventListener('submit', async event => {
     const errors = validateSourceForm(source, savedConfig.sources, sourceEditing); showFieldErrors(form, errors);
     if (Object.keys(errors).length) throw new Error('Bitte die markierten Quellenfelder korrigieren.');
     const sources = sourceEditing ? savedConfig.sources.map(item => item.id === sourceEditing ? source : item) : [...savedConfig.sources, source];
-    await api('/api/sources', { sources }); loaded = false; await refresh(); renderSources(); resetSource(); $('#sourceResult').textContent = 'Quelle gespeichert. Zeitplan unter Einstellungen festlegen.';
+    const schedule = { days: form.elements.planMode.value === 'manual' ? [] : [...$('#sourceDays').querySelectorAll('button[aria-pressed="true"]')].map(button => Number(button.dataset.day)), time: form.elements.planMode.value === 'manual' ? '' : form.elements.planTime.value };
+    await api('/api/sources', { sources, schedule: { id: source.id, value: schedule } }); loaded = false; await refresh(); renderSources(); if (detailId) editSource(source.id, true); else resetSource(); $('#sourceResult').textContent = 'Quelle und Wochenplan gespeichert.';
   } catch (e) { const field = serverField(e); if (field) showFieldErrors(form, { [field]: e.message }); $('#sourceResult').textContent = e.message; } finally { button.disabled = false; }
 });
 async function openHistory(id) {
-  $('#historyTitle').textContent = `Verlauf · ${names[id]}`; $('#historySummary').textContent = 'Wird geladen …'; $('#historyRows').replaceChildren(); $('#historyDialog').showModal();
+  $('#historyTitle').textContent = `Verlauf · ${names[id]}`; $('#historySummary').textContent = 'Wird geladen …'; $('#historyRows').replaceChildren(); showContext('historyDialog', id);
   try {
     const data = await api(`/api/history/${id}`), folder = folderData.find(item => item.id === id), health = lastHealth[id] || folder.health;
     $('#historySummary').textContent = `${folder.path} · Ziel: ${folder.targetRepository || 'Noch nicht konfiguriert'} · ${nextText(health)} (${activeTimezone})${health?.message ? ' · ' + health.message : ''}`;
@@ -306,12 +345,12 @@ async function openHistory(id) {
     }
   } catch (e) { $('#historySummary').textContent = e.message; }
 }
-$('#showPBS').addEventListener('click', async () => {
+async function openPBS() {
   $('#pbsFilter').replaceChildren(); const all = element('option','Alle Gruppen'); all.value = ''; $('#pbsFilter').append(all);
   for (const [id,name] of Object.entries(names)) { const option = element('option',name); option.value = id; $('#pbsFilter').append(option); }
   $('#pbsTarget').replaceChildren(...backupTargets().map(target => { const option = element('option', target.name); option.value = target.id; return option; }));
-  $('#pbsDialog').showModal(); await loadPBS();
-});
+  await loadPBS();
+}
 async function loadPBS(force = false) {
   $('#refreshPBS').disabled = true; $('#pbsTarget').disabled = true; $('#pbsSummary').textContent = 'PBS-Bestand wird geladen …';
   $('#pbsRows').replaceChildren(); pbsData = null;
@@ -365,7 +404,7 @@ $('#testNotification').addEventListener('click', async event => {
   try { await api('/api/notifications/test', {}); $('#notificationResult').textContent = 'Testmeldung zugestellt.'; } catch (e) { $('#notificationResult').textContent = e.message; } finally { button.disabled = false; }
 });
 async function bootstrap() {
-  try { const session = await api('/api/session'); if (session.authenticated) { authenticated = true; document.body.classList.remove('locked'); $('#logout').hidden = !session.authEnabled; await refresh(); } else showLogin(); }
+  try { const session = await api('/api/session'); if (session.authenticated) { authenticated = true; document.body.classList.remove('locked'); $('#logout').hidden = !session.authEnabled; await refresh(); navigate(); } else showLogin(); }
   catch (e) { showLogin(); $('#loginError').textContent = e.message; }
 }
 bootstrap();
@@ -380,7 +419,7 @@ function formatBytes(bytes) {
 }
 installMaintenance({ api, element, date, isAuthenticated: () => authenticated, getEpoch: () => authEpoch });
 
-$('#showDiscovered').addEventListener('click', () => { renderSources(); resetSource(); $('#sourcesDialog').showModal(); });
+$('#showDiscovered').addEventListener('click', () => { renderSources(); resetSource(); location.hash = 'sourcesDialog'; });
 function renderDiscovered() {
   $('#discoveredSources').hidden = !mountDiscovery.candidates.length;
   $('#discoveredList').replaceChildren();
@@ -401,3 +440,20 @@ function renderDiscovered() {
     row.append(info, button); $('#discoveredList').append(row);
   }
 }
+
+function fillSourcePlan(schedule) {
+  const form = $('#sourceForm'); form.elements.planMode.value = schedule.days.length ? 'weekly' : 'manual'; form.elements.planTime.value = schedule.time || '02:00';
+  $('#sourceDays').replaceChildren();
+  for (let day = 1; day <= 7; day++) { const button = element('button', dayNames[day - 1]); button.type = 'button'; button.dataset.day = day; button.setAttribute('aria-label', 'Sicherung ' + dayNames[day - 1]); button.setAttribute('aria-pressed', String(schedule.days.includes(day))); button.addEventListener('click', () => button.setAttribute('aria-pressed', String(button.getAttribute('aria-pressed') !== 'true'))); $('#sourceDays').append(button); }
+  $('#sourceTimezone').textContent = `Zeitzone: ${activeTimezone} · gilt für alle gewählten Tage.`;
+}
+function editSource(id, inline = false) {
+  const source = savedConfig.sources.find(item => item.id === id); if (!source) return;
+  renderSources(); sourceEditing = id; const form = $('#sourceForm'); clearFieldErrors(form);
+  for (const key of ['id','name','path','expectedSource']) form.elements[key].value = source[key];
+  form.elements.target.value = source.target || 'primary'; form.elements.id.readOnly = true;
+  $('#sourceFormTitle').textContent = `Quelle bearbeiten · ${source.name}`; $('#sourceResult').textContent = '';
+  fillSourcePlan(savedConfig.schedules[id]);
+  if (inline) showContext('sourceForm', id); else form.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+fillSourcePlan({ days: [], time: '' });

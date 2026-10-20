@@ -12,17 +12,17 @@ test('Passwort-Modal: Fehler, Anmeldung und Sperren', async ({ page }) => {
 });
 
 test('Passwortschutz lässt sich deaktivieren und wieder einschalten', async ({ page }) => {
-  await login(page); await page.getByRole('button', { name: /^⚙.*Einstellungen$/ }).click();
+  await login(page); await page.getByRole('link', { name: /^⚙.*Einstellungen$/ }).click();
   await page.getByLabel('App mit Passwort schützen').uncheck(); await page.getByRole('button', { name: 'Zugang speichern' }).click();
   await expect(page.locator('#authResult')).toContainText('ausgeschaltet'); await page.reload(); await expect(page.locator('#loginDialog')).not.toBeVisible();
-  await page.getByRole('button', { name: /^⚙.*Einstellungen$/ }).click();
+  await page.getByRole('link', { name: /^⚙.*Einstellungen$/ }).click();
   await page.getByLabel('App mit Passwort schützen').check(); await page.getByRole('button', { name: 'Zugang speichern' }).click();
   await expect(page.locator('#authResult')).toContainText('eingeschaltet'); await page.getByRole('button', { name: 'Sperren', exact: true }).click();
   await expect(page.locator('#loginDialog')).toBeVisible();
 });
 
 test('Zeitzonen-Dropdown und Wochenplan speichern; Polling bewahrt Entwürfe', async ({ page }) => {
-  await login(page); await page.clock.install(); await page.getByRole('button', { name: /^⚙.*Einstellungen$/ }).click();
+  await login(page); await page.clock.install(); await page.getByRole('link', { name: /^⚙.*Einstellungen$/ }).click();
   await expect(page.getByRole('combobox', { name: 'Zeitzone', exact: true })).toHaveJSProperty('tagName', 'SELECT');
   await page.getByRole('combobox', { name: 'Zeitzone', exact: true }).selectOption('UTC');
   await page.getByLabel('Häufigkeit Software').selectOption('custom');
@@ -33,7 +33,7 @@ test('Zeitzonen-Dropdown und Wochenplan speichern; Polling bewahrt Entwürfe', a
   await page.clock.fastForward(16_000); await expect(page.getByLabel('Uhrzeit Software')).toHaveValue('03:15');
   await expect(page.getByRole('combobox', { name: 'Zeitzone', exact: true })).toHaveValue('UTC');
   await page.getByRole('button', { name: 'Einstellungen speichern' }).click(); await expect(page.locator('#settingsResult')).toContainText(/gespeichert/i);
-  await page.reload(); await page.getByRole('button', { name: /^⚙.*Einstellungen$/ }).click();
+  await page.reload(); await page.getByRole('link', { name: /^⚙.*Einstellungen$/ }).click();
   await expect(page.getByRole('combobox', { name: 'Zeitzone', exact: true })).toHaveValue('UTC'); await expect(page.getByLabel('Uhrzeit Software')).toHaveValue('03:15');
   await expect(page.getByRole('button', { name: 'Software: Montag', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: 'Software: Mittwoch', exact: true })).toHaveAttribute('aria-pressed', 'true');
@@ -41,20 +41,20 @@ test('Zeitzonen-Dropdown und Wochenplan speichern; Polling bewahrt Entwürfe', a
 });
 
 test('ntfy: fehlendes Topic markieren, speichern und Testmeldung senden', async ({ page }) => {
-  await login(page); await page.getByRole('button', { name: /^⚙.*Einstellungen$/ }).click();
+  await login(page); await page.getByRole('link', { name: /^⚙.*Einstellungen$/ }).click();
   await page.getByText('Benachrichtigungen über ntfy', { exact: true }).click();
   await page.getByLabel('Fehlermeldungen aktivieren').check(); await page.getByRole('button', { name: 'ntfy speichern' }).click();
   await expect(page.getByRole('textbox', { name: /^Topic/ })).toHaveAttribute('aria-invalid', 'true');
   await page.getByRole('textbox', { name: /^Topic/ }).fill('e2e-backup'); await page.getByRole('button', { name: 'ntfy speichern' }).click();
   await expect(page.locator('#notificationResult')).toContainText('aktiviert und gespeichert');
   await page.getByRole('button', { name: 'Gespeicherte Verbindung testen' }).click(); await expect(page.locator('#notificationResult')).toContainText('zugestellt');
-  await page.reload(); await page.getByRole('button', { name: /^⚙.*Einstellungen$/ }).click(); await page.getByText('Benachrichtigungen über ntfy', { exact: true }).click();
+  await page.reload(); await page.getByRole('link', { name: /^⚙.*Einstellungen$/ }).click(); await page.getByText('Benachrichtigungen über ntfy', { exact: true }).click();
   await expect(page.getByLabel('Fehlermeldungen aktivieren')).toBeChecked(); await expect(page.getByRole('textbox', { name: /^Topic/ })).toHaveValue('e2e-backup');
 });
 
 test('Quellen hinzufügen, SMB ermitteln, bearbeiten und abmelden', async ({ page }) => {
-  await login(page); await page.getByRole('button', { name: 'Quellen', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Backup-Quellen' });
+  await login(page); await page.getByRole('link', { name: 'Quellen', exact: true }).click();
+  const dialog = page.getByRole('region', { name: 'Backup-Quellen' });
   await dialog.getByLabel('Name', { exact: true }).fill('Fotos'); await dialog.getByLabel('Backup-ID').fill('fotos');
   await dialog.getByLabel('Pfad im LXC').fill('/mnt/Daten/Fotos'); await dialog.getByRole('button', { name: 'SMB-Quelle ermitteln' }).click();
   await expect(dialog.getByLabel('Erwartete SMB-Freigabe')).toHaveValue('//test-nas/fotos');
@@ -78,7 +78,7 @@ test('Backup starten: Prozent, Restzeit, Live-Protokoll und Verlauf', async ({ p
   expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('progress.png') });
   await page.getByRole('button', { name: 'Live-Protokoll ↗' }).click(); await expect(page.locator('#logText')).toContainText('processed 5 GiB');
-  await page.getByRole('dialog', { name: /Protokoll/ }).getByRole('button', { name: 'Schließen' }).click();
+  await page.locator('#closeDetail').click();
   app.finish(); await expect(row.locator('.job-state')).toContainText('Erfolgreich');
   await expect(page.locator('#progressEstimate')).toHaveText('100 % · Abgeschlossen');
   await row.getByRole('button', { name: 'Software', exact: true }).click(); await expect(page.locator('#historyRows')).toContainText('Erfolgreich');
@@ -110,7 +110,7 @@ test.describe('Ohne Quellgröße', () => {
 
 
 test('PBS-Bestand abrufen und nach Gruppe filtern', async ({ page }) => {
-  await login(page); await page.getByRole('button', { name: 'PBS-Bestand', exact: true }).click();
+  await login(page); await page.getByRole('link', { name: 'PBS-Bestand', exact: true }).click();
   await page.getByRole('button', { name: 'Vom PBS abrufen', exact: true }).click();
   await expect(page.locator('#pbsRows')).toContainText('host/software');
   await page.getByRole('combobox', { name: 'PBS-Bestand filtern' }).selectOption('filme');
@@ -122,41 +122,41 @@ test('PBS-Bestand abrufen und nach Gruppe filtern', async ({ page }) => {
 test('Mobile Navigation und Einstellungen ohne horizontales Seiten-Scrollen', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 }); await login(page);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.getByRole('button', { name: /^⚙.*Einstellungen$/ }).click();
+  await page.getByRole('link', { name: /^⚙.*Einstellungen$/ }).click();
   await expect(page.getByRole('combobox', { name: 'Zeitzone', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: /Anleitung/ }).click(); await expect(page.locator('#guide')).toBeVisible();
+  await page.getByRole('link', { name: /Anleitung/ }).click(); await expect(page.locator('#guide')).toBeVisible();
 });
 
 
 test('Zweiten Datastore einrichten, Quelle zuweisen und getrennten PBS-Bestand prüfen', async ({ page, app }, testInfo) => {
-  await login(page); await page.getByRole('button', { name: /^⚙.*Einstellungen$/ }).click();
+  await login(page); await page.getByRole('link', { name: /^⚙.*Einstellungen$/ }).click();
   await page.getByRole('textbox', { name: /^Datastore 2/ }).fill('archive-store');
   await page.getByRole('button', { name: 'Einstellungen speichern' }).click(); await expect(page.locator('#settingsResult')).toContainText(/gespeichert/i);
   await page.getByRole('button', { name: 'Verbindung prüfen', exact: true }).click();
   await expect(page.locator('#connectionResult')).toContainText('archive-store: PBS erreichbar');
   await expect(page.locator('#connectionResult')).toContainText('test-store: PBS erreichbar');
-  await page.getByRole('button', { name: /Übersicht/ }).click(); await page.getByRole('button', { name: 'Quellen', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Backup-Quellen' });
+  await page.getByRole('link', { name: /Übersicht/ }).click(); await page.getByRole('link', { name: 'Quellen', exact: true }).click();
+  const dialog = page.getByRole('region', { name: 'Backup-Quellen' });
   await dialog.locator('.source-editor-row').filter({ has: page.getByText('Software', { exact: true }) }).getByRole('button', { name: 'Bearbeiten' }).click();
   await dialog.getByRole('combobox', { name: 'Backup-Ziel', exact: true }).selectOption('secondary');
-  await dialog.getByRole('button', { name: 'Quelle speichern' }).click(); await expect(dialog.locator('#sourceResult')).toContainText('Quelle gespeichert');
+  await dialog.getByRole('button', { name: 'Quelle speichern' }).click(); await expect(dialog.locator('#sourceResult')).toContainText('Quelle und Wochenplan gespeichert');
   await dialog.getByRole('button', { name: 'Schließen', exact: true }).click();
   const row = page.locator('tr[data-folder="software"]'); await expect(row.locator('.source-target')).toHaveText('archive-store');
   await row.getByRole('button', { name: '↗ Sichern', exact: true }).click(); await page.getByRole('button', { name: 'Live-Protokoll ↗' }).click();
   await expect(page.locator('#logText')).toContainText('E2E repository: test@pbs@localhost:archive-store');
-  await page.getByRole('dialog', { name: /Protokoll/ }).getByRole('button', { name: 'Schließen' }).click();
+  await page.locator('#closeDetail').click();
   app.finish(); await expect(row.locator('.job-state')).toContainText('Erfolgreich');
   await row.getByRole('button', { name: 'Software', exact: true }).click(); await expect(page.locator('#historyRows')).toContainText('test@pbs@localhost:archive-store');
-  await page.getByRole('dialog', { name: /Verlauf/ }).getByRole('button', { name: 'Schließen' }).click();
-  await page.getByRole('button', { name: 'PBS-Bestand', exact: true }).click();
+  await page.locator('#closeDetail').click();
+  await page.getByRole('link', { name: 'PBS-Bestand', exact: true }).click();
   await page.getByRole('combobox', { name: 'Datastore auswählen' }).selectOption('secondary');
   await page.getByRole('button', { name: 'Vom PBS abrufen', exact: true }).click(); await expect(page.locator('#pbsRows')).toContainText('host/daten');
   await page.getByRole('combobox', { name: 'Datastore auswählen' }).selectOption('primary');
   await expect(page.locator('#pbsRows')).not.toContainText('host/daten');
-  await page.getByRole('dialog', { name: 'Sicherungen auf dem PBS' }).getByRole('button', { name: 'Schließen' }).click();
+  await page.getByRole('region', { name: 'Sicherungen auf dem PBS' }).getByRole('button', { name: 'Schließen' }).click();
   await page.screenshot({ path: testInfo.outputPath('two-datastores.png') });
   await page.reload(); await expect(page.locator('tr[data-folder="software"] .source-target')).toHaveText('archive-store');
-  await page.getByRole('button', { name: /^⚙.*Einstellungen$/ }).click();
+  await page.getByRole('link', { name: /^⚙.*Einstellungen$/ }).click();
   await page.getByRole('textbox', { name: /^Datastore 2/ }).fill(''); await page.getByRole('button', { name: 'Einstellungen speichern' }).click();
   await expect(page.locator('#settingsResult')).toContainText('noch von Quellen verwendet');
 });
@@ -173,12 +173,12 @@ test('Aktualisieren erkennt geänderte und neue SMB-Mounts ohne automatische Fre
   await expect(page.getByRole('button', { name: 'Neue SMB-Freigaben (1)', exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('mount-refresh.png') });
   await page.getByRole('button', { name: 'Neue SMB-Freigaben (1)', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Backup-Quellen' });
+  const dialog = page.getByRole('region', { name: 'Backup-Quellen' });
   await dialog.getByRole('button', { name: 'FotosNeu als Quelle vorbereiten' }).click();
   await expect(dialog.getByLabel('Pfad im LXC')).toHaveValue('/mnt/Daten/FotosNeu');
   await expect(dialog.getByLabel('Erwartete SMB-Freigabe')).toHaveValue('//test-nas/fotos-neu');
   await dialog.getByRole('button', { name: 'Quelle speichern', exact: true }).click();
-  await expect(dialog.locator('#sourceResult')).toContainText('Quelle gespeichert');
+  await expect(dialog.locator('#sourceResult')).toContainText('Quelle und Wochenplan gespeichert');
   await expect(dialog.locator('#discoveredSources')).not.toBeVisible();
   await dialog.locator('.source-editor-row').filter({ has: page.getByText('Daten', { exact: true }) }).getByRole('button', { name: 'SMB bestätigen' }).click();
   await expect(dialog.locator('#sourceResult')).toContainText('//test-nas/CorrectData');
@@ -203,4 +203,36 @@ test('Aktualisieren erzwingt neue Größen und verschiebt Messungen während lau
   app.finish(); await expect(row.locator('.job-state')).toContainText('Erfolgreich');
   await page.getByRole('button', { name: '↻ Aktualisieren', exact: true }).click();
   await expect(row.locator('.source-size')).toHaveText('50 GiB');
+});
+
+test('Navigation als Seiten und Drilldown: Quelle und Wochenplan direkt in der Übersicht', async ({ page }, testInfo) => {
+  await login(page);
+  await page.getByRole('link', { name: 'Quellen', exact: true }).click();
+  await expect(page).toHaveURL(/#sourcesDialog$/);
+  await expect(page.getByRole('region', { name: 'Backup-Quellen' })).toBeVisible();
+  await expect(page.locator('dialog:not(#loginDialog)')).toHaveCount(0);
+  await page.goBack(); await expect(page.locator('#overview')).toBeVisible();
+  await page.locator('tr[data-folder="software"]').getByRole('button', { name: 'Zeitplan Software bearbeiten' }).click();
+  await expect(page).toHaveURL(/#overview\/software\/edit$/);
+  const detail = page.locator('#sourceDetail');
+  await expect(detail).toBeVisible(); await expect(page.locator('#folders')).toBeVisible();
+  await detail.getByLabel('Name', { exact: true }).fill('Software neu');
+  await detail.getByRole('combobox', { name: 'Frequenz', exact: true }).selectOption('weekly');
+  await detail.getByLabel('Uhrzeit', { exact: true }).fill('04:25');
+  for (const day of ['Mo','Mi','Fr']) await detail.getByRole('button', { name: 'Sicherung ' + day, exact: true }).click();
+  await detail.getByRole('button', { name: 'Quelle speichern', exact: true }).click();
+  await expect(detail.locator('#sourceResult')).toContainText('Wochenplan gespeichert');
+  await expect(page.locator('tr[data-folder="software"]')).toContainText('Software neu');
+  await expect(page.locator('tr[data-folder="software"]')).toContainText('04:25');
+  await page.screenshot({ path: testInfo.outputPath('source-drilldown.png'), fullPage: true });
+  await detail.getByRole('button', { name: 'Verlauf', exact: true }).click();
+  await expect(page).toHaveURL(/\/history$/); await expect(page.locator('#historyRows')).not.toBeEmpty();
+  await page.goBack(); await expect(detail.getByLabel('Uhrzeit', { exact: true })).toHaveValue('04:25');
+  await page.reload(); await expect(detail).toBeVisible(); await expect(detail.getByLabel('Name', { exact: true })).toHaveValue('Software neu');
+  await detail.getByRole('button', { name: 'Schließen', exact: true }).click(); await expect(detail).not.toBeVisible();
+  await page.getByRole('link', { name: /^⚙.*Einstellungen$/ }).click();
+  const first = await page.getByRole('textbox', { name: 'Datastore 1', exact: true }).boundingBox();
+  const second = await page.getByRole('textbox', { name: /^Datastore 2/ }).boundingBox();
+  expect(Math.abs(first.y - second.y)).toBeLessThan(2);
+  await page.screenshot({ path: testInfo.outputPath('compact-datastores.png') });
 });

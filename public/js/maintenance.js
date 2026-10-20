@@ -10,10 +10,10 @@ function showDiagnostics(report) {
   const errors = report.checks.filter(check => check.status === 'error').length, warnings = report.checks.filter(check => check.status === 'warning').length;
   $('#diagnosticSummary').textContent = report.running ? `Prüfung läuft … ${report.checks.length} Ergebnisse vorhanden.` : report.checkedAt ? `${errors} Fehler · ${warnings} Hinweise · geprüft ${date(report.checkedAt)}` : 'Mounts, Verzeichniszugriff, PBS und Zeitpläne mit einem Klick prüfen.';
   $('#runDiagnostics').disabled = report.running;
-  if (report.running && $('#systemDialog').open) { clearTimeout(diagnosticTimer); diagnosticTimer = setTimeout(pollDiagnostics, 1500); }
+  if (report.running && !$('#systemDialog').hidden) { clearTimeout(diagnosticTimer); diagnosticTimer = setTimeout(pollDiagnostics, 1500); }
 }
 async function pollDiagnostics() {
-  if (!isAuthenticated() || !$('#systemDialog').open || diagnosticPolling) return;
+  if (!isAuthenticated() || $('#systemDialog').hidden || diagnosticPolling) return;
   diagnosticPolling = true; const epoch = getEpoch();
   try { const report = await api('/api/diagnostics'); if (epoch === getEpoch()) showDiagnostics(report); }
   catch (e) { $('#diagnosticSummary').textContent = e.message; $('#runDiagnostics').disabled = false; }
@@ -26,16 +26,14 @@ function showUpdate(result) {
 }
 async function openSystem() {
   if (!isAuthenticated()) return;
-  $('#systemDialog').showModal(); const epoch = getEpoch();
+  const epoch = getEpoch();
   $('#installedVersion').textContent = 'Installierte Version wird geladen …';
   await Promise.allSettled([pollDiagnostics(), (async () => {
     try { const data = await api('/api/updates'); if (epoch !== getEpoch()) return; $('#installedVersion').textContent = `Installiert: v${data.installed.version} · ${data.installed.commit ? data.installed.commit.slice(0, 7) : 'Git-Stand unbekannt'}${data.installed.modified ? ' · lokale Änderungen' : ''}`; showUpdate(data.result); }
     catch (e) { $('#installedVersion').textContent = e.message; }
   })()]);
 }
-$('#openSystem').addEventListener('click', openSystem);
-$('#appVersion').addEventListener('click', openSystem);
-$('#systemDialog').addEventListener('close', () => clearTimeout(diagnosticTimer));
+document.addEventListener('open-system', openSystem);
 $('#runDiagnostics').addEventListener('click', async () => {
   $('#runDiagnostics').disabled = true; $('#diagnosticSummary').textContent = 'Prüfung wird gestartet …'; const epoch = getEpoch();
   try { const report = await api('/api/diagnostics', {}); if (epoch === getEpoch()) showDiagnostics(report); }
