@@ -9,15 +9,29 @@ const config = JSON.parse(fs.readFileSync(path.join(root, 'config.example.json')
 Object.assign(config, { repository: 'test@pbs@localhost:test-store', password: 'e2e-pbs-secret', authEnabled: true });
 for (const source of config.sources) source.expectedSource = '//test-nas/' + source.id;
 fs.writeFileSync(process.env.CONFIG_FILE, JSON.stringify(config));
+let mountNumber = 10;
+const actualMounts = new Map(config.sources.map(source => [source.path, { id: String(mountNumber++), device: '0:10', target: source.path, root: '/', type: 'cifs', source: source.expectedSource, bytes: 10737418240 }]));
+process.on('message', message => {
+  if (message?.type !== 'mount') return;
+  const previous = actualMounts.get(message.path);
+  actualMounts.set(message.path, { id: String(mountNumber++), device: '0:10', target: message.path, root: '/', type: 'cifs', bytes: 10737418240, ...previous, ...message.values, ...(message.values.source ? { id: String(mountNumber++) } : {}) });
+  process.send({ ack: message.request });
+});
+const realDiscovery = require('../lib/discovery').createDiscovery;
+require('../lib/discovery').createDiscovery = options => realDiscovery({ ...options, readMountinfo: async () => [...actualMounts.values()].map(mount => `${mount.id} 1 ${mount.device} ${mount.root} ${mount.target} rw - ${mount.type} ${mount.source} rw`).join('\n') });
 const cp = require('node:child_process');
 const realExecFile = cp.execFile;
 cp.execFile = (file, args, options, callback) => {
-  if (file === 'du') return setImmediate(() => process.env.E2E_SOURCE_SIZE === 'false' ? callback(new Error('Size unavailable')) : callback(null, `10737418240\t${args.at(-1)}\n`, ''));
+  if (file === 'du') return setImmediate(() => process.env.E2E_SOURCE_SIZE === 'false' ? callback(new Error('Size unavailable')) : callback(null, `${actualMounts.get(args.at(-1))?.bytes ?? 10737418240}\t${args.at(-1)}\n`, ''));
   if (file === 'proxmox-backup-client') return setImmediate(() => callback(null, args[0] === 'version' ? 'test-client' : JSON.stringify([{ 'backup-type': 'host', 'backup-id': options.env?.PBS_REPOSITORY?.endsWith(':archive-store') ? 'daten' : 'software', 'backup-time': 1792454400, files: ['qnap-software.pxar.didx'], size: 1024 }]), ''));
   return realExecFile(file, args, options, callback);
 };
 cp.execFile[require('node:util').promisify.custom] = (...args) => new Promise((resolve, reject) => cp.execFile(...args, (error, stdout, stderr) => error ? reject(error) : resolve({ stdout, stderr })));
-require('../lib/inspect').createInspector = () => async (target, expectedSource) => ({ ok: true, path: target, identityConfirmed: Boolean(expectedSource), error: '', mount: { source: expectedSource || '//test-nas/' + target.split('/').pop().toLowerCase(), target, type: 'cifs' } });
+require('../lib/inspect').createInspector = () => async (target, expectedSource) => {
+  const mount = actualMounts.get(target) || { source: '//test-nas/' + target.split('/').pop().toLowerCase(), target, type: 'cifs' };
+  const error = require('../lib/mounts').mountIssue(mount, expectedSource);
+  return { ok: !error, path: target, identityConfirmed: Boolean(expectedSource && !error), error, mount: { ...mount } };
+};
 const realBackups = require('../lib/backups').createBackups;
 let activeChild;
 require('../lib/backups').createBackups = options => realBackups({ ...options, spawnProcess: (_, args, spawnOptions) => {

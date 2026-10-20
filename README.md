@@ -1,8 +1,14 @@
 # QNAP → Proxmox Backup Control
 
-Version 2.3.0 · [Betrieb, sichere Updates und Fehlerbehebung](docs/OPERATIONS.md)
+Version 2.4.0 · [Betrieb, sichere Updates und Fehlerbehebung](docs/OPERATIONS.md)
 
 Eine lokale Web-App für einen bestehenden Debian-12-LXC. Zeigt durchgereichte QNAP-SMB-Freigaben, startet den Proxmox Backup Client und dokumentiert den Aufbau. Ohne npm-Abhängigkeiten; Node.js ab Version 18.
+
+## Neu in 2.4.0
+
+- „Aktualisieren“ prüft die aktuellen Mounts, verwirft Größen-Caches und stößt neue Messungen an. Während laufender Backups erscheint ein Hinweis auf die verschobene Größenmessung.
+- Neue, im LXC sichtbare SMB-Mounts werden als Vorschläge zum Hinzufügen angeboten. Geänderte bestätigte Freigaben werden ausdrücklich gemeldet und benötigen eine erneute Bestätigung.
+- Größen gehören zur tatsächlichen Mount-Identität. Verspätete oder während eines Mount-Wechsels ermittelte Ergebnisse werden verworfen.
 
 ## Neu in 2.3.0
 

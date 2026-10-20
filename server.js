@@ -14,6 +14,7 @@ const { createAuth } = require('./lib/auth');
 const { createNotifier } = require('./lib/notifier');
 const { createInspector } = require('./lib/inspect');
 const { createSourceSizes } = require('./lib/source-sizes');
+const { createDiscovery } = require('./lib/discovery');
 const { createSystem } = require('./lib/system');
 const { createUpdates } = require('./lib/updates');
 const { createDiagnostics } = require('./lib/diagnostics');
@@ -40,6 +41,7 @@ const isMaintenance = () => fs.existsSync(path.join(DATA, 'maintenance'));
 const history = createHistory({ state, data: DATA, persist, getConfig, password: PASS });
 const notifier = createNotifier({ getConfig, state, persist });
 const inspectPath = createInspector(run);
+const discovery = createDiscovery({ getConfig });
 const sourceSizes = createSourceSizes({ run, inspectPath, isBusy: () => backups?.busy || isMaintenance() });
 function environment(target = 'primary') {
   const env = { ...process.env }, config = getConfig();
@@ -96,11 +98,16 @@ const server = http.createServer(async (req, res) => {
       const file = backups.active ? path.join(DATA, backups.active.folder + '.log') : null;
       return json(res, 200, { maintenance: isMaintenance(), health: Object.fromEntries(configs.get().sources.map(source => [source.id, scheduler.health(source.id)])), notification: state.notification || null, jobs: Object.fromEntries(configs.get().sources.map(source => [source.id, { ...(state.jobs[source.id] || { status: 'idle' }), estimate: estimateProgress(state.jobs[source.id]) }])), active: backups.active?.folder || null, phase: backups.active ? (backups.active.child ? 'backup' : 'checking') : 'idle', queue: backups.queue, log: file && fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '' });
     }
+    if (req.method === 'POST' && url.pathname === '/api/refresh') {
+      sourceSizes.invalidate();
+      return json(res, 202, { discovery: await discovery.refresh(), sizeDeferred: backups.busy || isMaintenance() });
+    }
     if (req.method === 'GET' && url.pathname === '/api/status') {
       const snapshot = configs.get();
       const folders = await Promise.all(snapshot.sources.map(async source => ({ ...source, targetRepository: repositoryFor(snapshot, source.target), ...(await inspectPath(source.path, source.expectedSource)), job: state.jobs[source.id] || { status: 'idle' }, schedule: snapshot.schedules[source.id], health: healthFor(snapshot.schedules[source.id], snapshot.timezone, new Date(), state.watchSince[source.id], state.jobs[source.id], snapshot.staleAfterDays, state.triggered[source.id]) })));
+      sourceSizes.retain(snapshot.sources);
       for (const folder of folders) folder.size = sourceSizes.read(folder, folder.ok);
-      return json(res, 200, { system: { ...await system.inspect(), timezone: snapshot.timezone }, folders, targets: targetsFor(snapshot), connections: pbs.connections(), connection: pbs.lastConnection, config: configs.safe(snapshot), pbs: { checkedAt: pbs.current().checkedAt, count: pbs.current().count || 0, error: pbs.current().error || '' } });
+      return json(res, 200, { system: { ...await system.inspect(), timezone: snapshot.timezone }, folders, discovery: discovery.current(), targets: targetsFor(snapshot), connections: pbs.connections(), connection: pbs.lastConnection, config: configs.safe(snapshot), pbs: { checkedAt: pbs.current().checkedAt, count: pbs.current().count || 0, error: pbs.current().error || '' } });
     }
     if (req.method === 'POST' && url.pathname === '/api/config') {
       configs.apply(await body(req));
@@ -141,7 +148,7 @@ scheduler.start();
 server.on('error', error => { console.error(error.code === 'EADDRINUSE' ? `Port ${PORT} ist bereits belegt.` : `Webserver konnte nicht starten: ${error.code || 'unbekannter Fehler'}`); scheduler.stop(); process.exitCode = 1; });
 server.listen(PORT, HOST, () => console.log(`QNAP Backup: http://${HOST}:${server.address().port}`));
 function shutdown() {
-  scheduler.stop(); backups.stop();
+  scheduler.stop(); sourceSizes.invalidate(); backups.stop();
   server.close(() => { if (!backups.active?.child) process.exit(0); });
   setTimeout(() => { backups.stop('SIGKILL'); process.exit(0); }, 8000).unref();
 }

@@ -160,3 +160,47 @@ test('Zweiten Datastore einrichten, Quelle zuweisen und getrennten PBS-Bestand p
   await page.getByRole('textbox', { name: /^Datastore 2/ }).fill(''); await page.getByRole('button', { name: 'Einstellungen speichern' }).click();
   await expect(page.locator('#settingsResult')).toContainText('noch von Quellen verwendet');
 });
+
+test('Aktualisieren erkennt geänderte und neue SMB-Mounts ohne automatische Freigabe', async ({ page, app }, testInfo) => {
+  await login(page);
+  const data = page.locator('tr[data-folder="daten"]'); await page.getByRole('button', { name: '↻ Aktualisieren', exact: true }).click(); await expect(data.locator('.source-size')).toHaveText('10 GiB');
+  await app.setMount('/mnt/Daten/Daten', { source: '//test-nas/CorrectData', bytes: 200 * 1024 ** 3 });
+  await app.setMount('/mnt/Daten/FotosNeu', { source: '//test-nas/fotos-neu', bytes: 20 * 1024 ** 3 });
+  await page.getByRole('button', { name: '↻ Aktualisieren', exact: true }).click();
+  await expect(data.getByText('● SMB geändert', { exact: true })).toBeVisible();
+  await expect(data.locator('.source-size')).not.toHaveText('10 GiB');
+  await expect(data.getByRole('button', { name: '↗ Sichern', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Neue SMB-Freigaben (1)', exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('mount-refresh.png') });
+  await page.getByRole('button', { name: 'Neue SMB-Freigaben (1)', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Backup-Quellen' });
+  await dialog.getByRole('button', { name: 'FotosNeu als Quelle vorbereiten' }).click();
+  await expect(dialog.getByLabel('Pfad im LXC')).toHaveValue('/mnt/Daten/FotosNeu');
+  await expect(dialog.getByLabel('Erwartete SMB-Freigabe')).toHaveValue('//test-nas/fotos-neu');
+  await dialog.getByRole('button', { name: 'Quelle speichern', exact: true }).click();
+  await expect(dialog.locator('#sourceResult')).toContainText('Quelle gespeichert');
+  await expect(dialog.locator('#discoveredSources')).not.toBeVisible();
+  await dialog.locator('.source-editor-row').filter({ has: page.getByText('Daten', { exact: true }) }).getByRole('button', { name: 'SMB bestätigen' }).click();
+  await expect(dialog.locator('#sourceResult')).toContainText('//test-nas/CorrectData');
+  await dialog.getByRole('button', { name: 'Schließen' }).click();
+  await page.getByRole('button', { name: '↻ Aktualisieren', exact: true }).click();
+  await expect(data.locator('.source-size')).toHaveText('200 GiB');
+});
+
+test('Aktualisieren erzwingt neue Größen und verschiebt Messungen während laufender Backups', async ({ page, app }) => {
+  await login(page); const row = page.locator('tr[data-folder="software"]');
+  await page.getByRole('button', { name: '↻ Aktualisieren', exact: true }).click();
+  await expect(row.locator('.source-size')).toHaveText('10 GiB');
+  await app.setMount('/mnt/Daten/Software', { bytes: 30 * 1024 ** 3 });
+  await page.getByRole('button', { name: '↻ Aktualisieren', exact: true }).click();
+  await expect(row.locator('.source-size')).toHaveText('30 GiB');
+  await row.getByRole('button', { name: '↗ Sichern', exact: true }).click();
+  await app.setMount('/mnt/Daten/Software', { bytes: 50 * 1024 ** 3 });
+  await page.getByRole('button', { name: '↻ Aktualisieren', exact: true }).click();
+  await expect(page.locator('#notice')).toContainText('warten auf das Ende');
+  await expect(row.locator('.job-state')).toContainText('Läuft');
+  await expect(row.locator('.source-size')).toHaveText('Größe vorgemerkt …');
+  app.finish(); await expect(row.locator('.job-state')).toContainText('Erfolgreich');
+  await page.getByRole('button', { name: '↻ Aktualisieren', exact: true }).click();
+  await expect(row.locator('.source-size')).toHaveText('50 GiB');
+});

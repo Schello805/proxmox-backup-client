@@ -25,7 +25,7 @@ test('HTTP: Auth, Secret-Schutz, persistente Konfiguration und fehlende Mounts',
  assert.equal(unauth.status, 401); assert.equal(unauth.headers.get('www-authenticate'), null);
  assert.equal((await fetch(url + '/api/activity')).status, 401);
  for (const route of ['/api/updates','/api/diagnostics']) assert.equal((await fetch(url + route)).status,401);
- for (const route of ['/api/updates/check','/api/diagnostics']) assert.equal((await fetch(url + route,{method:'POST',headers:{'X-Requested-With':'qnap-dashboard'}})).status,401);
+ for (const route of ['/api/updates/check','/api/diagnostics','/api/refresh']) assert.equal((await fetch(url + route,{method:'POST',headers:{'X-Requested-With':'qnap-dashboard'}})).status,401);
  assert.equal((await login('wrong')).status, 401);
  assert.equal((await login('123456', { Origin: 'https://evil.example' })).status, 403);
  const loggedIn = await login('123456'); assert.equal(loggedIn.status, 200);
@@ -88,6 +88,7 @@ test('HTTP: Auth, Secret-Schutz, persistente Konfiguration und fehlende Mounts',
  headers.Cookie=protectedAgain.headers.get('set-cookie').split(';')[0];
  assert.equal((await fetch(url+'/api/status')).status,401);
  assert.equal((await fetch(url+'/api/status',{headers})).status,200);
+ assert.equal((await post('/api/refresh',{})).status,202);
  const installed = await (await fetch(url+'/api/updates',{headers})).json(); assert.equal(installed.installed.version,require('../package.json').version);
  assert.equal((await post('/api/diagnostics',{})).status,202);
  let diagnosis;

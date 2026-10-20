@@ -7,7 +7,7 @@ const refreshWaiters = [];
 const $ = selector => document.querySelector(selector);
 const names = { software: 'Software', filme: 'Filme', serien: 'Serien', hoerspiele: 'Hörspiele', musik: 'Musik', daten: 'Daten' };
 const statuses = { idle: 'Noch kein Lauf', queued: 'Wartet', running: 'Läuft', success: 'Erfolgreich', failed: 'Fehler', interrupted: 'Unterbrochen' };
-let loaded = false, polling = false, logFolder = null, noticeTimer, authenticated = false, activityPolling = false, previousActive = null, authEpoch = 0, activeTimezone = 'Europe/Berlin', savedConfig = null, folderData = [], lastHealth = {}, logRun = null, sourceEditing = null, pbsData = null, sourcePage = 0, lastMainSnapshot = null, lastNotifySnapshot = null;
+let loaded = false, polling = false, logFolder = null, noticeTimer, authenticated = false, activityPolling = false, previousActive = null, authEpoch = 0, activeTimezone = 'Europe/Berlin', savedConfig = null, folderData = [], lastHealth = {}, logRun = null, sourceEditing = null, pbsData = null, sourcePage = 0, lastMainSnapshot = null, lastNotifySnapshot = null, mountDiscovery = { candidates: [] };
 const api = createAPI(showLogin);
 const { element, date, nextText, renderJob, scheduleText, renderEstimate } = createViews(() => activeTimezone, statuses);
 const formState = createFormState(['configForm', 'authForm', 'notifyForm'].map(id => document.getElementById(id)));
@@ -87,6 +87,9 @@ async function refresh() {
   try {
     const data = await api('/api/status');
     if (epoch !== authEpoch) return;
+    mountDiscovery = data.discovery || { candidates: [] };
+    $('#showDiscovered').hidden = !mountDiscovery.candidates.length;
+    $('#showDiscovered').textContent = `Neue SMB-Freigaben (${mountDiscovery.candidates.length})`;
     savedConfig = data.config; activeTimezone = data.config.timezone; folderData = data.folders;
     for (const key of Object.keys(names)) delete names[key]; for (const source of data.config.sources) names[source.id] = source.name;
     $('#appVersion').textContent = `v${data.system.version}`;
@@ -108,11 +111,11 @@ async function refresh() {
     $('#previousSources').disabled = sourcePage === 0; $('#nextSources').disabled = (sourcePage + 1) * 6 >= data.folders.length;
     for (const folder of data.folders.slice(sourcePage * 6, (sourcePage + 1) * 6)) {
       const row = element('tr'); row.dataset.folder = folder.id; const source = element('td'); const sourceButton = element('button', names[folder.id], 'source-link'); sourceButton.title = 'Verlauf und Details öffnen'; sourceButton.addEventListener('click', () => openHistory(folder.id)); const path = element('code', folder.path); path.title = folder.path; const target = element('small', folder.targetRepository?.split(':').at(-1) || 'Ziel fehlt', 'source-target'); target.title = folder.targetRepository || 'PBS-Ziel noch nicht konfiguriert'; const heading = element('div', undefined, 'source-heading'); heading.append(sourceButton, target); source.append(heading, path); row.append(source);
-      const mount = element('td'), badge = element('span', folder.ok ? '● Eingebunden' : '● Nicht verfügbar', `badge ${folder.ok ? 'ok' : 'bad'}`); badge.title = folder.ok ? `${folder.mount.source} → ${folder.mount.target} (${folder.mount.type}) · ${folder.identityConfirmed ? 'SMB-Identität bestätigt' : 'SMB-Quelle noch nicht festgelegt: unter Quellen bestätigen'}` : folder.error; mount.append(badge);
+      const mount = element('td'), badge = element('span', folder.ok ? '● Eingebunden' : folder.mount?.source && folder.expectedSource && folder.mount.source !== folder.expectedSource ? '● SMB geändert' : '● Nicht verfügbar', `badge ${folder.ok ? 'ok' : 'bad'}`); badge.title = folder.ok ? `${folder.mount.source} → ${folder.mount.target} (${folder.mount.type}) · ${folder.identityConfirmed ? 'SMB-Identität bestätigt' : 'SMB-Quelle noch nicht festgelegt: unter Quellen bestätigen'}` : `${folder.error}${folder.mount?.source ? ' Erkannt: ' + folder.mount.source : ''}`; mount.append(badge);
       const size = folder.size;
-      const sizeLabel = size?.bytes != null ? new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 }).format(size.bytes / 1024 ** 3) + ' GiB' : ({ scanning: 'Größe wird ermittelt …', pending: 'Größe vorgemerkt …', error: 'Größe nicht verfügbar' }[size?.status] || 'Größe: —');
+      const sizeLabel = size?.bytes != null ? new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 }).format(size.bytes / 1024 ** 3) + ' GiB' : ({ scanning: 'Größe wird ermittelt …', pending: 'Größe vorgemerkt …', error: 'Größe nicht verfügbar' }[size?.status] || (folder.mount?.source && !folder.ok ? 'Erkannt: ' + folder.mount.source : 'Größe: —'));
       const sizeInfo = element('small', sizeLabel, 'source-size');
-      sizeInfo.title = size?.error || `Dateigröße der Quelle (unkomprimiert)${size?.checkedAt ? ' · Stand: ' + date(size.checkedAt) : ''} · Aktualisierung alle 6 Stunden. Große Freigaben können länger dauern.`;
+      sizeInfo.title = size?.error || `Dateigröße der Quelle (unkomprimiert)${size?.checkedAt ? ' · Stand: ' + date(size.checkedAt) : ''} · Automatisch alle 6 Stunden oder über „Aktualisieren“. Große Freigaben können länger dauern.`;
       mount.append(sizeInfo); row.append(mount);
       const plan = element('td'); plan.append(element('span', scheduleText(folder.schedule)), element('small', nextText(folder.health), 'next-run')); plan.title = `${scheduleText(folder.schedule)} · ${nextText(folder.health)} (${activeTimezone})`;
       row.append(plan, element('td', date(folder.job.lastSuccess)));
@@ -137,7 +140,16 @@ $('#liveDetails').addEventListener('click', () => { if (previousActive) openLog(
 $('#closeLog').addEventListener('click', () => $('#logDialog').close()); $('#logDialog').addEventListener('close', () => { logFolder = null; logRun = null; });
 function navigate(page) { if (!['overview', 'settings', 'guide'].includes(page)) page = 'overview'; document.body.dataset.page = page; document.querySelectorAll('.page').forEach(el => el.hidden = el.id !== page); document.querySelectorAll('.nav').forEach(el => el.classList.toggle('active', el.dataset.page === page)); }
 document.querySelectorAll('.nav').forEach(button => button.addEventListener('click', () => { location.hash = button.dataset.page; })); window.addEventListener('hashchange', () => navigate(location.hash.slice(1))); navigate(location.hash.slice(1));
-$('#refresh').addEventListener('click', refresh);
+$('#refresh').addEventListener('click', async () => {
+  const button = $('#refresh'); button.disabled = true; button.textContent = '↻ Prüfe Mounts …';
+  try {
+    const result = await api('/api/refresh', {});
+    await refresh();
+    setTimeout(() => { if (authenticated) void refresh(); }, 1500);
+    notice(result.discovery.error || (result.sizeDeferred ? 'Mounts neu geprüft. Größenmessungen warten auf das Ende laufender Sicherungen bzw. der Wartung.' : 'Mounts neu geprüft. Größen werden im Hintergrund neu ermittelt.') + (result.discovery.candidates.length ? ` ${result.discovery.candidates.length} neue SMB-Freigabe(n) erkannt.` : ''), Boolean(result.discovery.error));
+  } catch (e) { notice(e.message, true); }
+  finally { button.disabled = false; button.textContent = '↻ Aktualisieren'; }
+});
 $('#previousSources').addEventListener('click', () => { sourcePage = Math.max(0, sourcePage - 1); void refresh(); });
 $('#nextSources').addEventListener('click', () => { sourcePage++; void refresh(); });
 $('#configForm').addEventListener('submit', async event => {
@@ -242,6 +254,7 @@ function renderSources() {
   const selected = $('#sourceForm').elements.target.value || 'primary';
   $('#sourceForm').elements.target.replaceChildren(...backupTargets().map(target => { const option = element('option', target.name); option.value = target.id; return option; }));
   $('#sourceForm').elements.target.value = selected;
+  renderDiscovered();
   $('#sourceList').replaceChildren();
   for (const source of savedConfig.sources) {
     const row = element('div', undefined, 'source-editor-row'), info = element('div');
@@ -366,3 +379,25 @@ function formatBytes(bytes) {
   return new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 }).format(bytes / 1024 ** index) + ' ' + units[index];
 }
 installMaintenance({ api, element, date, isAuthenticated: () => authenticated, getEpoch: () => authEpoch });
+
+$('#showDiscovered').addEventListener('click', () => { renderSources(); resetSource(); $('#sourcesDialog').showModal(); });
+function renderDiscovered() {
+  $('#discoveredSources').hidden = !mountDiscovery.candidates.length;
+  $('#discoveredList').replaceChildren();
+  for (const candidate of mountDiscovery.candidates) {
+    const row = element('div', undefined, 'discovered-mount'), info = element('div');
+    info.append(element('strong', candidate.name), element('code', candidate.path), element('small', candidate.expectedSource));
+    const button = element('button', 'Übernehmen', 'secondary'); button.type = 'button'; button.setAttribute('aria-label', `${candidate.name} als Quelle vorbereiten`);
+    button.addEventListener('click', () => {
+      resetSource(); const form = $('#sourceForm');
+      const base = candidate.name.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9_-]+/g, '-').slice(0, 32);
+      let id = /^[a-z]/.test(base) ? base : 'quelle-' + base;
+      const prefix = id.slice(0, 34); let suffix = 2;
+      while (savedConfig.sources.some(source => source.id === id)) id = prefix + '-' + suffix++;
+      form.elements.id.value = id; form.elements.name.value = candidate.name.slice(0, 60); form.elements.path.value = candidate.path; form.elements.expectedSource.value = candidate.expectedSource;
+      $('#sourceResult').textContent = 'Erkannte Freigabe prüfen, Backup-Ziel wählen und mit „Quelle speichern“ hinzufügen.';
+      form.elements.name.focus();
+    });
+    row.append(info, button); $('#discoveredList').append(row);
+  }
+}

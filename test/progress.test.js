@@ -46,8 +46,8 @@ test('Backup übernimmt Live-Messwerte, archiviert Abschluss und setzt Werte vor
   child.emit('close', 0, null);
   assert.equal(archived[0].status, 'success'); assert.equal(archived[0].progress.uploadedBytes, 1024 ** 3);
   backups.enqueue('daten', 'manual'); assert.equal(state.jobs.daten.progress, null);
-  assert.equal(state.jobs.daten.estimatedTotalBytes, 20 * 1024 ** 3);
-  await new Promise(resolve => setImmediate(resolve)); child.emit('close', 1, null);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(state.jobs.daten.estimatedTotalBytes, 20 * 1024 ** 3); child.emit('close', 1, null);
   assert.equal(state.jobs.daten.status, 'failed'); assert.equal(state.jobs.daten.progress, null);
 });
 

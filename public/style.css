@@ -1924,3 +1924,11 @@ button:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid
 .history-target { display: block; font-size: 10px; color: var(--muted); margin-top: 4px; }
 .source-inputs select { font: inherit; font-size: 12px; padding: 9px; min-width: 0; border: 1px solid #d7e2d9; border-radius: 5px; color: #243e30; background: #fbfdfb; }
 @media(max-width:760px) { .second-target { align-items: start; flex-direction: column; gap: 6px; } .second-target label { flex-basis: auto; width: 100%; } }
+
+.discovered-mount { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.discovered-mount div { min-width: 0; }
+.discovered-mount strong, .discovered-mount code, .discovered-mount small { display: block; overflow-wrap: anywhere; }
+.discovered-mount strong { font-size: 12px; }
+.discovered-mount code, .discovered-mount small { font-size: 10px; color: var(--muted); margin-top: 4px; }
+.discovered-mount button { flex-shrink: 0; }
+#discoveredSources { border: 1px solid #c5dfd2; border-radius: 8px; padding: 12px; background: #f6fbf8; margin: 14px 0; }
