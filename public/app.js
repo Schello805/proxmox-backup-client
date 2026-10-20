@@ -24,7 +24,7 @@ function fillForm(config) {
   for (const key of ['fingerprint', 'namespace']) form.elements[key].value = config[key];
   $('#repositoryPreview').textContent = config.repository || 'Noch nicht gespeichert';
   form.elements.password.value = '';
-  $('#passwordHint').textContent = config.hasPassword ? 'PBS-Passwort gespeichert. Nur ausfüllen, wenn du es ändern möchtest.' : 'Hier das PBS-Passwort eintragen, das du bisher für den Backup Client benutzt hast.';
+  $('#passwordHint').textContent = config.hasPassword ? 'PBS-Passwort gespeichert · leer lassen zum Beibehalten.' : 'PBS-Passwort noch nicht hinterlegt.';
   $('#schedules').replaceChildren();
   for (const [id, name] of Object.entries(names)) {
     const label = element('label', name), input = element('input'); input.type = 'time'; input.name = `schedule-${id}`; input.value = config.schedules[id]; const clear = element('button', 'Nur manuell', 'schedule-clear'); clear.type = 'button'; clear.addEventListener('click', () => input.value = ''); label.append(input, clear); $('#schedules').append(label);
