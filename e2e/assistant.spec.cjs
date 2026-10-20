@@ -15,9 +15,11 @@ test('Quellen-Assistent: Kopierbefehle, freier Mount-Slot, Identitätsprüfung u
   const command = await wizard.locator('.command-card pre').first().textContent();
   expect(command).toContain("ct='120'");
   expect(spawnSync('bash', ['-n'], { input: command, encoding: 'utf8' }).status).toBe(0);
-  const stubs = `findmnt() { case "$*" in *SOURCE*) echo '//test-nas/fotos';; *FSTYPE*) echo cifs;; esac; }; pct() { if [ "$1" = config ]; then echo 'mp0: /old,mp=/mnt/Daten/Old'; else printf '%s\\n' "$*"; fi; }; export -f findmnt pct;\n`;
+  const stubs = `findmnt() { case "$*" in *SOURCE*) echo '//test-nas/fotos';; *FSTYPE*) echo cifs;; esac; }; pct() { if [ "$1" = config ]; then echo 'mp0: /old,mp=/mnt/Daten/FotosAlt'; else printf '%s\\n' "$*"; fi; }; export -f findmnt pct;\n`;
   const simulated = spawnSync('bash', ['-c', stubs + command], { encoding: 'utf8' });
   expect(simulated.status, simulated.stderr).toBe(0); expect(simulated.stdout).toContain('set 120 -mp1'); expect(simulated.stdout).toContain('mp=/mnt/Daten/Fotos,ro=1');
+  const duplicate = spawnSync('bash', ['-c', stubs.replace('/mnt/Daten/FotosAlt','/mnt/Daten/Fotos') + command], { encoding: 'utf8' });
+  expect(duplicate.status).toBe(1); expect(duplicate.stdout).toContain('Zielpfad bereits konfiguriert');
   const wrong = spawnSync('bash', ['-c', stubs.replace('//test-nas/fotos','//test-nas/wrong') + command], { encoding: 'utf8' });
   expect(wrong.status).toBe(1); expect(wrong.stdout).toContain('SMB-Freigabe am Host stimmt nicht');
   await wizard.getByRole('button', { name: '1 · Proxmox-Host · Bash kopieren', exact: true }).click();
