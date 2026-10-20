@@ -33,15 +33,15 @@ require('../lib/inspect').createInspector = () => async (target, expectedSource)
   return { ok: !error, path: target, identityConfirmed: Boolean(expectedSource && !error), error, mount: { ...mount } };
 };
 const realBackups = require('../lib/backups').createBackups;
-let activeChild;
+let activeChild, activeJob;
 require('../lib/backups').createBackups = options => realBackups({ ...options, spawnProcess: (_, args, spawnOptions) => {
   const child = new EventEmitter(); child.stdout = new EventEmitter(); child.stderr = new EventEmitter();
   child.kill = signal => { if (activeChild === child) { activeChild = null; child.emit('close', null, signal); } };
-  activeChild = child;
+  activeChild = child; activeJob = options.state.jobs[args[args.indexOf('--backup-id') + 1]];
   setImmediate(() => child.stdout.emit('data', Buffer.from(`E2E repository: ${spawnOptions.env.PBS_REPOSITORY}\nE2E namespace: ${spawnOptions.env.PBS_NAMESPACE}\nE2E credential match: ${spawnOptions.env.PBS_PASSWORD === (spawnOptions.env.PBS_REPOSITORY.includes('pbs2.local') ? 'e2e-second-secret' : 'e2e-pbs-secret')}\nprocessed 5 GiB in 2min, uploaded 1 GiB\n`)));
   return child;
 } });
-process.on('message', message => { if (message?.type === 'finish' && activeChild) { const child = activeChild; activeChild = null; child.emit('close', message.code, null); } });
+process.on('message', message => { if (message?.type === 'finish' && activeChild) { const child = activeChild; if (Number.isFinite(message.durationSeconds) && message.durationSeconds >= 0) activeJob.startedAt = new Date(Date.now() - message.durationSeconds * 1000).toISOString(); activeChild = null; child.emit('close', message.code, null); } });
 require('../notifications').sendNotification = async () => {};
 require('../lib/updates').createUpdates = () => ({
   installed: async () => ({ version: require('../package.json').version, commit: 'a'.repeat(40), modified: false }),

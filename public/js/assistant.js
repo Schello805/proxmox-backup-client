@@ -89,7 +89,7 @@ export function installAssistant({ api, getConfig, refresh, openSource }) {
   function validatePBS() {
     const config = getConfig();
     if (!/^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,63}$/.test(pbs.datastore)) throw new Error('Datastore-Namen aus Buchstaben, Zahlen, Punkt, Bindestrich oder Unterstrich wählen.');
-    if (!storedTarget && ((!pbs.ownServer && pbs.datastore === config.repository.split(':').at(-1)) || config.secondaryDatastore)) throw new Error(config.secondaryDatastore ? 'Beide Datastore-Plätze sind bereits eingerichtet. Vorhandene Ziele unter Einstellungen bearbeiten.' : 'Dieser Datastore ist bereits eingerichtet.');
+    if (!storedTarget && ((!pbs.ownServer && pbs.datastore === config.repository.split(':').at(-1)) || config.secondaryDatastore)) throw new Error(config.secondaryDatastore ? 'Beide Datastore-Plätze sind bereits eingerichtet. Vorhandene Ziele unter Backup-Ziele bearbeiten.' : 'Dieser Datastore ist bereits eingerichtet.');
     if (pbs.create && (!/^\/[a-zA-Z0-9_./-]+$/.test(pbs.path) || pbs.path === '/' || pbs.path.split('/').some(part => ['.', '..'].includes(part)))) throw new Error('Den vorhandenen Mountpfad des PBS-Datenträgers angeben, z. B. /mnt/datastore.');
     if (!storedTarget && (!config.repository || pbs.ownServer) && (!/^[a-zA-Z0-9.-]+$/.test(pbs.server) || !/^[^\s@]+@[^\s@]+$/.test(pbs.authId) || !pbs.password)) throw new Error('PBS-Adresse, Benutzer (z. B. backup@pbs) und Passwort oder Token eintragen.');
   }
@@ -119,7 +119,7 @@ export function installAssistant({ api, getConfig, refresh, openSource }) {
       await refresh();
     }
     try { const result = await api('/api/connection', { target: storedTarget }); if (!result.ok) throw new Error(result.message); $('#assistantResult').textContent = `Ziel gespeichert · ${result.message}. Unter Quellen das Backup-Ziel auswählen.`; $('#assistantNext').textContent = 'Verbindung erneut prüfen'; }
-    catch (e) { $('#assistantResult').textContent = `Ziel gespeichert, Prüfung fehlgeschlagen: ${e.message}. Zugang und PBS-Rechte unter Einstellungen prüfen.`; $('#assistantNext').textContent = 'Verbindung erneut prüfen'; }
+    catch (e) { $('#assistantResult').textContent = `Ziel gespeichert, Prüfung fehlgeschlagen: ${e.message}. Zugang und PBS-Rechte unter Backup-Ziele prüfen.`; $('#assistantNext').textContent = 'Verbindung erneut prüfen'; }
   }
   $('#assistantBack').addEventListener('click', () => { step--; $('#assistantResult').textContent = ''; render(); });
   $('#assistantForm').addEventListener('submit', async event => {

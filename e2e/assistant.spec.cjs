@@ -75,9 +75,9 @@ test('PBS-Assistent: eigener Server mit getrenntem Zugang, Backup und dauerhaft 
   await page.locator('tr[data-folder="software"]').getByRole('button', { name: '↗ Sichern', exact: true }).click(); await page.getByRole('button', { name: 'Live-Protokoll ↗' }).click();
   await expect(page.locator('#logText')).toContainText('archive@pbs@pbs2.local:test-store'); await expect(page.locator('#logText')).toContainText('E2E namespace: archive'); await expect(page.locator('#logText')).toContainText('E2E credential match: true');
   app.finish(); await expect(page.locator('tr[data-folder="software"] .job-state')).toContainText('Erfolgreich');
-  await page.getByRole('link', { name: /^⚙.*Einstellungen$/ }).click();
+  await page.getByRole('link', { name: /Backup-Ziele$/ }).click();
   await expect(page.getByRole('textbox', { name: 'PBS-2-Adresse', exact: true })).toHaveValue('pbs2.local');
-  await page.getByRole('button', { name: 'Einstellungen speichern', exact: true }).click(); await expect(page.locator('#settingsResult')).toContainText('Gespeichert');
+  await page.getByRole('button', { name: 'Backup-Ziele speichern', exact: true }).click(); await expect(page.locator('#settingsResult')).toContainText('Gespeichert');
   await page.reload(); await expect(page.getByRole('textbox', { name: 'PBS-2-Namespace (optional)', exact: true })).toHaveValue('archive');
   const saved = await (await page.request.get('/api/status')).json(); expect(saved.config.secondaryPBS.hasPassword).toBe(true); expect(saved.targets[1].repository).toBe('archive@pbs@pbs2.local:test-store');
 });

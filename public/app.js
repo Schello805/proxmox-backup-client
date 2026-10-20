@@ -1,10 +1,13 @@
+import { installTimeline } from '/js/timeline.js';
+import { sourceProblem } from '/js/problems.js';
 import { installAssistant } from '/js/assistant.js';
 import { installMaintenance } from '/js/maintenance.js';
 import { createAPI } from '/js/api.js';
 import { createViews, dayNames } from '/js/views.js';
 import { createFormState, clearFieldErrors, showFieldErrors, serverField, validateMainForm, validateNotifyForm, validateSourceForm } from '/js/forms.js';
 'use strict';
-let assistant;
+let assistant, timeline;
+let lastTargets = [], lastConnections = {}, lastPreferencesSnapshot = null;
 const refreshWaiters = [];
 const $ = selector => document.querySelector(selector);
 const names = { software: 'Software', filme: 'Filme', serien: 'Serien', hoerspiele: 'Hörspiele', musik: 'Musik', daten: 'Daten' };
@@ -12,50 +15,14 @@ const statuses = { idle: 'Noch kein Lauf', queued: 'Wartet', running: 'Läuft', 
 let loaded = false, polling = false, logFolder = null, noticeTimer, authenticated = false, activityPolling = false, previousActive = null, authEpoch = 0, activeTimezone = 'Europe/Berlin', savedConfig = null, folderData = [], lastHealth = {}, logRun = null, sourceEditing = null, pbsData = null, sourcePage = 0, lastMainSnapshot = null, lastNotifySnapshot = null, mountDiscovery = { candidates: [] };
 const api = createAPI(showLogin);
 const { element, date, nextText, renderJob, scheduleText, renderEstimate } = createViews(() => activeTimezone, statuses);
-const formState = createFormState(['configForm', 'authForm', 'notifyForm'].map(id => document.getElementById(id)));
+const formState = createFormState(['configForm', 'preferencesForm', 'authForm', 'notifyForm'].map(id => document.getElementById(id)));
 function notice(message, error = false) {
   $('#notice').textContent = message; $('#notice').classList.toggle('error', error); $('#notice').hidden = false;
   clearTimeout(noticeTimer); noticeTimer = setTimeout(() => $('#notice').hidden = true, 12000);
 }
 const presets = { manual: [], daily: [1,2,3,4,5,6,7], weekdays: [1,2,3,4,5], weekend: [6,7] };
-const scheduleControls = new Map();
-function buildSchedule(id, name, schedule) {
-  const row = element('div', undefined, 'schedule-row'); row.dataset.schedule = id; const title = element('strong', name);
-  const mode = element('select'); mode.name = `frequency-${id}`; mode.setAttribute('aria-label', `Häufigkeit ${name}`);
-  for (const [value, text] of [['manual','Nur manuell'],['daily','Täglich'],['weekdays','Werktags (Mo–Fr)'],['weekend','Wochenende'],['weekly','Wöchentlich'],['custom','Eigene Tage']]) { const option = element('option', text); option.value = value; mode.append(option); }
-  const time = element('input'); time.type = 'time'; time.name = `schedule-${id}`; time.setAttribute('aria-label', `Uhrzeit ${name}`); time.value = schedule.time;
-  const days = element('div', undefined, 'week-days'); days.setAttribute('role', 'group'); days.setAttribute('aria-label', `Wochentage ${name}`);
-  const hint = element('span', undefined, 'schedule-days-hint');
-  const current = [...schedule.days];
-  const matched = Object.entries(presets).find(([, values]) => values.join(',') === current.join(','));
-  mode.value = matched ? matched[0] : current.length === 1 ? 'weekly' : 'custom';
-  const control = { mode, time, days: current }; scheduleControls.set(id, control);
-  for (let day = 1; day <= 7; day++) {
-    const button = element('button', dayNames[day - 1]); button.type = 'button'; button.dataset.day = day;
-    button.setAttribute('aria-label', `${name}: ${['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'][day - 1]}`);
-    button.addEventListener('click', () => {
-      formState.touch('configForm');
-      if (control.days.includes(day)) { if (control.days.length === 1) return; control.days = control.days.filter(value => value !== day); }
-      else control.days = [...control.days, day].sort((a,b) => a-b);
-      mode.value = control.days.length === 1 ? 'weekly' : 'custom'; paint();
-    }); days.append(button);
-  }
-  function paint() {
-    const manual = mode.value === 'manual', custom = ['weekly','custom'].includes(mode.value);
-    time.disabled = manual; time.required = !manual; days.hidden = !custom; hint.hidden = custom;
-    hint.textContent = manual ? 'Automatik aus' : control.days.map(day => dayNames[day - 1]).join(' · ');
-    for (const button of days.children) button.setAttribute('aria-pressed', String(control.days.includes(Number(button.dataset.day))));
-  }
-  mode.addEventListener('change', () => {
-    if (presets[mode.value]) control.days = [...presets[mode.value]];
-    else if (mode.value === 'weekly') control.days = [control.days[0] || 7];
-    else if (!control.days.length) control.days = [1,3,5];
-    paint();
-  });
-  row.append(title, mode, time, days, hint); $('#schedules').append(row); paint();
-}
 function fillForm(config) {
-  const mainSnapshot = JSON.stringify([config.repository, config.secondaryDatastore, config.secondaryPBS, config.fingerprint, config.namespace, config.timezone, config.staleAfterDays, config.sources, config.schedules, config.hasPassword]);
+  const mainSnapshot = JSON.stringify([config.repository, config.secondaryDatastore, config.secondaryPBS, config.fingerprint, config.namespace, config.hasPassword]);
   if (!formState.dirty('configForm') && mainSnapshot !== lastMainSnapshot) {
   lastMainSnapshot = mainSnapshot;
   const form = $('#configForm');
@@ -70,22 +37,19 @@ function fillForm(config) {
   for (const key of ['fingerprint', 'namespace']) form.elements[key].value = config[key];
   $('#repositoryPreview').textContent = config.repository || 'Noch nicht gespeichert';
   form.elements.password.value = '';
-  if (![...form.elements.timezone.options].some(option => option.value === config.timezone)) {
-    const option = element('option');
-    option.value = option.textContent = config.timezone;
-    form.elements.timezone.append(option);
-  }
-  form.elements.timezone.value = config.timezone;
-  form.elements.staleAfterDays.value = config.staleAfterDays;
   $('#passwordHint').textContent = config.hasPassword ? 'PBS-Passwort gespeichert · leer lassen zum Beibehalten.' : 'PBS-Passwort noch nicht hinterlegt.';
-    $('#schedules').replaceChildren(); scheduleControls.clear();
+
   }
   if (!formState.dirty('authForm')) { $('#authForm').elements.authEnabled.checked = config.authEnabled; $('#authResult').textContent = config.authEnabled ? 'Passwortschutz ist eingeschaltet.' : 'Zugriff im Netzwerk ohne App-Passwort.'; }
   $('#logout').hidden = !config.authEnabled;
   const notifySnapshot = JSON.stringify(config.notifications);
   if (!formState.dirty('notifyForm') && notifySnapshot !== lastNotifySnapshot) { fillNotifications(config.notifications); lastNotifySnapshot = notifySnapshot; }
-  for (const [id, control] of scheduleControls) if (!names[id]) { document.querySelector(`[data-schedule="${id}"]`)?.remove(); scheduleControls.delete(id); }
-  for (const [id, name] of Object.entries(names)) if (!scheduleControls.has(id)) buildSchedule(id, name, config.schedules[id]);
+  const preferenceSnapshot = JSON.stringify([config.timezone, config.staleAfterDays]);
+  if (!formState.dirty('preferencesForm') && preferenceSnapshot !== lastPreferencesSnapshot) {
+    lastPreferencesSnapshot = preferenceSnapshot; const form = $('#preferencesForm');
+    if (![...form.elements.timezone.options].some(option => option.value === config.timezone)) { const option = element('option', config.timezone); option.value = config.timezone; form.elements.timezone.append(option); }
+    form.elements.timezone.value = config.timezone; form.elements.staleAfterDays.value = config.staleAfterDays;
+  }
 }
 async function refresh() {
   if (polling) return new Promise(resolve => refreshWaiters.push(resolve)); polling = true; const epoch = authEpoch;
@@ -95,6 +59,7 @@ async function refresh() {
     mountDiscovery = data.discovery || { candidates: [] };
     $('#showDiscovered').hidden = !mountDiscovery.candidates.length;
     $('#showDiscovered').textContent = `Neue SMB-Freigaben (${mountDiscovery.candidates.length})`;
+    lastTargets = data.targets || []; lastConnections = data.connections || {};
     savedConfig = data.config; activeTimezone = data.config.timezone; folderData = data.folders;
     for (const key of Object.keys(names)) delete names[key]; for (const source of data.config.sources) names[source.id] = source.name;
     $('#appVersion').textContent = `v${data.system.version}`;
@@ -116,7 +81,7 @@ async function refresh() {
     $('#previousSources').disabled = sourcePage === 0; $('#nextSources').disabled = (sourcePage + 1) * 6 >= data.folders.length;
     for (const folder of data.folders.slice(sourcePage * 6, (sourcePage + 1) * 6)) {
       const row = element('tr'); row.dataset.folder = folder.id; const source = element('td'); const sourceButton = element('button', names[folder.id], 'source-link'); sourceButton.title = 'Details, Zeitplan und Verlauf öffnen'; sourceButton.addEventListener('click', () => openHistory(folder.id)); const path = element('code', folder.path); path.title = folder.path; const target = element('small', folder.targetRepository?.split(':').at(-1) || 'Ziel fehlt', 'source-target'); target.title = folder.targetRepository || 'PBS-Ziel noch nicht konfiguriert'; const heading = element('div', undefined, 'source-heading'); heading.append(sourceButton, target); source.append(heading, path); row.append(source);
-      const mount = element('td'), badge = element('span', folder.ok ? '● Eingebunden' : folder.mount?.source && folder.expectedSource && folder.mount.source !== folder.expectedSource ? '● SMB geändert' : '● Nicht verfügbar', `badge ${folder.ok ? 'ok' : 'bad'}`); badge.title = folder.ok ? `${folder.mount.source} → ${folder.mount.target} (${folder.mount.type}) · ${folder.identityConfirmed ? 'SMB-Identität bestätigt' : 'SMB-Quelle noch nicht festgelegt: unter Quellen bestätigen'}` : `${folder.error}${folder.mount?.source ? ' Erkannt: ' + folder.mount.source : ''}`; mount.append(badge);
+      const mount = element('td'), badge = element('span', folder.ok ? '● Eingebunden' : ['cifs','smb3'].includes(folder.mount?.type) && folder.mount?.source && folder.expectedSource && folder.mount.source !== folder.expectedSource ? '● SMB geändert' : '● Nicht verfügbar', `badge ${folder.ok ? 'ok' : 'bad'}`); badge.title = folder.ok ? `${folder.mount.source} → ${folder.mount.target} (${folder.mount.type}) · ${folder.identityConfirmed ? 'SMB-Identität bestätigt' : 'SMB-Quelle noch nicht festgelegt: unter Quellen bestätigen'}` : `${folder.error}${folder.mount?.source ? ' Erkannt: ' + folder.mount.source : ''}`; mount.append(badge);
       const size = folder.size;
       const sizeLabel = size?.bytes != null ? new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 }).format(size.bytes / 1024 ** 3) + ' GiB' : ({ scanning: 'Größe wird ermittelt …', pending: 'Größe vorgemerkt …', error: 'Größe nicht verfügbar' }[size?.status] || (folder.mount?.source && !folder.ok ? 'Erkannt: ' + folder.mount.source : 'Größe: —'));
       const sizeInfo = element('small', sizeLabel, 'source-size');
@@ -124,7 +89,7 @@ async function refresh() {
       mount.append(sizeInfo); row.append(mount);
       const plan = element('td'); plan.append(element('span', scheduleText(folder.schedule)), element('small', nextText(folder.health), 'next-run')); plan.classList.add('plan-link'); plan.tabIndex = 0; plan.setAttribute('role', 'button'); plan.setAttribute('aria-label', `Zeitplan ${names[folder.id]} bearbeiten`); plan.addEventListener('click', () => editSource(folder.id, true)); plan.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); editSource(folder.id, true); } }); plan.title = `${scheduleText(folder.schedule)} · ${nextText(folder.health)} (${activeTimezone})`;
       row.append(plan, element('td', date(folder.job.lastSuccess)));
-      const state = element('td'); state.className = 'job-state'; renderJob(state, folder.job, folder.health); row.append(state); const status = folder.job.status;
+      const state = element('td'); state.className = 'job-state'; renderFolderState(state, folder, folder.job, folder.health); row.append(state); const status = folder.job.status;
       const actions = element('td'), start = element('button', '↗ Sichern', 'row-action'), logs = element('button', 'Protokoll', 'row-action');
       const targetReady = data.targets?.find(target => target.id === (folder.target || 'primary'))?.hasPassword ?? data.config.hasPassword;
       start.dataset.start = folder.id; start.dataset.available = String(Boolean(folder.ok && folder.targetRepository && targetReady));
@@ -134,7 +99,7 @@ async function refresh() {
     }
     $('#systemInfo').replaceChildren();
     for (const [label, value] of [['Host', data.system.hostname], ['System', data.system.platform], ['Backup Client', data.system.client], ['Zeitpläne', data.system.timezone]]) { const item = element('span'); item.append(element('strong', label), document.createTextNode(value)); $('#systemInfo').append(item); }
-    fillForm(data.config); loaded = true;
+    fillForm(data.config); loaded = true; timeline?.update(data.timeline); if (sourceEditing) renderSourceProblem(sourceEditing);
     const connectionMessages = (data.targets || []).filter(target => data.connections?.[target.id]).map(target => `${target.name}: ${data.connections[target.id].message} (${date(data.connections[target.id].checkedAt)})`);
     $('#connectionResult').textContent = connectionMessages.join(' · ');
     await refreshActivity();
@@ -166,7 +131,7 @@ function showContext(view, id) {
 function navigate() {
   restoreContext();
   const [requested, id, tab] = location.hash.slice(1).split('/');
-  const page = ['overview','settings','guide','sourcesDialog','pbsDialog','systemDialog','assistant'].includes(requested) ? requested : 'overview';
+  const page = ['overview','settings','targets','guide','sourcesDialog','pbsDialog','systemDialog','assistant'].includes(requested) ? requested : 'overview';
   document.body.dataset.page = page;
   if (!id || page === 'assistant') window.scrollTo({ top: 0, behavior: 'instant' });
   document.querySelectorAll('.page').forEach(el => el.hidden = el.id !== page);
@@ -199,19 +164,26 @@ $('#previousSources').addEventListener('click', () => { sourcePage = Math.max(0,
 $('#nextSources').addEventListener('click', () => { sourcePage++; void refresh(); });
 $('#configForm').addEventListener('submit', async event => {
   event.preventDefault(); if (!loaded) return notice('Konfiguration zuerst laden.', true);
-  const form = event.currentTarget, button = form.querySelector('[type=submit]'), data = { schedules: {} };
+  const form = event.currentTarget, button = form.querySelector('[type=submit]'), data = {};
   const target = Object.fromEntries(['server','authId','datastore'].map(key => [key, form.elements[key].value.trim()]));
   data.repository = target.server || target.authId || form.elements.password.value ? `${target.authId}@${target.server}:${target.datastore}` : '';
-  for (const key of ['password', 'fingerprint', 'namespace', 'timezone', 'secondaryDatastore']) data[key] = form.elements[key].value;
+  for (const key of ['password', 'fingerprint', 'namespace', 'secondaryDatastore']) data[key] = form.elements[key].value;
   data.secondaryPBS = form.elements.secondaryOwnServer.checked ? Object.fromEntries([['server','secondaryServer'],['authId','secondaryAuthId'],['password','secondaryPassword'],['fingerprint','secondaryFingerprint'],['namespace','secondaryNamespace']].map(([key, field]) => [key, form.elements[field].value])) : null;
-  data.staleAfterDays = Number(form.elements.staleAfterDays.value);
-  data.sources = savedConfig.sources;
-  for (const id of Object.keys(names)) { const control = scheduleControls.get(id); data.schedules[id] = { days: control.mode.value === 'manual' ? [] : control.days, time: control.mode.value === 'manual' ? '' : control.time.value }; }
-  const errors = validateMainForm({ ...target, ...data }); showFieldErrors(form, errors);
+  const errors = validateMainForm({ ...savedConfig, ...target, ...data }); showFieldErrors(form, errors);
   if (Object.keys(errors).length) { $('#settingsResult').textContent = 'Bitte die markierten Felder korrigieren.'; return; }
   const stamp = formState.capture('configForm');
   button.disabled = true; $('#settingsResult').textContent = '';
-  try { await api('/api/config', data); const clean = formState.clean('configForm', stamp); if (clean) lastMainSnapshot = null; loaded = false; await refresh(); $('#settingsResult').textContent = clean ? 'Gespeichert. Die Verbindung kannst du separat prüfen.' : 'Gespeichert. Neuere Eingaben sind noch ungespeichert.'; } catch (e) { const field = serverField(e); if (field) showFieldErrors(form, { [field]: e.message }); $('#settingsResult').textContent = e.message; notice(e.message, true); } finally { button.disabled = false; }
+  try { await api('/api/targets', data); const clean = formState.clean('configForm', stamp); if (clean) lastMainSnapshot = null; loaded = false; await refresh(); $('#settingsResult').textContent = clean ? 'Gespeichert. Die Verbindung kannst du separat prüfen.' : 'Gespeichert. Neuere Eingaben sind noch ungespeichert.'; } catch (e) { const field = serverField(e); if (field) showFieldErrors(form, { [field]: e.message }); $('#settingsResult').textContent = e.message; notice(e.message, true); } finally { button.disabled = false; }
+});
+$('#preferencesForm').addEventListener('submit', async event => {
+  event.preventDefault(); if (!savedConfig) return;
+  const form = event.currentTarget, button = form.querySelector('[type=submit]'), data = { timezone: form.elements.timezone.value, staleAfterDays: Number(form.elements.staleAfterDays.value) };
+  const errors = validateMainForm({ ...savedConfig, ...data, server: '', authId: '', datastore: '', secondaryDatastore: '', secondaryPBS: null, password: '', schedules: {} }); showFieldErrors(form, errors);
+  if (Object.keys(errors).length) { $('#preferencesResult').textContent = 'Bitte die markierten Felder korrigieren.'; return; }
+  const stamp = formState.capture('preferencesForm'); button.disabled = true;
+  try { await api('/api/preferences', data); const clean = formState.clean('preferencesForm', stamp); if (clean) lastPreferencesSnapshot = null; await refresh(); $('#preferencesResult').textContent = clean ? 'Allgemeine Einstellungen gespeichert.' : 'Gespeichert. Neuere Eingaben sind noch ungespeichert.'; }
+  catch (e) { const field = serverField(e); if (field) showFieldErrors(form, { [field]: e.message }); $('#preferencesResult').textContent = e.message; }
+  finally { button.disabled = false; }
 });
 $('#testConnection').addEventListener('click', async event => {
   const button = event.currentTarget; button.disabled = true; $('#connectionResult').textContent = 'Verbindung wird geprüft …';
@@ -259,7 +231,7 @@ async function refreshActivity() {
       const latest = Object.entries(data.jobs).filter(([, job]) => job.endedAt).sort((a, b) => b[1].endedAt.localeCompare(a[1].endedAt))[0];
       if (latest?.[1].status === 'success') estimateJob = latest[1];
       if (latest && ['failed', 'interrupted'].includes(latest[1].status)) { $('#activityBadge').textContent = 'Letzter Lauf mit Fehler'; $('#activityBadge').className = 'badge bad'; }
-      $('#activityDescription').textContent = latest ? `Letzter Lauf: ${names[latest[0]]} · ${statuses[latest[1].status]} · ${date(latest[1].endedAt)}${latest[1].error ? ' · ' + latest[1].error : ''}` : 'Starte unten eine Sicherung oder hinterlege einen Wochenplan in den Einstellungen.';
+      $('#activityDescription').textContent = latest ? `Letzter Lauf: ${names[latest[0]]} · ${statuses[latest[1].status]} · ${date(latest[1].endedAt)}${latest[1].error ? ' · ' + latest[1].error : ''}` : 'Starte unten eine Sicherung oder hinterlege einen Wochenplan an der Quelle.';
       $('#liveDetails').hidden = true;
     }
     $('#activityTitle').title = $('#activityTitle').textContent;
@@ -269,7 +241,7 @@ async function refreshActivity() {
     lastHealth = data.health || {};
     for (const row of document.querySelectorAll('[data-folder]')) {
       const job = data.jobs[row.dataset.folder] || { status: 'idle' }, state = row.querySelector('.job-state');
-      renderJob(state, job, lastHealth[row.dataset.folder]);
+      const folder = folderData.find(item => item.id === row.dataset.folder); renderFolderState(state, folder, job, lastHealth[row.dataset.folder]);
       const next = row.querySelector('.next-run'); if (next) next.textContent = nextText(lastHealth[row.dataset.folder]);
       row.children[3].textContent = date(job.lastSuccess);
       const start = row.querySelector('[data-start]'); start.disabled = start.dataset.available !== 'true' || ['running', 'queued'].includes(job.status);
@@ -291,7 +263,7 @@ for (const zone of timezones) { const option = element('option'); option.value =
 document.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click', closeContext));
 
 function resetSource() {
-  sourceEditing = null; clearFieldErrors($('#sourceForm')); $('#sourceForm').reset(); $('#sourceForm').elements.id.readOnly = false; $('#sourceFormTitle').textContent = 'Quelle hinzufügen'; $('#sourceResult').textContent = ''; fillSourcePlan({ days: [], time: '' });
+  sourceEditing = null; clearFieldErrors($('#sourceForm')); $('#sourceForm').reset(); $('#sourceForm').elements.id.readOnly = false; $('#sourceFormTitle').textContent = 'Quelle hinzufügen'; $('#sourceResult').textContent = ''; $('#sourceProblem').hidden = true; fillSourcePlan({ days: [], time: '' });
 }
 function backupTargets() {
   return [{ id: 'primary', name: savedConfig?.repository?.split(':').at(-1) || 'Datastore 1' }, ...(savedConfig?.secondaryDatastore ? [{ id: 'secondary', name: savedConfig.secondaryDatastore + (savedConfig.secondaryPBS ? ' · ' + savedConfig.secondaryPBS.server : '') }] : [])];
@@ -334,10 +306,13 @@ $('#sourceForm').addEventListener('submit', async event => {
   event.preventDefault(); const form = event.currentTarget, button = form.querySelector('[type=submit]'); button.disabled = true;
   try {
     const source = {}; for (const key of ['id','name','path','expectedSource','target']) source[key] = form.elements[key].value.trim();
-    const errors = validateSourceForm(source, savedConfig.sources, sourceEditing); showFieldErrors(form, errors);
+    const errors = validateSourceForm(source, savedConfig.sources, sourceEditing);
+    const chosenDays = [...$('#sourceDays').querySelectorAll('button[aria-pressed="true"]')].map(button => Number(button.dataset.day));
+    if (form.elements.planMode.value !== 'manual' && !chosenDays.length) errors.planMode = 'Mindestens einen Wochentag wählen.';
+    if (form.elements.planMode.value !== 'manual' && !/^([01]\d|2[0-3]):[0-5]\d$/.test(form.elements.planTime.value)) errors.planTime = 'Eine gültige Uhrzeit wählen.'; showFieldErrors(form, errors);
     if (Object.keys(errors).length) throw new Error('Bitte die markierten Quellenfelder korrigieren.');
     const sources = sourceEditing ? savedConfig.sources.map(item => item.id === sourceEditing ? source : item) : [...savedConfig.sources, source];
-    const schedule = { days: form.elements.planMode.value === 'manual' ? [] : [...$('#sourceDays').querySelectorAll('button[aria-pressed="true"]')].map(button => Number(button.dataset.day)), time: form.elements.planMode.value === 'manual' ? '' : form.elements.planTime.value };
+    const schedule = { days: form.elements.planMode.value === 'manual' ? [] : chosenDays, time: form.elements.planMode.value === 'manual' ? '' : form.elements.planTime.value };
     await api('/api/sources', { sources, schedule: { id: source.id, value: schedule } }); loaded = false; await refresh(); renderSources(); if (detailId) editSource(source.id, true); else resetSource(); $('#sourceResult').textContent = 'Quelle und Wochenplan gespeichert.';
   } catch (e) { const field = serverField(e); if (field) showFieldErrors(form, { [field]: e.message }); $('#sourceResult').textContent = e.message; } finally { button.disabled = false; }
 });
@@ -449,19 +424,30 @@ function renderDiscovered() {
   }
 }
 
-function fillSourcePlan(schedule) {
-  const form = $('#sourceForm'); form.elements.planMode.value = schedule.days.length ? 'weekly' : 'manual'; form.elements.planTime.value = schedule.time || '02:00';
-  $('#sourceDays').replaceChildren();
-  for (let day = 1; day <= 7; day++) { const button = element('button', dayNames[day - 1]); button.type = 'button'; button.dataset.day = day; button.setAttribute('aria-label', 'Sicherung ' + dayNames[day - 1]); button.setAttribute('aria-pressed', String(schedule.days.includes(day))); button.addEventListener('click', () => button.setAttribute('aria-pressed', String(button.getAttribute('aria-pressed') !== 'true'))); $('#sourceDays').append(button); }
-  $('#sourceTimezone').textContent = `Zeitzone: ${activeTimezone} · gilt für alle gewählten Tage.`;
+function paintSourcePlan() {
+  const form = $('#sourceForm'), manual = form.elements.planMode.value === 'manual';
+  form.elements.planTime.disabled = manual;
+  for (const button of $('#sourceDays').children) button.disabled = manual;
 }
+function fillSourcePlan(schedule) {
+  const form = $('#sourceForm'), matched = Object.entries(presets).find(([, days]) => days.join(',') === schedule.days.join(','));
+  form.elements.planMode.value = matched ? matched[0] : schedule.days.length === 1 ? 'weekly' : 'custom'; form.elements.planTime.value = schedule.time || '02:00';
+  $('#sourceDays').replaceChildren();
+  for (let day = 1; day <= 7; day++) { const button = element('button', dayNames[day - 1]); button.type = 'button'; button.dataset.day = day; button.setAttribute('aria-label', 'Sicherung ' + dayNames[day - 1]); button.setAttribute('aria-pressed', String(schedule.days.includes(day))); button.addEventListener('click', () => { button.setAttribute('aria-pressed', String(button.getAttribute('aria-pressed') !== 'true')); const count = [...$('#sourceDays').children].filter(item => item.getAttribute('aria-pressed') === 'true').length; form.elements.planMode.value = count === 1 ? 'weekly' : 'custom'; }); $('#sourceDays').append(button); }
+  $('#sourceTimezone').textContent = `Zeitzone: ${activeTimezone} · gilt für alle gewählten Tage.`; paintSourcePlan();
+}
+$('#sourceForm').elements.planMode.addEventListener('change', event => {
+  const mode = event.target.value, current = [...$('#sourceDays').children].filter(button => button.getAttribute('aria-pressed') === 'true').map(button => Number(button.dataset.day));
+  const days = presets[mode] || (mode === 'weekly' ? [current[0] || 1] : current.length ? current : [1,3,5]);
+  for (const button of $('#sourceDays').children) button.setAttribute('aria-pressed', String(days.includes(Number(button.dataset.day)))); paintSourcePlan();
+});
 function editSource(id, inline = false) {
   const source = savedConfig.sources.find(item => item.id === id); if (!source) return;
   renderSources(); sourceEditing = id; const form = $('#sourceForm'); clearFieldErrors(form);
   for (const key of ['id','name','path','expectedSource']) form.elements[key].value = source[key];
   form.elements.target.value = source.target || 'primary'; form.elements.id.readOnly = true;
   $('#sourceFormTitle').textContent = `Quelle bearbeiten · ${source.name}`; $('#sourceResult').textContent = '';
-  fillSourcePlan(savedConfig.schedules[id]);
+  fillSourcePlan(savedConfig.schedules[id]); renderSourceProblem(id);
   if (inline) showContext('sourceForm', id); else form.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 fillSourcePlan({ days: [], time: '' });
@@ -469,3 +455,25 @@ fillSourcePlan({ days: [], time: '' });
 assistant = installAssistant({ api, getConfig: () => savedConfig, refresh, openSource: id => editSource(id, true) });
 
 $('#configForm').elements.secondaryOwnServer.addEventListener('change', event => { $('#secondaryFields').hidden = !event.target.checked; });
+
+function issueFor(folder, job = folder?.job, health = folder?.health) { return folder ? sourceProblem(folder, job, health, lastTargets.find(target => target.id === (folder.target || 'primary')), lastConnections[folder.target || 'primary']) : null; }
+async function runSource(id) { try { await api(`/api/backup/${id}`, {}); notice(`${names[id]} zur Sicherung vorgemerkt.`); await refresh(); } catch (e) { notice(e.message, true); } }
+function openProblem(folder, issue) {
+  if (issue.view === 'source') editSource(folder.id, true);
+  else if (issue.view === 'log') void openLog(folder.id);
+  else if (issue.view === 'backup') void runSource(folder.id);
+  else { location.hash = 'targets'; setTimeout(() => $('#configForm').elements[folder.target === 'secondary' && savedConfig.secondaryPBS ? 'secondaryServer' : 'server'].focus(), 0); }
+}
+function renderFolderState(cell, folder, job, health) {
+  renderJob(cell, job, health); const issue = issueFor(folder, job, health); if (!issue) return;
+  if (['mount','target'].includes(issue.kind) && !['running','queued'].includes(job.status)) { const badge = cell.querySelector('.badge'); badge.textContent = 'Handlungsbedarf'; badge.className = 'badge bad'; }
+  cell.querySelector('.row-error')?.remove(); const text = element('small', issue.message, 'row-error problem-message'); text.title = issue.message + ' ' + issue.help;
+  const button = element('button', issue.action, 'row-action problem-action'); button.type = 'button'; button.addEventListener('click', () => openProblem(folder, issue)); cell.append(text, button);
+}
+function renderSourceProblem(id) {
+  const folder = folderData.find(item => item.id === id), issue = issueFor(folder), box = $('#sourceProblem'); box.hidden = !issue; box.replaceChildren(); if (!issue) return;
+  box.append(element('strong', issue.message), element('p', issue.help, 'hint'));
+  if (issue.kind === 'mount') { box.append(element('code', 'Erkannt: ' + (folder.mount?.source || 'kein SMB-Mount')), element('code', 'Erwartet: ' + (folder.expectedSource || 'noch nicht festgelegt'))); }
+  else { const button = element('button', issue.action, 'secondary'); button.type = 'button'; button.addEventListener('click', () => openProblem(folder, issue)); box.append(button); }
+}
+timeline = installTimeline({ element, openSource: id => editSource(id, true) });

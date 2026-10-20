@@ -25,7 +25,7 @@ test('HTTP: Auth, Secret-Schutz, persistente Konfiguration und fehlende Mounts',
  assert.equal(unauth.status, 401); assert.equal(unauth.headers.get('www-authenticate'), null);
  assert.equal((await fetch(url + '/api/activity')).status, 401);
  for (const route of ['/api/updates','/api/diagnostics']) assert.equal((await fetch(url + route)).status,401);
- for (const route of ['/api/updates/check','/api/diagnostics','/api/refresh','/api/targets/setup']) assert.equal((await fetch(url + route,{method:'POST',headers:{'X-Requested-With':'qnap-dashboard'}})).status,401);
+ for (const route of ['/api/updates/check','/api/diagnostics','/api/refresh','/api/targets/setup','/api/preferences','/api/targets']) assert.equal((await fetch(url + route,{method:'POST',headers:{'X-Requested-With':'qnap-dashboard'}})).status,401);
  assert.equal((await login('wrong')).status, 401);
  assert.equal((await login('123456', { Origin: 'https://evil.example' })).status, 403);
  const loggedIn = await login('123456'); assert.equal(loggedIn.status, 200);
@@ -58,6 +58,14 @@ test('HTTP: Auth, Secret-Schutz, persistente Konfiguration und fehlende Mounts',
  assert.deepEqual(separate.config.schedules,config.schedules); assert.equal(separate.config.timezone,'UTC');
  assert.equal((await post('/api/targets/setup',{datastore:'third'})).status,400);
  assert.equal((await post('/api/config',{...config,secondaryDatastore:'',secondaryPBS:null})).status,200);
+ assert.equal((await post('/api/preferences',{timezone:'Europe/Vienna',staleAfterDays:21,repository:'ignored',schedules:{}})).status,200);
+ let separated=(await (await fetch(url+'/api/status',{headers})).json()).config;
+ assert.equal(separated.repository,config.repository);assert.deepEqual(separated.schedules,config.schedules);assert.equal(separated.timezone,'Europe/Vienna');
+ assert.equal((await post('/api/targets',{repository:config.repository,password:'',namespace:config.namespace,timezone:'Mars/Invalid',schedules:{}})).status,200);
+ separated=(await (await fetch(url+'/api/status',{headers})).json()).config;
+ assert.equal(separated.timezone,'Europe/Vienna');assert.deepEqual(separated.schedules,config.schedules);assert.equal(separated.hasPassword,true);
+ assert.equal((await post('/api/preferences',{timezone:'Mars/Invalid',staleAfterDays:21})).status,400);
+ assert.equal((await post('/api/preferences',{timezone:'UTC',staleAfterDays:14})).status,200);
  assert.equal((await post('/api/backup/unknown', {})).status, 400);
  const sources = [...initial.config.sources, { id:'testquelle',name:'Testquelle',path:'/mnt/Daten/Fehlt-' + Date.now(),expectedSource:'' }];
  assert.equal((await post('/api/sources', { sources })).status,200);

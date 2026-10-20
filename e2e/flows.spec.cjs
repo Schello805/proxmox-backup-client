@@ -21,23 +21,25 @@ test('Passwortschutz lässt sich deaktivieren und wieder einschalten', async ({ 
   await expect(page.locator('#loginDialog')).toBeVisible();
 });
 
-test('Zeitzonen-Dropdown und Wochenplan speichern; Polling bewahrt Entwürfe', async ({ page }) => {
+test('Zeitzonen-Dropdown und Wochenplan an der Quelle speichern; Polling bewahrt Entwürfe', async ({ page }) => {
   await login(page); await page.clock.install(); await page.getByRole('link', { name: /^⚙.*Einstellungen$/ }).click();
-  await expect(page.getByRole('combobox', { name: 'Zeitzone', exact: true })).toHaveJSProperty('tagName', 'SELECT');
-  await page.getByRole('combobox', { name: 'Zeitzone', exact: true }).selectOption('UTC');
-  await page.getByLabel('Häufigkeit Software').selectOption('custom');
-  await page.getByRole('button', { name: 'Software: Freitag', exact: true }).click();
-  await page.getByLabel('Uhrzeit Software').fill(''); await page.getByRole('button', { name: 'Einstellungen speichern' }).click();
-  await expect(page.getByLabel('Uhrzeit Software')).toHaveAttribute('aria-invalid', 'true');
-  await page.getByLabel('Uhrzeit Software').fill('03:15');
-  await page.clock.fastForward(16_000); await expect(page.getByLabel('Uhrzeit Software')).toHaveValue('03:15');
-  await expect(page.getByRole('combobox', { name: 'Zeitzone', exact: true })).toHaveValue('UTC');
-  await page.getByRole('button', { name: 'Einstellungen speichern' }).click(); await expect(page.locator('#settingsResult')).toContainText(/gespeichert/i);
-  await page.reload(); await page.getByRole('link', { name: /^⚙.*Einstellungen$/ }).click();
-  await expect(page.getByRole('combobox', { name: 'Zeitzone', exact: true })).toHaveValue('UTC'); await expect(page.getByLabel('Uhrzeit Software')).toHaveValue('03:15');
-  await expect(page.getByRole('button', { name: 'Software: Montag', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('button', { name: 'Software: Mittwoch', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('button', { name: 'Software: Freitag', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  const zone = page.getByRole('combobox', { name: 'Zeitzone', exact: true });
+  await expect(zone).toHaveJSProperty('tagName', 'SELECT'); await zone.selectOption('UTC');
+  await page.clock.fastForward(16_000); await expect(zone).toHaveValue('UTC');
+  await page.getByRole('button', { name: 'Einstellungen speichern', exact: true }).click(); await expect(page.locator('#preferencesResult')).toContainText('gespeichert');
+  await page.getByRole('link', { name: /Übersicht/ }).click(); await page.locator('tr[data-folder="software"]').getByRole('button', { name: 'Zeitplan Software bearbeiten' }).click();
+  const detail = page.locator('#sourceDetail');
+  await detail.getByRole('combobox', { name: 'Frequenz', exact: true }).selectOption('custom');
+  await detail.getByRole('button', { name: 'Sicherung Fr', exact: true }).click();
+  await detail.getByLabel('Uhrzeit', { exact: true }).fill(''); await detail.getByRole('button', { name: 'Quelle speichern', exact: true }).click();
+  await expect(detail.getByLabel('Uhrzeit', { exact: true })).toHaveAttribute('aria-invalid', 'true');
+  await detail.getByLabel('Uhrzeit', { exact: true }).fill('03:15'); await page.clock.fastForward(16_000); await expect(detail.getByLabel('Uhrzeit', { exact: true })).toHaveValue('03:15');
+  await detail.getByRole('button', { name: 'Quelle speichern', exact: true }).click(); await expect(detail.locator('#sourceResult')).toContainText('gespeichert');
+  await page.reload(); await expect(detail.getByLabel('Uhrzeit', { exact: true })).toHaveValue('03:15');
+  await expect(detail.getByRole('button', { name: 'Sicherung Mo', exact: true })).toHaveAttribute('aria-pressed','true');
+  await expect(detail.getByRole('button', { name: 'Sicherung Mi', exact: true })).toHaveAttribute('aria-pressed','true');
+  await expect(detail.getByRole('button', { name: 'Sicherung Fr', exact: true })).toHaveAttribute('aria-pressed','false');
+  await expect(detail.locator('#sourceTimezone')).toContainText('UTC');
 });
 
 test('ntfy: fehlendes Topic markieren, speichern und Testmeldung senden', async ({ page }) => {
@@ -75,7 +77,7 @@ test('Backup starten: Prozent, Restzeit, Live-Protokoll und Verlauf', async ({ p
   await expect(page.locator('#progressEstimate')).toContainText('ca. 50 %'); await expect(page.locator('#progressEstimate')).toContainText('Restzeit ca. 2 min');
   await expect(page.getByRole('progressbar', { name: 'Geschätzter Backup-Fortschritt' })).toHaveJSProperty('value', 50);
   await expect(row.getByRole('button', { name: '↗ Sichern', exact: true })).toBeDisabled();
-  expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight)).toBe(true);
+  expect(await page.locator('#folders').evaluate(element => element.getBoundingClientRect().bottom <= innerHeight)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('progress.png') });
   await page.getByRole('button', { name: 'Live-Protokoll ↗' }).click(); await expect(page.locator('#logText')).toContainText('processed 5 GiB');
   await page.locator('#closeDetail').click();
@@ -129,9 +131,9 @@ test('Mobile Navigation und Einstellungen ohne horizontales Seiten-Scrollen', as
 
 
 test('Zweiten Datastore einrichten, Quelle zuweisen und getrennten PBS-Bestand prüfen', async ({ page, app }, testInfo) => {
-  await login(page); await page.getByRole('link', { name: /^⚙.*Einstellungen$/ }).click();
+  await login(page); await page.getByRole('link', { name: /Backup-Ziele$/ }).click();
   await page.getByRole('textbox', { name: /^Datastore 2/ }).fill('archive-store');
-  await page.getByRole('button', { name: 'Einstellungen speichern' }).click(); await expect(page.locator('#settingsResult')).toContainText(/gespeichert/i);
+  await page.getByRole('button', { name: 'Backup-Ziele speichern' }).click(); await expect(page.locator('#settingsResult')).toContainText(/gespeichert/i);
   await page.getByRole('button', { name: 'Verbindung prüfen', exact: true }).click();
   await expect(page.locator('#connectionResult')).toContainText('archive-store: PBS erreichbar');
   await expect(page.locator('#connectionResult')).toContainText('test-store: PBS erreichbar');
@@ -156,8 +158,8 @@ test('Zweiten Datastore einrichten, Quelle zuweisen und getrennten PBS-Bestand p
   await page.getByRole('region', { name: 'Sicherungen auf dem PBS' }).getByRole('button', { name: 'Schließen' }).click();
   await page.screenshot({ path: testInfo.outputPath('two-datastores.png') });
   await page.reload(); await expect(page.locator('tr[data-folder="software"] .source-target')).toHaveText('archive-store');
-  await page.getByRole('link', { name: /^⚙.*Einstellungen$/ }).click();
-  await page.getByRole('textbox', { name: /^Datastore 2/ }).fill(''); await page.getByRole('button', { name: 'Einstellungen speichern' }).click();
+  await page.getByRole('link', { name: /Backup-Ziele$/ }).click();
+  await page.getByRole('textbox', { name: /^Datastore 2/ }).fill(''); await page.getByRole('button', { name: 'Backup-Ziele speichern' }).click();
   await expect(page.locator('#settingsResult')).toContainText('noch von Quellen verwendet');
 });
 
@@ -219,7 +221,7 @@ test('Navigation als Seiten und Drilldown: Quelle und Wochenplan direkt in der �
   await detail.getByLabel('Name', { exact: true }).fill('Software neu');
   await detail.getByRole('combobox', { name: 'Frequenz', exact: true }).selectOption('weekly');
   await detail.getByLabel('Uhrzeit', { exact: true }).fill('04:25');
-  for (const day of ['Mo','Mi','Fr']) await detail.getByRole('button', { name: 'Sicherung ' + day, exact: true }).click();
+  for (const day of ['Mo','Mi','Fr']) { const button = detail.getByRole('button', { name: 'Sicherung ' + day, exact: true }); if (await button.getAttribute('aria-pressed') !== 'true') await button.click(); }
   await detail.getByRole('button', { name: 'Quelle speichern', exact: true }).click();
   await expect(detail.locator('#sourceResult')).toContainText('Wochenplan gespeichert');
   await expect(page.locator('tr[data-folder="software"]')).toContainText('Software neu');
@@ -230,7 +232,7 @@ test('Navigation als Seiten und Drilldown: Quelle und Wochenplan direkt in der �
   await page.goBack(); await expect(detail.getByLabel('Uhrzeit', { exact: true })).toHaveValue('04:25');
   await page.reload(); await expect(detail).toBeVisible(); await expect(detail.getByLabel('Name', { exact: true })).toHaveValue('Software neu');
   await detail.getByRole('button', { name: 'Schließen', exact: true }).click(); await expect(detail).not.toBeVisible();
-  await page.getByRole('link', { name: /^⚙.*Einstellungen$/ }).click();
+  await page.getByRole('link', { name: /Backup-Ziele$/ }).click();
   const first = await page.getByRole('textbox', { name: 'Datastore 1', exact: true }).boundingBox();
   const second = await page.getByRole('textbox', { name: /^Datastore 2/ }).boundingBox();
   expect(Math.abs(first.y - second.y)).toBeLessThan(2);

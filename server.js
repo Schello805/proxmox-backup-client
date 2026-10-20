@@ -18,6 +18,7 @@ const { createDiscovery } = require('./lib/discovery');
 const { createSystem } = require('./lib/system');
 const { createUpdates } = require('./lib/updates');
 const { createDiagnostics } = require('./lib/diagnostics');
+const { createTimeline } = require('./lib/timeline');
 const { healthFor } = require('./lib/planning');
 const { estimateProgress } = require('./lib/progress');
 const { repositoryFor, targetConfig, targetsFor } = require('./lib/targets');
@@ -73,7 +74,7 @@ const server = http.createServer(async (req, res) => {
       if (req.headers['x-requested-with'] !== 'qnap-dashboard') return json(res, 403, { error: 'Anfrage-Header fehlt.' });
     }
     // Nur die App-Hülle ist öffentlich. Daten und Aktionen benötigen eine Sitzung.
-    const assets = { '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], ...Object.fromEntries(['api','views','forms','maintenance','assistant'].map(name => ['/js/' + name + '.js', ['js/' + name + '.js', 'text/javascript']])) };
+    const assets = { '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], ...Object.fromEntries(['api','views','forms','maintenance','assistant','timeline','problems'].map(name => ['/js/' + name + '.js', ['js/' + name + '.js', 'text/javascript']])) };
     if (req.method === 'GET' && assets[url.pathname]) {
       const [file, type] = assets[url.pathname]; res.writeHead(200, { 'Content-Type': `${type}; charset=utf-8`, 'Cache-Control': 'no-cache' });
       return res.end(fs.readFileSync(path.join(ROOT, 'public', file)));
@@ -107,10 +108,20 @@ const server = http.createServer(async (req, res) => {
       const folders = await Promise.all(snapshot.sources.map(async source => ({ ...source, targetRepository: repositoryFor(snapshot, source.target), ...(await inspectPath(source.path, source.expectedSource)), job: state.jobs[source.id] || { status: 'idle' }, schedule: snapshot.schedules[source.id], health: healthFor(snapshot.schedules[source.id], snapshot.timezone, new Date(), state.watchSince[source.id], state.jobs[source.id], snapshot.staleAfterDays, state.triggered[source.id]) })));
       sourceSizes.retain(snapshot.sources);
       for (const folder of folders) folder.size = sourceSizes.read(folder, folder.ok);
-      return json(res, 200, { system: { ...await system.inspect(), timezone: snapshot.timezone }, folders, discovery: discovery.current(), targets: targetsFor(snapshot), connections: pbs.connections(), connection: pbs.lastConnection, config: configs.safe(snapshot), pbs: { checkedAt: pbs.current().checkedAt, count: pbs.current().count || 0, error: pbs.current().error || '' } });
+      return json(res, 200, { system: { ...await system.inspect(), timezone: snapshot.timezone }, folders, timeline: createTimeline(snapshot, state), discovery: discovery.current(), targets: targetsFor(snapshot), connections: pbs.connections(), connection: pbs.lastConnection, config: configs.safe(snapshot), pbs: { checkedAt: pbs.current().checkedAt, count: pbs.current().count || 0, error: pbs.current().error || '' } });
     }
     if (req.method === 'POST' && url.pathname === '/api/config') {
       configs.apply(await body(req));
+      return json(res, 200, { success: true });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/preferences') {
+      const input = await body(req); configs.apply({ ...configs.get(), timezone: input.timezone, staleAfterDays: input.staleAfterDays });
+      return json(res, 200, { success: true });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/targets') {
+      const input = await body(req), changes = {};
+      for (const key of ['repository','password','fingerprint','namespace','secondaryDatastore','secondaryPBS']) if (Object.hasOwn(input, key)) changes[key] = input[key];
+      configs.apply({ ...configs.get(), ...changes });
       return json(res, 200, { success: true });
     }
     if (req.method === 'POST' && url.pathname === '/api/targets/setup') {

@@ -27,7 +27,7 @@ bash deploy/install.sh
 
 Im Environment `APP_PASSWORD` setzen (mindestens sechs Zeichen) oder für Zugriff ohne Anmeldung leeren. Oberfläche: **http://LXC-IP:3000**. Nur im vertrauenswürdigen Netz betreiben; für weitere Zugriffe HTTPS verwenden.
 
-Danach PBS-Zugang unter **Einstellungen** speichern und prüfen. Unter **Quellen** die SMB-Zuordnung kontrollieren. Ein erstes Backup starten und im PBS eine Datei testweise wiederherstellen.
+Danach PBS-Zugang unter **Backup-Ziele** speichern und prüfen. Unter **Quellen** die SMB-Zuordnung kontrollieren. Ein erstes Backup starten und im PBS eine Datei testweise wiederherstellen.
 
 ## Update und Betrieb
 
