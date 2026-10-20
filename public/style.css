@@ -453,7 +453,7 @@ footer {
 
 .form-panel {
   padding: 28px;
-  max-width: 850px;
+  max-width: none;
 }
 
 .form-panel>p {
@@ -976,7 +976,7 @@ summary:focus-visible {
 
 #configForm {
   padding: 20px 22px;
-  max-width: 850px;
+  max-width: none;
 }
 
 #configForm .settings-grid {
@@ -1750,7 +1750,7 @@ body[data-page=overview] #notice {
 }
 
 .settings-extra {
-  max-width: 850px;
+  max-width: none;
   padding: 14px 22px;
   margin-top: 12px;
 }
