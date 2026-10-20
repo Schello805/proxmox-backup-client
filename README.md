@@ -37,6 +37,8 @@ systemctl status qnap-backup
 journalctl -u qnap-backup -n 50
 ```
 
+**Alle sichern** stellt sämtliche eingerichteten Quellen in die Warteschlange; sie werden nacheinander auf ihr jeweiliges Ziel gesichert. Bereits laufende oder wartende Quellen werden übersprungen.
+
 Laufende und wartende Aufträge lassen sich in der Übersicht einzeln oder über **Alle abbrechen** stoppen. Vor einem Update warten, bis kein Auftrag mehr läuft oder wartet. Mount-Zuordnungen werden sofort aktualisiert; Lesbarkeit und Ordnergrößen werden im Hintergrund geprüft.
 
 Konfiguration und Verlauf: `/var/lib/qnap-backup/`. Backups laufen nacheinander als `.pxar`-Archive ohne zusätzliche clientseitige Verschlüsselung; die Übertragung erfolgt per TLS. Aufbewahrung und Verify-Jobs werden im PBS konfiguriert. Die App löscht keine PBS-Sicherungen.

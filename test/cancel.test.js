@@ -38,3 +38,17 @@ test('Cancelling one queued job keeps other jobs running', async t => {
   f.backups.cancel('filme'); await tick(); assert.deepEqual(f.backups.queue, ['musik']); assert.equal(f.state.jobs.software.status, 'running');
   f.children[0].emit('close', 0); await tick(); assert.equal(f.backups.active.folder, 'musik'); f.children[1].emit('close', 0);
 });
+
+test('All backups are queued once in source order and continue after a failed run', async t => {
+  const f = fixture(t); const result = f.backups.enqueueAll();
+  assert.deepEqual(result.added, ['software','filme','serien','hoerspiele','musik','daten']); assert.deepEqual(result.skipped, []);
+  assert.deepEqual(f.backups.queue, result.added.slice(1));
+  const repeated = f.backups.enqueueAll(); assert.deepEqual(repeated.added, []); assert.equal(repeated.skipped.length, 6);
+  await tick(); assert.equal(f.children.length, 1); f.children[0].emit('close', 1); await tick(); assert.equal(f.backups.active.folder, 'filme'); assert.equal(f.children.length, 2);
+  f.backups.cancelAll(); f.children[1].emit('close', null, 'SIGTERM'); assert.equal(f.backups.busy, false);
+});
+test('All backups skip missing target credentials and maintenance never partially enqueues', t => {
+  const config = validateConfig({ repository: '', password: '', fingerprint: '', namespace: '', schedules: {}, authEnabled: false }, { password: '' });
+  const f = fixture(t, { getConfig: () => config }); const result = f.backups.enqueueAll(); assert.deepEqual(result.added, []); assert.equal(result.skipped.length, 6); assert.equal(f.backups.busy, false);
+  const maintenance = fixture(t, { isMaintenance: () => true }); assert.throws(() => maintenance.backups.enqueueAll(), { status: 409 }); assert.equal(maintenance.backups.busy, false);
+});

@@ -103,7 +103,7 @@ async function refresh() {
     $('#systemInfo').replaceChildren();
     for (const [label, value] of [['Host', data.system.hostname], ['System', data.system.platform], ['Backup Client', data.system.client], ['Zeitpläne', data.system.timezone]]) { const item = element('span'); item.append(element('strong', label), document.createTextNode(value)); $('#systemInfo').append(item); }
     if (data.folders.some(folder => folder.checking)) setTimeout(() => { if (authenticated) void refresh(); }, 1000);
-    fillForm(data.config); loaded = true; timeline?.update(data.timeline); operations?.update(data); if (sourceEditing) renderSourceProblem(sourceEditing);
+    fillForm(data.config); loaded = true; $('#backupAll').disabled = false; timeline?.update(data.timeline); operations?.update(data); if (sourceEditing) renderSourceProblem(sourceEditing);
     const connectionMessages = (data.targets || []).filter(target => data.connections?.[target.id]).map(target => `${target.name}: ${data.connections[target.id].message} (${date(data.connections[target.id].checkedAt)})`);
     $('#connectionResult').textContent = connectionMessages.join(' · ');
     await refreshActivity();
@@ -154,6 +154,16 @@ $('#detailHistory').addEventListener('click', () => openHistory(detailId));
 $('#detailLog').addEventListener('click', () => openLog(detailId));
 $('#appVersion').addEventListener('click', () => { location.hash = 'systemDialog'; });
 navigate();
+$('#backupAll').addEventListener('click', async () => {
+  const button = $('#backupAll'); button.disabled = true;
+  try {
+    const result = await api('/api/backups/start', {});
+    const skipped = result.skipped.length ? ' Übersprungen: ' + result.skipped.map(source => `${source.name} (${source.reason})`).join(', ') : '';
+    notice((result.added.length ? `${result.added.length} Sicherungen vorgemerkt. Sie laufen automatisch nacheinander.` : 'Keine zusätzlichen Sicherungen vorgemerkt.') + skipped);
+    await refresh();
+  } catch (e) { notice(e.message, true); }
+  finally { button.disabled = false; }
+});
 $('#refresh').addEventListener('click', async () => {
   const button = $('#refresh'); button.disabled = true; button.textContent = '↻ Prüfe Mounts …';
   try {

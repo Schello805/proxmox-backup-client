@@ -175,6 +175,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { log: fs.readFileSync(path.join(DATA, 'history', history[1], history[2] + '.log'), 'utf8') });
     }
     if (req.method === 'POST' && url.pathname === '/api/connection') return json(res, 200, await pbs.connection((await body(req)).target || 'primary'));
+    if (req.method === 'POST' && url.pathname === '/api/backups/start') return json(res, 202, backups.enqueueAll());
     if (req.method === 'POST' && url.pathname === '/api/backups/cancel') { backups.cancelAll(); return json(res, 202, { success: true }); }
     const cancel = url.pathname.match(/^\/api\/backup\/([a-z][a-z0-9_-]{0,39})\/cancel$/);
     if (req.method === 'POST' && cancel) { backups.cancel(cancel[1]); return json(res, 202, { success: true }); }

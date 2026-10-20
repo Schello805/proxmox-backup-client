@@ -29,3 +29,15 @@ test('Refresh stays responsive while SMB readability is slow; changed mappings d
   await page.getByRole('button', { name: '↻ Aktualisieren', exact: true }).click();
   await expect(daten).toContainText('SMB geändert'); await expect(daten.getByRole('button', { name: '↗ Sichern', exact: true })).toBeDisabled();
 });
+
+test('Alle sichern runs sources sequentially, skips duplicate starts and supports cancelling the rest', async ({ page, app }) => {
+  await login(page); await page.getByRole('button', { name: 'Alle sichern', exact: true }).click();
+  const software = page.locator('[data-folder="software"]'), filme = page.locator('[data-folder="filme"]');
+  await expect(software.locator('.job-state')).toContainText('Läuft'); await expect(filme.locator('.job-state')).toContainText('Wartet');
+  expect((await (await page.request.get('/api/activity')).json()).queue).toEqual(['filme','serien','hoerspiele','musik','daten']);
+  await page.getByRole('button', { name: 'Alle sichern', exact: true }).click(); await expect(page.locator('#notice')).toContainText('Keine zusätzlichen');
+  expect((await (await page.request.get('/api/activity')).json()).queue).toHaveLength(5);
+  app.finish(); await expect(software.locator('.job-state')).toContainText('Erfolgreich'); await expect(filme.locator('.job-state')).toContainText('Läuft');
+  await page.getByRole('button', { name: 'Alle abbrechen', exact: true }).click();
+  const activity = await (await page.request.get('/api/activity')).json(); expect(activity.active).toBe(null); expect(activity.queue).toEqual([]); expect(activity.jobs.software.status).toBe('success'); expect(activity.jobs.daten.status).toBe('cancelled');
+});
