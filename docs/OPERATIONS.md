@@ -107,7 +107,7 @@ Die Messung liest Verzeichniseinträge und kann große SMB-Freigaben zusätzlich
 
 ### Live-Fortschritt (ab 2.1.0)
 
-Die Statuskarte zeigt Laufzeit, verarbeitete Daten, den vom Client gemeldeten Upload und die durchschnittliche Verarbeitungsgeschwindigkeit. Die Weboberfläche aktualisiert alle drei Sekunden; neue Messwerte erscheinen erst, wenn der Client sie protokolliert (je nach Client-Version typischerweise etwa minütlich). Ohne passende Meldungen bleiben die Felder leer; ältere Clients liefern gegebenenfalls erst beim Abschluss die Verarbeitungssumme. Die App berechnet keine Prozentwerte oder Restzeit aus zwischengespeicherten Ordnergrößen.
+Die Statuskarte zeigt Laufzeit, verarbeitete Daten, den vom Client gemeldeten Upload und die durchschnittliche Verarbeitungsgeschwindigkeit. Die Weboberfläche aktualisiert alle drei Sekunden; neue Messwerte erscheinen erst, wenn der Client sie protokolliert (je nach Client-Version typischerweise etwa minütlich). Ohne passende Meldungen bleiben die Felder leer; ältere Clients liefern gegebenenfalls erst beim Abschluss die Verarbeitungssumme. Seit 2.2.0 zeigt die App zusätzlich eine ausdrücklich gekennzeichnete Schätzung für Prozent und Restzeit (siehe unten).
 
 „Upload (Client)“ ist der Zähler aus dem Client-Protokoll und kein gemessener Netzwerkverkehr. Komprimierung und Deduplizierung beeinflussen den tatsächlichen Transport und PBS-Speicherbedarf. „Ø Verarbeitung“ ist die verarbeitete Datenmenge geteilt durch die vom Client gemeldete Zeit. Messwerte werden beim nächsten Lauf zurückgesetzt und beim Abschluss im lokalen Auftragsverlauf gespeichert. Die Erfolgserkennung erfolgt weiterhin über den Prozess-Exit-Code, nicht über Fortschrittsmeldungen.
 
@@ -118,3 +118,28 @@ Grundlage des Parsers: [Proxmox: Einführung der periodischen Fortschrittsmeldun
 Über „Diagnose“ auf der Übersicht oder den Versionsbutton im Kopfbereich öffnet sich „System & Wartung“. „Diagnose starten“ prüft die Laufzeitumgebung und den lokalen Datenspeicher erneut, öffnet die Quellverzeichnisse, prüft deren Mount-Zuordnung, liest den PBS-Snapshot-Bestand und zeigt die nächsten Termine in der gewählten Zeitzone. Die Prüfung läuft im Hintergrund; mehrfache Starts teilen sich einen laufenden Durchgang. Ohne Wochenplan erscheint ein Hinweis. Die Prüfung verändert keine Backups, verschickt keine Testbenachrichtigung und prüft nicht rekursiv die Lesbarkeit jeder Datei. Die vorhandene PBS-Bestandsanzeige wird beim Verbindungstest aktualisiert. Änderungen an der Konfiguration während der Prüfung erfordern einen neuen Durchgang.
 
 „Auf Updates prüfen“ vergleicht den beim Dienststart erfassten lokalen Commit mit `main` auf GitHub und zeigt die dortige Paketversion sowie einen Link zum Commit. Auch neue Commits ohne Versionsänderung werden erkannt. Lokale Änderungen, ein vorausliegender oder auseinander gelaufener Git-Stand werden gesondert angezeigt. Ohne Git-Checkout ist der Vergleich unbekannt; ein Netzwerkfehler gilt nicht als „aktuell“. GitHub wird nur beim ausdrücklichen Prüfen kontaktiert; Ergebnisse werden für eine Minute zwischengespeichert. Die Prüfung überträgt keine Konfiguration und verwendet keine PBS-Zugangsdaten. Updates werden weiterhin mit dem dokumentierten Update-Skript im LXC installiert.
+
+
+### Prozent und Restzeit (ab 2.2.0)
+
+Für die Schätzung wird eine erfolgreiche, weniger als sechs Stunden alte Größenmessung der betreffenden Quelle verwendet. Die Größe wird je Backup-Lauf festgehalten, damit sich die Bezugsgröße während des Backups nicht durch neue Messungen verschiebt. Wird eine bereits laufende Größenmessung erst während des Backups fertig, kann ihr Ergebnis beim nächsten Client-Messwert übernommen werden. Für die Prozentzahl zählt der verarbeitete Datenstrom, nicht der durch Deduplizierung kleinere Upload. Die Restzeit folgt aus verbleibender Datenmenge und durchschnittlicher Verarbeitungsgeschwindigkeit am letzten Messpunkt.
+
+Die Anzeige ist eine Orientierung: pxar-Metadaten, ausgeschlossene Dateien, Änderungen an der Quelle und der abschließende PBS-Schreibvorgang können sie verändern. Solange der Prozess läuft, wird höchstens 99 % angezeigt. Wenn die geschätzte Datenmenge erreicht wird, bleibt die Restzeit offen; ein erfolgreicher Prozessabschluss zeigt 100 %. Ohne Quellgröße, ohne Client-Messwerte oder nach mehr als drei Minuten ohne frische Messwerte wird keine Restzeit erfunden. Nach einem Dienstneustart müssen die Quellgrößen erneut ermittelt werden; eine Sicherung startet auch ohne verfügbare Schätzung.
+
+### Automatische Browserprüfungen
+
+Die Produktion startet weiterhin mit `node server.js` ohne npm-Laufzeitabhängigkeiten. Playwright ist ausschließlich eine Entwicklungsabhängigkeit. Für die Browserprüfungen Node.js 22 oder neuer und die Testwerkzeuge installieren:
+
+```sh
+npm ci
+npx playwright install chromium
+npm run test:all
+```
+
+Auf Linux kann die Browserinstallation zusätzlich Systembibliotheken benötigen: `npx playwright install --with-deps chromium`. Nur Backendtests: `npm test`. Nur Browserprüfungen: `npm run test:browser`. Den Bericht öffnet `npx playwright show-report`.
+
+Die elf Chromium-Abläufe prüfen Passwort-Modal und Fehlermeldung, optionalen Passwortschutz, Zeitzonen-Dropdown und Mehrtagespläne samt Entwurfsschutz bei Statusaktualisierungen, ntfy-Validierung/Speichern/Testmeldung, Quellenverwaltung, Backup-Start mit Prozent/Restzeit/Live-Protokoll/Verlauf, fehlgeschlagenen Lauf, Diagnose/Update-Anzeige, fehlende Größenmessung, PBS-Filter und mobile Navigation. Zusätzlich wird die Übersicht mit sechs Quellen bei 1280 × 720 Pixeln auf vertikales Scrollen geprüft. Unbehandelte JavaScript-Fehler lassen die Browserprüfung fehlschlagen.
+
+Jeder Ablauf startet eine eigene App-Instanz auf einem zufälligen lokalen Port mit temporärer Konfiguration. NAS-Zugriff, Backup-Prozess, PBS-Antworten, ntfy-Versand und GitHub-Vergleich sind ausschließlich im Test-Einstiegspunkt `e2e/server.cjs` simuliert. Der Produktionsserver importiert diesen Einstiegspunkt nicht. Die Tests kontaktieren keinen echten PBS, keine QNAP und keinen Benachrichtigungsdienst; sie ersetzen keinen echten Backup-/Restore-Test.
+
+GitHub Actions führt Backend- und Browserprüfungen bei Pushes und Pull Requests aus. Bei Fehlern stehen Screenshots und Playwright-Traces als Artefakt für sieben Tage bereit. Lokale Berichte unter `playwright-report/` und `test-results/` sind von Git ausgeschlossen.

@@ -15,5 +15,24 @@ function scheduleText(schedule) {
   const label = days === '1,2,3,4,5,6,7' ? 'Täglich' : days === '1,2,3,4,5' ? 'Mo–Fr' : days === '6,7' ? 'Sa–So' : schedule.days.map(day => dayNames[day - 1]).join(', ');
   return `${label} · ${schedule.time}`;
 }
-return { element, date, nextText, renderJob, scheduleText };
+function renderEstimate(container, job, queueText = '') {
+  container.replaceChildren(); container.classList.toggle('progress-line', Boolean(job));
+  if (job) {
+    const estimate = job.estimate || {}, progress = element('progress');
+    progress.max = 100; progress.setAttribute('aria-label', 'Geschätzter Backup-Fortschritt');
+    if (estimate.percent != null) { progress.value = estimate.percent; container.append(progress); }
+    const messages = { 'waiting-size': 'Prozent und Restzeit: Quellgröße noch nicht verfügbar.', 'waiting-data': 'Warte auf Fortschrittsdaten des Clients …', stale: 'Keine aktuellen Messwerte · Restzeit offen.', 'size-reached': 'Datenmenge erreicht · Restzeit offen.', unavailable: 'Restzeit noch nicht bestimmbar.' };
+    let text = estimate.percent != null ? `${estimate.status === 'complete' ? '' : 'ca. '}${estimate.percent} %` : '';
+    if (estimate.status === 'estimating') {
+      const seconds = estimate.remainingSeconds;
+      const eta = seconds == null ? 'offen' : seconds < 60 ? 'unter 1 min' : seconds < 3600 ? `ca. ${Math.ceil(seconds / 60)} min` : `ca. ${Math.floor(seconds / 3600)} h ${Math.ceil(seconds % 3600 / 60)} min`;
+      text += ` · Restzeit ${eta}`;
+    } else text += `${text ? ' · ' : ''}${estimate.status === 'complete' ? 'Abgeschlossen' : messages[estimate.status] || messages.unavailable}`;
+    const label = element('span', text); label.id = 'progressEstimate';
+    label.title = estimate.status === 'complete' ? 'Backup erfolgreich abgeschlossen.' : `Schätzung anhand der Quellgröße${estimate.sizeCheckedAt ? ' vom ' + date(estimate.sizeCheckedAt) : ''} und der Client-Messwerte. Dateiausschlüsse, Änderungen und der Backup-Abschluss können die Dauer verändern. 100 % erst bei Erfolg.`;
+    container.append(label);
+  }
+  if (queueText) container.append(element('span', queueText, 'queue-text'));
+}
+return { element, date, nextText, renderJob, scheduleText, renderEstimate };
 }

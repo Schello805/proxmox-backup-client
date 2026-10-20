@@ -1905,3 +1905,12 @@ button:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid
 .diagnostic-checks small { display: block; color: var(--muted); line-height: 1.5; margin-top: 3px; overflow-wrap: anywhere; }
 .update-command { display: block; background: #f2f7f4; border-radius: 6px; padding: 10px; white-space: normal; overflow-wrap: anywhere; font-size: 11px; }
 #overview .activity-meta { gap: 6px 22px; }
+
+#overview #queueInfo.progress-line { display: flex; gap: 10px; align-items: center; min-width: 0; }
+.progress-line progress { flex: 0 0 110px; width: 110px; height: 6px; border: 0; border-radius: 6px; overflow: hidden; background: #e4eee8; accent-color: var(--green); }
+.progress-line progress::-webkit-progress-bar { background: #e4eee8; border-radius: 6px; }
+.progress-line progress::-webkit-progress-value { background: var(--green); border-radius: 6px; }
+.progress-line progress::-moz-progress-bar { background: var(--green); border-radius: 6px; }
+#progressEstimate { flex-shrink: 0; }
+.progress-line .queue-text { overflow: hidden; text-overflow: ellipsis; }
+@media(max-width:760px) { #overview #queueInfo.progress-line { flex-wrap: wrap; white-space: normal; } }

@@ -9,7 +9,7 @@ const names = { software: 'Software', filme: 'Filme', serien: 'Serien', hoerspie
 const statuses = { idle: 'Noch kein Lauf', queued: 'Wartet', running: 'Läuft', success: 'Erfolgreich', failed: 'Fehler', interrupted: 'Unterbrochen' };
 let loaded = false, polling = false, logFolder = null, noticeTimer, authenticated = false, activityPolling = false, previousActive = null, authEpoch = 0, activeTimezone = 'Europe/Berlin', savedConfig = null, folderData = [], lastHealth = {}, logRun = null, sourceEditing = null, pbsData = null, sourcePage = 0, lastMainSnapshot = null, lastNotifySnapshot = null;
 const api = createAPI(showLogin);
-const { element, date, nextText, renderJob, scheduleText } = createViews(() => activeTimezone, statuses);
+const { element, date, nextText, renderJob, scheduleText, renderEstimate } = createViews(() => activeTimezone, statuses);
 const formState = createFormState(['configForm', 'authForm', 'notifyForm'].map(id => document.getElementById(id)));
 function notice(message, error = false) {
   $('#notice').textContent = message; $('#notice').classList.toggle('error', error); $('#notice').hidden = false;
@@ -183,6 +183,7 @@ async function refreshActivity() {
     $('#activityBadge').className = `badge ${data.active ? 'busy' : 'ok'}`;
     $('.activity').classList.toggle('running', Boolean(data.active));
     $('#runningCount').textContent = (data.active ? 1 : 0) + data.queue.length;
+    let estimateJob = data.active ? data.jobs[data.active] : null;
     if (data.active) {
       const job = data.jobs[data.active];
       $('#activityTitle').textContent = `${names[data.active]} · ${data.phase === 'checking' ? 'Quelle wird geprüft' : 'Backup läuft'}`;
@@ -193,13 +194,14 @@ async function refreshActivity() {
     } else {
       $('#activityTitle').textContent = 'Gerade läuft kein Backup';
       const latest = Object.entries(data.jobs).filter(([, job]) => job.endedAt).sort((a, b) => b[1].endedAt.localeCompare(a[1].endedAt))[0];
+      if (latest?.[1].status === 'success') estimateJob = latest[1];
       if (latest && ['failed', 'interrupted'].includes(latest[1].status)) { $('#activityBadge').textContent = 'Letzter Lauf mit Fehler'; $('#activityBadge').className = 'badge bad'; }
       $('#activityDescription').textContent = latest ? `Letzter Lauf: ${names[latest[0]]} · ${statuses[latest[1].status]} · ${date(latest[1].endedAt)}${latest[1].error ? ' · ' + latest[1].error : ''}` : 'Starte unten eine Sicherung oder hinterlege einen Wochenplan in den Einstellungen.';
       $('#liveDetails').hidden = true;
     }
     $('#activityDescription').title = $('#activityDescription').textContent;
     previousActive = data.active;
-    $('#queueInfo').textContent = data.queue.length ? `Danach: ${data.queue.map(id => names[id]).join(' → ')}` : 'Keine weiteren Aufträge in der Warteschlange.';
+    renderEstimate($('#queueInfo'), estimateJob, data.queue.length ? `Danach: ${data.queue.map(id => names[id]).join(' → ')}` : estimateJob ? '' : 'Keine weiteren Aufträge in der Warteschlange.');
     lastHealth = data.health || {};
     for (const row of document.querySelectorAll('[data-folder]')) {
       const job = data.jobs[row.dataset.folder] || { status: 'idle' }, state = row.querySelector('.job-state');

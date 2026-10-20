@@ -1,8 +1,13 @@
 # QNAP → Proxmox Backup Control
 
-Version 2.1.0 · [Betrieb, sichere Updates und Fehlerbehebung](docs/OPERATIONS.md)
+Version 2.2.0 · [Betrieb, sichere Updates und Fehlerbehebung](docs/OPERATIONS.md)
 
 Eine lokale Web-App für einen bestehenden Debian-12-LXC. Zeigt durchgereichte QNAP-SMB-Freigaben, startet den Proxmox Backup Client und dokumentiert den Aufbau. Ohne npm-Abhängigkeiten; Node.js ab Version 18.
+
+## Neu in 2.2.0
+
+- Geschätzter Fortschrittsbalken mit Prozent und Restzeit anhand der Quellgröße und verarbeiteten Daten. 100 % erst nach erfolgreichem Abschluss; fehlende oder veraltete Messwerte bleiben ausdrücklich offen.
+- Automatisierte Chromium-Browsertests für die wichtigsten Bedienabläufe, zusätzlich zu den Backendtests. GitHub Actions prüft Pushes und Pull Requests.
 
 ## Neu in 2.1.0
 

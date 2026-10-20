@@ -7,3 +7,6 @@ node_modules/
 config.json.pre-v*.json
 config.json.*.tmp
 .instance-lock
+
+playwright-report/
+test-results/

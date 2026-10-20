@@ -18,6 +18,7 @@ const { createSystem } = require('./lib/system');
 const { createUpdates } = require('./lib/updates');
 const { createDiagnostics } = require('./lib/diagnostics');
 const { healthFor } = require('./lib/planning');
+const { estimateProgress } = require('./lib/progress');
 const { sendNotification } = require('./notifications');
 const run = promisify(execFile);
 const ROOT = __dirname, DATA = process.env.DATA_DIR || path.join(ROOT, 'data');
@@ -44,7 +45,7 @@ function environment() {
   for (const key of Object.keys(env)) if (key.startsWith('PBS_')) delete env[key];
   return { ...env, PBS_REPOSITORY: config.repository, PBS_PASSWORD: config.password, PBS_FINGERPRINT: config.fingerprint, PBS_NAMESPACE: config.namespace };
 }
-backups = createBackups({ state, data: DATA, persist, getConfig, inspectPath, environment, log: history.log, archive: history.archive, notify: notifier.notify, isMaintenance });
+backups = createBackups({ state, data: DATA, persist, getConfig, inspectPath, environment, log: history.log, archive: history.archive, notify: notifier.notify, isMaintenance, getSourceSize: source => sourceSizes.peek(source) });
 const scheduler = createScheduler({ getConfig, state, persist, backups, log: history.log, notify: notifier.notify, isMaintenance });
 pbs = createPBS({ getConfig, environment, run, cacheFile: path.join(DATA, 'pbs.json'), save: saveJSON });
 const system = createSystem({ run, getConfig, storageChecks });
@@ -92,7 +93,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/logout') { auth.logout(req, res); return json(res, 200, { success: true }); }
     if (req.method === 'GET' && url.pathname === '/api/activity') {
       const file = backups.active ? path.join(DATA, backups.active.folder + '.log') : null;
-      return json(res, 200, { maintenance: isMaintenance(), health: Object.fromEntries(configs.get().sources.map(source => [source.id, scheduler.health(source.id)])), notification: state.notification || null, jobs: Object.fromEntries(configs.get().sources.map(source => [source.id, state.jobs[source.id] || { status: 'idle' }])), active: backups.active?.folder || null, phase: backups.active ? (backups.active.child ? 'backup' : 'checking') : 'idle', queue: backups.queue, log: file && fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '' });
+      return json(res, 200, { maintenance: isMaintenance(), health: Object.fromEntries(configs.get().sources.map(source => [source.id, scheduler.health(source.id)])), notification: state.notification || null, jobs: Object.fromEntries(configs.get().sources.map(source => [source.id, { ...(state.jobs[source.id] || { status: 'idle' }), estimate: estimateProgress(state.jobs[source.id]) }])), active: backups.active?.folder || null, phase: backups.active ? (backups.active.child ? 'backup' : 'checking') : 'idle', queue: backups.queue, log: file && fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '' });
     }
     if (req.method === 'GET' && url.pathname === '/api/status') {
       const snapshot = configs.get();
