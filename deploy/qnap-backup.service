@@ -1,0 +1,30 @@
+[Unit]
+Description=QNAP to Proxmox Backup Controller
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=qnap-backup
+Group=qnap-backup
+WorkingDirectory=/opt/proxmox-backup-client
+EnvironmentFile=/etc/qnap-backup.env
+Environment=CONFIG_FILE=/var/lib/qnap-backup/config.json
+Environment=DATA_DIR=/var/lib/qnap-backup
+ExecStart=/usr/bin/node /opt/proxmox-backup-client/server.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+KillMode=control-group
+StateDirectory=qnap-backup
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/qnap-backup
+ReadOnlyPaths=/mnt/Daten
+
+[Install]
+WantedBy=multi-user.target
