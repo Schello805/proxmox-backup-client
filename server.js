@@ -11,8 +11,8 @@ const run = promisify(execFile);
 const ROOT = __dirname, DATA = process.env.DATA_DIR || path.join(ROOT, 'data');
 const CONFIG = process.env.CONFIG_FILE || path.join(ROOT, 'config.json');
 const HOST = process.env.HOST || '127.0.0.1', PORT = Number(process.env.PORT || 3000);
-const USER = process.env.APP_USER || 'admin', PASS = process.env.APP_PASSWORD;
-if (!PASS || PASS.length < 12) throw new Error('APP_PASSWORD mit mindestens 12 Zeichen setzen.');
+const PASS = process.env.APP_PASSWORD;
+if (!PASS || PASS.length < 6) throw new Error('APP_PASSWORD mit mindestens 6 Zeichen setzen.');
 fs.mkdirSync(DATA, { recursive: true, mode: 0o700 });
 function save(file, value) {
   fs.writeFileSync(file + '.tmp', JSON.stringify(value, null, 2), { mode: 0o600 });
@@ -106,11 +106,19 @@ async function system() {
   try { debian = (await fs.promises.readFile('/etc/os-release', 'utf8')).match(/^PRETTY_NAME="?([^"\n]+)/m)?.[1] || debian; } catch {}
   return systemCache = { hostname: os.hostname(), platform: debian, client: version, timezone: 'Europe/Berlin' };
 }
-const expectedAuth = crypto.createHash('sha256').update(`${USER}:${PASS}`).digest();
+const expectedPassword = crypto.createHash('sha256').update(PASS).digest();
+const sessions = new Map(), attempts = new Map();
+const SESSION_MS = 12 * 60 * 60 * 1000;
+function sessionToken(req) {
+  return (req.headers.cookie || '').split(';').map(c => c.trim()).find(c => c.startsWith('qnap_session='))?.slice(13);
+}
 function authorized(req) {
-  const header = req.headers.authorization || '';
-  if (!header.startsWith('Basic ')) return false;
-  return crypto.timingSafeEqual(expectedAuth, crypto.createHash('sha256').update(Buffer.from(header.slice(6), 'base64')).digest());
+  const token = sessionToken(req), expires = sessions.get(token);
+  if (!expires || expires <= Date.now()) { if (token) sessions.delete(token); return false; }
+  return true;
+}
+function cookie(req, token, age) {
+  return `qnap_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${age}${req.socket.encrypted || process.env.COOKIE_SECURE === 'true' ? '; Secure' : ''}`;
 }
 function json(res, code, data) { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(data)); }
 async function body(req) {
@@ -122,12 +130,44 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
-  if (!authorized(req)) { res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="QNAP Backup", charset="UTF-8"' }); res.end('Anmeldung erforderlich'); return; }
   try {
     const url = new URL(req.url, 'http://localhost');
     if (req.method === 'POST') {
       if (req.headers.origin && req.headers.origin !== `http://${req.headers.host}` && req.headers.origin !== `https://${req.headers.host}`) return json(res, 403, { error: 'Fremder Ursprung.' });
       if (req.headers['x-requested-with'] !== 'qnap-dashboard') return json(res, 403, { error: 'Anfrage-Header fehlt.' });
+    }
+    // Nur die App-Hülle ist öffentlich. Daten und Aktionen benötigen eine Sitzung.
+    const assets = { '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'] };
+    if (req.method === 'GET' && assets[url.pathname]) {
+      const [file, type] = assets[url.pathname]; res.writeHead(200, { 'Content-Type': `${type}; charset=utf-8`, 'Cache-Control': 'no-cache' });
+      return res.end(fs.readFileSync(path.join(ROOT, 'public', file)));
+    }
+    if (req.method === 'POST' && url.pathname === '/api/login') {
+      const now = Date.now(), ip = req.socket.remoteAddress;
+      for (const [key, entry] of attempts) if (entry.until <= now) attempts.delete(key);
+      for (const [key, expires] of sessions) if (expires <= now) sessions.delete(key);
+      const attempt = attempts.get(ip) || { count: 0, until: now + 60000 };
+      if (attempt.count >= 10) return json(res, 429, { error: 'Zu viele Versuche. Bitte in einer Minute erneut versuchen.' });
+      const input = await body(req);
+      if (typeof input.password !== 'string' || !crypto.timingSafeEqual(expectedPassword, crypto.createHash('sha256').update(input.password).digest())) {
+        attempt.count++; if (attempts.size < 1000 || attempts.has(ip)) attempts.set(ip, attempt);
+        return json(res, 401, { error: 'Das Passwort stimmt nicht.' });
+      }
+      attempts.delete(ip);
+      if (sessions.size >= 1000) sessions.delete(sessions.keys().next().value);
+      const token = crypto.randomBytes(32).toString('hex'); sessions.set(token, now + SESSION_MS);
+      res.setHeader('Set-Cookie', cookie(req, token, SESSION_MS / 1000));
+      return json(res, 200, { success: true });
+    }
+    if (!url.pathname.startsWith('/api/')) return json(res, 404, { error: 'Nicht gefunden.' });
+    if (!authorized(req)) return json(res, 401, { error: 'Bitte anmelden.' });
+    if (req.method === 'POST' && url.pathname === '/api/logout') {
+      sessions.delete(sessionToken(req)); res.setHeader('Set-Cookie', cookie(req, '', 0));
+      return json(res, 200, { success: true });
+    }
+    if (req.method === 'GET' && url.pathname === '/api/activity') {
+      const file = active ? path.join(DATA, active.folder + '.log') : null;
+      return json(res, 200, { jobs: state.jobs, active: active?.folder || null, phase: active ? (active.child ? 'backup' : 'checking') : 'idle', queue: [...queue], log: file && fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '' });
     }
     if (req.method === 'GET' && url.pathname === '/api/status') {
       const folders = await Promise.all(Object.keys(FOLDERS).map(async id => ({ id, ...(await inspectFolder(id)), job: state.jobs[id] || { status: 'idle' }, schedule: config.schedules[id] })));
@@ -145,11 +185,6 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && logs && FOLDERS[logs[1]]) {
       const file = path.join(DATA, logs[1] + '.log');
       return json(res, 200, { log: fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : 'Noch kein Protokoll vorhanden.' });
-    }
-    const assets = { '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'] };
-    if (req.method === 'GET' && assets[url.pathname]) {
-      const [file, type] = assets[url.pathname]; res.writeHead(200, { 'Content-Type': `${type}; charset=utf-8`, 'Cache-Control': 'no-cache' });
-      return res.end(fs.readFileSync(path.join(ROOT, 'public', file)));
     }
     json(res, 404, { error: 'Nicht gefunden.' });
   } catch (e) { json(res, 400, { error: e instanceof SyntaxError ? 'Ungültiges JSON.' : e.message }); }

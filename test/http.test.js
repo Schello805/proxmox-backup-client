@@ -8,19 +8,30 @@ const path = require('node:path');
 const { once } = require('node:events');
 test('HTTP: Auth, Secret-Schutz, persistente Konfiguration und fehlende Mounts', async t => {
  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'qnap-test-'));
- const child = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], { env: { ...process.env, APP_PASSWORD: 'integration-password', HOST: '127.0.0.1', PORT: '0', CONFIG_FILE: path.join(tmp, 'config.json'), DATA_DIR: tmp }, stdio: ['ignore', 'pipe', 'pipe'] });
+ const child = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], { env: { ...process.env, APP_PASSWORD: '123456', HOST: '127.0.0.1', PORT: '0', CONFIG_FILE: path.join(tmp, 'config.json'), DATA_DIR: tmp }, stdio: ['ignore', 'pipe', 'pipe'] });
  t.after(async () => { child.kill('SIGTERM'); if (child.exitCode === null) await once(child, 'exit'); fs.rmSync(tmp, { recursive: true, force: true }); });
  const url = await new Promise((resolve, reject) => {
    const timer = setTimeout(() => reject(new Error('Serverstart überschritten')), 5000);
    child.stdout.on('data', data => { const match = data.toString().match(/http:\/\/127.0.0.1:\d+/); if (match) { clearTimeout(timer); resolve(match[0]); } });
    child.once('exit', code => { clearTimeout(timer); reject(new Error(`Server beendet: ${code}`)); });
  });
- const headers = { Authorization: `Basic ${Buffer.from('admin:integration-password').toString('base64')}` };
+ const login = (password, extra = {}) => fetch(url + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'qnap-dashboard', ...extra }, body: JSON.stringify({ password }) });
+ assert.equal((await fetch(url + '/')).status, 200);
+ const unauth = await fetch(url + '/api/status');
+ assert.equal(unauth.status, 401); assert.equal(unauth.headers.get('www-authenticate'), null);
+ assert.equal((await fetch(url + '/api/activity')).status, 401);
+ assert.equal((await login('wrong')).status, 401);
+ assert.equal((await login('123456', { Origin: 'https://evil.example' })).status, 403);
+ const loggedIn = await login('123456'); assert.equal(loggedIn.status, 200);
+ const cookie = loggedIn.headers.get('set-cookie');
+ assert.ok(cookie.includes('HttpOnly')); assert.ok(cookie.includes('SameSite=Strict'));
+ const headers = { Cookie: cookie.split(';')[0] };
  const post = (route, data, extra = {}) => fetch(url + route, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', 'X-Requested-With': 'qnap-dashboard', ...extra }, body: JSON.stringify(data) });
  assert.equal((await fetch(url + '/api/status')).status, 401);
  assert.equal((await fetch(url + '/config.json', { headers })).status, 404);
  assert.equal((await fetch(url + '/server.js', { headers })).status, 404);
  assert.equal((await fetch(url + '/', { headers })).status, 200);
+ assert.equal((await fetch(url + '/api/activity', { headers })).status, 200);
  const initial = await (await fetch(url + '/api/status', { headers })).json();
  assert.equal(initial.folders.length, 5); assert.equal(initial.config.password, '');
  const config = { ...initial.config, repository: 'backup@pbs@localhost:store', password: 'test-secret' };
@@ -36,4 +47,8 @@ test('HTTP: Auth, Secret-Schutz, persistente Konfiguration und fehlende Mounts',
    for (let n = 0; n < 30; n++) { state = JSON.parse(fs.readFileSync(path.join(tmp, 'state.json'))); if (state.jobs.software?.status === 'failed') break; await new Promise(resolve => setTimeout(resolve, 30)); }
    assert.equal(state.jobs.software.status, 'failed'); assert.ok(state.jobs.software.error.includes('Mount'));
  }
+ assert.equal((await post('/api/logout', {})).status, 200);
+ assert.equal((await fetch(url + '/api/status', { headers })).status, 401);
+ for (let n = 0; n < 10; n++) assert.equal((await login('wrong')).status, 401);
+ assert.equal((await login('123456')).status, 429);
 });

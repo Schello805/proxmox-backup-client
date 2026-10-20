@@ -58,7 +58,7 @@ install -m 600 deploy/qnap-backup.env.example /etc/qnap-backup.env
 nano /etc/qnap-backup.env
 ```
 
-In `/etc/qnap-backup.env` ein eigenes langes `APP_PASSWORD` setzen. `APP_USER` ist standardmäßig `admin`. `HOST=0.0.0.0` macht die Oberfläche im LXC-Netz erreichbar. Zugriff über `http://<LXC-IP>:3000`. Basic Auth über unverschlüsseltes HTTP nur im vertrauenswürdigen Netz einsetzen; für andere Netze HTTPS-Reverse-Proxy oder einen SSH-Tunnel verwenden. Keine direkte Internetfreigabe.
+In `/etc/qnap-backup.env` ein eigenes `APP_PASSWORD` mit mindestens sechs Zeichen setzen. Es wird kein Benutzername benötigt; ein vorhandenes `APP_USER` wird ignoriert. `HOST=0.0.0.0` macht die Oberfläche im LXC-Netz erreichbar. Zugriff über `http://<LXC-IP>:3000`. Passwort-Anmeldung über unverschlüsseltes HTTP nur im vertrauenswürdigen Netz einsetzen; für andere Netze HTTPS-Reverse-Proxy oder einen SSH-Tunnel verwenden. Keine direkte Internetfreigabe.
 
 Der Dienstbenutzer `qnap-backup` muss alle fünf Verzeichnisse und deren Dateien lesen und Verzeichnisse betreten können. Bei einem unprivilegierten LXC die UID/GID-Zuordnung berücksichtigen. Berechtigungen und SMB-Optionen auf dem Proxmox-Host passend zur vorhandenen Konfiguration einstellen; keine pauschalen `chmod 777` verwenden.
 
@@ -80,10 +80,10 @@ Falls der Dienst wegen LXC/systemd-Isolierung nicht startet, den konkreten Journ
 
 ## Erster Start und Einstellungen
 
-1. Web-App öffnen und mit den Zugangsdaten aus `/etc/qnap-backup.env` anmelden.
-2. Unter **Einstellungen** das vollständige Repository eintragen, z. B. `backup@pbs@192.168.1.20:datastore`. Mit API-Token: `backup@pbs!qnap@192.168.1.20:datastore`.
+1. Web-App öffnen und im App-Modal mit dem Passwort aus `/etc/qnap-backup.env` anmelden.
+2. Unter **Einstellungen** PBS-Adresse (z. B. `192.168.1.20`), Datastore (`pbs1`) und PBS-Benutzer (z. B. `backup@pbs`) eintragen. Mit API-Token lautet der Benutzer z. B. `backup@pbs!qnap`. Die App setzt daraus das Repository zusammen.
 3. Passwort bzw. API-Token-Secret hinterlegen. Bei selbst signiertem Zertifikat den **im PBS verifizierten** SHA-256-Fingerprint eintragen; optional den bereits angelegten Namespace.
-4. Speichern und **Gespeicherte Verbindung prüfen**. Dies prüft Anmeldung und Snapshot-Abfrage, nicht die Schreibrechte oder den Zustand aller Quelldateien.
+4. **Speichern & Verbindung prüfen** wählen. Dies prüft Anmeldung und Snapshot-Abfrage, nicht die Schreibrechte oder den Zustand aller Quelldateien.
 5. Mounts prüfen und einen Auftrag manuell sichern. Protokoll und Ergebnis kontrollieren, anschließend im PBS einen Restore testen.
 6. Tägliche Zeiten pro Ordner eintragen; leere Felder deaktivieren den Zeitplan.
 
@@ -117,6 +117,16 @@ proxmox-backup-client restore 'host/software/<ZEITSTEMPEL>' qnap-software.pxar /
 
 Snapshot-Namen aus der Liste übernehmen. Bei älteren CLI-Sicherungen den tatsächlichen Archivnamen im PBS prüfen; `.pxar` allein legt den Archivnamen nicht fest. Testdateien öffnen und mit der Quelle vergleichen. Nicht in produktive QNAP-Verzeichnisse zurückschreiben.
 
+## Anmeldung und Live-Status
+
+Die App öffnet ein eigenes Passwort-Modal, ohne Benutzername und ohne Browser-Anmeldefenster. `APP_PASSWORD` akzeptiert mindestens sechs Zeichen; längere bestehende Passwörter bleiben gültig. Die Anmeldung gilt zwölf Stunden und verwendet ein zufälliges HttpOnly-/SameSite-Cookie. „Sperren“ beendet die Sitzung; nach Dienstneustart ist eine erneute Anmeldung nötig. Nach zehn Fehlversuchen pro IP wird eine Minute lang begrenzt. Bei HTTPS-Reverse-Proxy `COOKIE_SECURE=true` in der Dienst-Umgebung setzen.
+
+Oben in der Übersicht stehen laufender Auftrag, Prüfschritt oder Backup-Phase, Startzeit, Laufzeit, Auslöser und Warteschlange. Das Live-Protokoll und die Auftragszustände aktualisieren sich alle drei Sekunden, die aufwendigere Mount-Prüfung alle 15 Sekunden. Es wird keine geschätzte Prozentanzeige erfunden. Separat in einer Shell gestartete Backups sind nicht Teil dieses Status.
+
+### Update von der ersten Version
+
+Bestehende PBS-Einstellungen, Zeitpläne und Ergebnisse bleiben erhalten. Nach dem Update einmal mit dem bisherigen `APP_PASSWORD` im neuen App-Dialog anmelden. Optional in `/etc/qnap-backup.env` ein kürzeres Passwort (mindestens sechs Zeichen) setzen; `APP_USER` kann entfernt werden. Danach den Dienst neu starten.
+
 ## Updates
 
 ```sh
@@ -136,4 +146,4 @@ APP_PASSWORD='lokales-testpasswort' npm start
 npm test
 ```
 
-Standard: `127.0.0.1:3000`, Benutzer `admin`. Ohne Linux-Mountinfo und echte CIFS-Quellen werden alle Mounts als nicht verfügbar angezeigt und Backups gesperrt. Keine simulierten Erfolgsmeldungen. `config.json` und `data/` sind von Git ausgeschlossen. Getestet werden Mount-Erkennung, Validierung, Zeitpläne und die HTTP-Schnittstelle; der reale PBS-/QNAP-Betrieb muss im LXC geprüft werden.
+Standard: `127.0.0.1:3000`, Anmeldung nur mit App-Passwort. Ohne Linux-Mountinfo und echte CIFS-Quellen werden alle Mounts als nicht verfügbar angezeigt und Backups gesperrt. Keine simulierten Erfolgsmeldungen. `config.json` und `data/` sind von Git ausgeschlossen. Getestet werden Mount-Erkennung, Validierung, Zeitpläne und die HTTP-Schnittstelle; der reale PBS-/QNAP-Betrieb muss im LXC geprüft werden.
