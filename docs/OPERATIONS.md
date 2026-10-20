@@ -98,3 +98,9 @@ npm run check
 ```
 
 `server.js` enthält HTTP-Routen und verdrahtet die Dienste. `lib/` enthält Anmeldung, Konfiguration, Migration, Backup-Ausführung, Verlauf, PBS und Scheduler. `core.js` hält die bisherige Hilfsfunktionsschnittstelle kompatibel. Im Browser trennt `public/js/` API-Zugriffe, Darstellung und Formularzustand; `public/app.js` verbindet die Ansichten und Aktionen. Das Frontend verwendet native ES-Module ohne Build-Schritt.
+
+### Größen der Quellen
+
+Die Übersicht zeigt unter dem SMB-Status die logische, unkomprimierte Dateigröße in GiB (kein PBS-Speicherverbrauch und keine Gesamtkapazität des NAS). Die Messung nutzt GNU `du --summarize --bytes --one-file-system` im LXC. Sie läuft nach erfolgreicher Mount-Prüfung einzeln im Hintergrund und wird beim Abrufen der Übersicht nach sechs Stunden erneut angestoßen. Während laufender oder vorgemerkter Backups startet kein neuer Scan; ein bereits laufender Scan kann sich mit einem später gestarteten Backup überschneiden. Nach einem App-Neustart werden die Werte neu ermittelt.
+
+Die Messung liest Verzeichniseinträge und kann große SMB-Freigaben zusätzlich belasten. Nach zehn Minuten wird sie abgebrochen; Lesefehler und Zeitüberschreitungen erscheinen als „Größe nicht verfügbar“, ohne unvollständige Summen anzuzeigen. Ein erneuter Versuch erfolgt nach 15 Minuten beim nächsten Abruf der Übersicht. Änderungen während der Messung können zu abweichenden Größen führen; der Wert ist eine Orientierung, kein konsistenter Snapshot.

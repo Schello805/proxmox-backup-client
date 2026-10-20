@@ -13,6 +13,7 @@ const { createPBS } = require('./lib/pbs');
 const { createAuth } = require('./lib/auth');
 const { createNotifier } = require('./lib/notifier');
 const { createInspector } = require('./lib/inspect');
+const { createSourceSizes } = require('./lib/source-sizes');
 const { createSystem } = require('./lib/system');
 const { healthFor } = require('./lib/planning');
 const { sendNotification } = require('./notifications');
@@ -35,6 +36,7 @@ const isMaintenance = () => fs.existsSync(path.join(DATA, 'maintenance'));
 const history = createHistory({ state, data: DATA, persist, getConfig, password: PASS });
 const notifier = createNotifier({ getConfig, state, persist });
 const inspectPath = createInspector(run);
+const sourceSizes = createSourceSizes({ run, inspectPath, isBusy: () => backups?.busy || isMaintenance() });
 function environment() {
   const env = { ...process.env }, config = getConfig();
   for (const key of Object.keys(env)) if (key.startsWith('PBS_')) delete env[key];
@@ -86,6 +88,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/status') {
       const snapshot = configs.get();
       const folders = await Promise.all(snapshot.sources.map(async source => ({ ...source, ...(await inspectPath(source.path, source.expectedSource)), job: state.jobs[source.id] || { status: 'idle' }, schedule: snapshot.schedules[source.id], health: healthFor(snapshot.schedules[source.id], snapshot.timezone, new Date(), state.watchSince[source.id], state.jobs[source.id], snapshot.staleAfterDays, state.triggered[source.id]) })));
+      for (const folder of folders) folder.size = sourceSizes.read(folder, folder.ok);
       return json(res, 200, { system: { ...await system.inspect(), timezone: snapshot.timezone }, folders, connection: pbs.lastConnection, config: configs.safe(snapshot), pbs: { checkedAt: pbs.current().checkedAt, count: pbs.current().count || 0, error: pbs.current().error || '' } });
     }
     if (req.method === 'POST' && url.pathname === '/api/config') {

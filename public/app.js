@@ -103,7 +103,12 @@ async function refresh() {
     $('#previousSources').disabled = sourcePage === 0; $('#nextSources').disabled = (sourcePage + 1) * 6 >= data.folders.length;
     for (const folder of data.folders.slice(sourcePage * 6, (sourcePage + 1) * 6)) {
       const row = element('tr'); row.dataset.folder = folder.id; const source = element('td'); const sourceButton = element('button', names[folder.id], 'source-link'); sourceButton.title = 'Verlauf und Details öffnen'; sourceButton.addEventListener('click', () => openHistory(folder.id)); source.append(sourceButton, element('code', folder.path)); row.append(source);
-      const mount = element('td'), badge = element('span', folder.ok ? '● Eingebunden' : '● Nicht verfügbar', `badge ${folder.ok ? 'ok' : 'bad'}`); badge.title = folder.ok ? `${folder.mount.source} → ${folder.mount.target} (${folder.mount.type}) · ${folder.identityConfirmed ? 'SMB-Identität bestätigt' : 'SMB-Quelle noch nicht festgelegt: unter Quellen bestätigen'}` : folder.error; mount.append(badge); row.append(mount);
+      const mount = element('td'), badge = element('span', folder.ok ? '● Eingebunden' : '● Nicht verfügbar', `badge ${folder.ok ? 'ok' : 'bad'}`); badge.title = folder.ok ? `${folder.mount.source} → ${folder.mount.target} (${folder.mount.type}) · ${folder.identityConfirmed ? 'SMB-Identität bestätigt' : 'SMB-Quelle noch nicht festgelegt: unter Quellen bestätigen'}` : folder.error; mount.append(badge);
+      const size = folder.size;
+      const sizeLabel = size?.bytes != null ? new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 }).format(size.bytes / 1024 ** 3) + ' GiB' : ({ scanning: 'Größe wird ermittelt …', pending: 'Größe vorgemerkt …', error: 'Größe nicht verfügbar' }[size?.status] || 'Größe: —');
+      const sizeInfo = element('small', sizeLabel, 'next-run');
+      sizeInfo.title = size?.error || `Dateigröße der Quelle (unkomprimiert)${size?.checkedAt ? ' · Stand: ' + date(size.checkedAt) : ''} · Aktualisierung alle 6 Stunden. Große Freigaben können länger dauern.`;
+      mount.append(sizeInfo); row.append(mount);
       const plan = element('td'); plan.append(element('span', scheduleText(folder.schedule)), element('small', nextText(folder.health), 'next-run')); plan.title = `${scheduleText(folder.schedule)} · ${nextText(folder.health)} (${activeTimezone})`;
       row.append(plan, element('td', date(folder.job.lastSuccess)));
       const state = element('td'); state.className = 'job-state'; renderJob(state, folder.job, folder.health); row.append(state); const status = folder.job.status;
