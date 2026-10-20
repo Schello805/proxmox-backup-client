@@ -4,10 +4,25 @@
   "fingerprint": "",
   "namespace": "",
   "schedules": {
-    "software": "",
-    "filme": "",
-    "serien": "",
-    "hoerspiele": "",
-    "musik": ""
+    "software": {
+      "days": [],
+      "time": ""
+    },
+    "filme": {
+      "days": [],
+      "time": ""
+    },
+    "serien": {
+      "days": [],
+      "time": ""
+    },
+    "hoerspiele": {
+      "days": [],
+      "time": ""
+    },
+    "musik": {
+      "days": [],
+      "time": ""
+    }
   }
 }

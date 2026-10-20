@@ -23,14 +23,24 @@ function validateConfig(body, current) {
   if (!body.schedules || typeof body.schedules !== 'object') throw new Error('Zeitpläne fehlen.');
   out.schedules = {};
   for (const folder of Object.keys(FOLDERS)) {
-    const value = body.schedules[folder];
-    if (typeof value !== 'string' || (value !== '' && !/^([01]\d|2[0-3]):[0-5]\d$/.test(value))) throw new Error(`Ungültige Uhrzeit für ${folder}.`);
-    out.schedules[folder] = value;
+    out.schedules[folder] = normalizeSchedule(body.schedules[folder]);
   }
   return out;
 }
+function normalizeSchedule(value) {
+  // Version 1: eine Uhrzeit bedeutete täglich; leere Zeichenfolge war deaktiviert.
+  if (typeof value === 'string') value = { days: value ? [1, 2, 3, 4, 5, 6, 7] : [], time: value };
+  if (!value || typeof value !== 'object' || !Array.isArray(value.days) || typeof value.time !== 'string') throw new Error('Ungültiger Wochenplan.');
+  if (value.days.length > 7 || value.days.some(day => !Number.isInteger(day) || day < 1 || day > 7) || new Set(value.days).size !== value.days.length) throw new Error('Ungültige Wochentage.');
+  if (value.days.length ? !/^([01]\d|2[0-3]):[0-5]\d$/.test(value.time) : value.time !== '') throw new Error('Bitte eine gültige Uhrzeit für den Wochenplan wählen.');
+  return { days: [...value.days].sort((a, b) => a - b), time: value.time };
+}
 function scheduleKey(date = new Date()) {
   const parts = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(date);
-  return { day: parts.slice(0, 10), time: parts.slice(11, 16) };
+  const day = parts.slice(0, 10);
+  return { day, time: parts.slice(11, 16), weekday: new Date(day + 'T12:00:00Z').getUTCDay() || 7 };
 }
-module.exports = { FOLDERS, mountFor, validateConfig, scheduleKey };
+function scheduleDue(schedule, now, lastDay) {
+  return schedule.days.includes(now.weekday) && schedule.time === now.time && lastDay !== now.day;
+}
+module.exports = { FOLDERS, mountFor, validateConfig, normalizeSchedule, scheduleKey, scheduleDue };

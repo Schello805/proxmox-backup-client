@@ -15,6 +15,49 @@ async function api(url, data) {
   if (!res.ok) throw new Error(result.error || 'Anfrage fehlgeschlagen.'); return result;
 }
 function element(tag, text, className) { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; if (className) el.className = className; return el; }
+const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+const presets = { manual: [], daily: [1,2,3,4,5,6,7], weekdays: [1,2,3,4,5], weekend: [6,7] };
+const scheduleControls = new Map();
+function scheduleText(schedule) {
+  if (!schedule.days.length) return 'Nur manuell';
+  const days = schedule.days.join(',');
+  const label = days === '1,2,3,4,5,6,7' ? 'Täglich' : days === '1,2,3,4,5' ? 'Mo–Fr' : days === '6,7' ? 'Sa–So' : schedule.days.map(day => dayNames[day - 1]).join(', ');
+  return `${label} · ${schedule.time}`;
+}
+function buildSchedule(id, name, schedule) {
+  const row = element('div', undefined, 'schedule-row'), title = element('strong', name);
+  const mode = element('select'); mode.name = `frequency-${id}`; mode.setAttribute('aria-label', `Häufigkeit ${name}`);
+  for (const [value, text] of [['manual','Nur manuell'],['daily','Täglich'],['weekdays','Werktags (Mo–Fr)'],['weekend','Wochenende'],['weekly','Wöchentlich'],['custom','Eigene Tage']]) { const option = element('option', text); option.value = value; mode.append(option); }
+  const time = element('input'); time.type = 'time'; time.name = `schedule-${id}`; time.setAttribute('aria-label', `Uhrzeit ${name}`); time.value = schedule.time;
+  const days = element('div', undefined, 'week-days'); days.setAttribute('role', 'group'); days.setAttribute('aria-label', `Wochentage ${name}`);
+  const hint = element('span', undefined, 'schedule-days-hint');
+  const current = [...schedule.days];
+  const matched = Object.entries(presets).find(([, values]) => values.join(',') === current.join(','));
+  mode.value = matched ? matched[0] : current.length === 1 ? 'weekly' : 'custom';
+  const control = { mode, time, days: current }; scheduleControls.set(id, control);
+  for (let day = 1; day <= 7; day++) {
+    const button = element('button', dayNames[day - 1]); button.type = 'button'; button.dataset.day = day;
+    button.setAttribute('aria-label', `${name}: ${['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'][day - 1]}`);
+    button.addEventListener('click', () => {
+      if (control.days.includes(day)) { if (control.days.length === 1) return; control.days = control.days.filter(value => value !== day); }
+      else control.days = [...control.days, day].sort((a,b) => a-b);
+      mode.value = control.days.length === 1 ? 'weekly' : 'custom'; paint();
+    }); days.append(button);
+  }
+  function paint() {
+    const manual = mode.value === 'manual', custom = ['weekly','custom'].includes(mode.value);
+    time.disabled = manual; time.required = !manual; days.hidden = !custom; hint.hidden = custom;
+    hint.textContent = manual ? 'Automatik aus' : control.days.map(day => dayNames[day - 1]).join(' · ');
+    for (const button of days.children) button.setAttribute('aria-pressed', String(control.days.includes(Number(button.dataset.day))));
+  }
+  mode.addEventListener('change', () => {
+    if (presets[mode.value]) control.days = [...presets[mode.value]];
+    else if (mode.value === 'weekly') control.days = [control.days[0] || 7];
+    else if (!control.days.length) control.days = [1,3,5];
+    paint();
+  });
+  row.append(title, mode, time, days, hint); $('#schedules').append(row); paint();
+}
 function fillForm(config) {
   const form = $('#configForm');
   const at = config.repository.lastIndexOf('@'), colon = config.repository.lastIndexOf(':');
@@ -25,10 +68,8 @@ function fillForm(config) {
   $('#repositoryPreview').textContent = config.repository || 'Noch nicht gespeichert';
   form.elements.password.value = '';
   $('#passwordHint').textContent = config.hasPassword ? 'PBS-Passwort gespeichert · leer lassen zum Beibehalten.' : 'PBS-Passwort noch nicht hinterlegt.';
-  $('#schedules').replaceChildren();
-  for (const [id, name] of Object.entries(names)) {
-    const label = element('label', name), input = element('input'); input.type = 'time'; input.name = `schedule-${id}`; input.value = config.schedules[id]; const clear = element('button', 'Nur manuell', 'schedule-clear'); clear.type = 'button'; clear.addEventListener('click', () => input.value = ''); label.append(input, clear); $('#schedules').append(label);
-  }
+  $('#schedules').replaceChildren(); scheduleControls.clear();
+  for (const [id, name] of Object.entries(names)) buildSchedule(id, name, config.schedules[id]);
 }
 async function refresh() {
   if (polling) return; polling = true; const epoch = authEpoch;
@@ -46,7 +87,7 @@ async function refresh() {
     for (const folder of data.folders) {
       const row = element('tr'); row.dataset.folder = folder.id; const source = element('td'); source.append(element('strong', names[folder.id]), element('code', folder.path)); row.append(source);
       const mount = element('td'), badge = element('span', folder.ok ? '● Eingebunden' : '● Nicht verfügbar', `badge ${folder.ok ? 'ok' : 'bad'}`); badge.title = folder.ok ? `${folder.mount.source} → ${folder.mount.target} (${folder.mount.type})` : folder.error; mount.append(badge); row.append(mount);
-      row.append(element('td', folder.schedule || 'Deaktiviert'), element('td', date(folder.job.lastSuccess)));
+      row.append(element('td', scheduleText(folder.schedule)), element('td', date(folder.job.lastSuccess)));
       const state = element('td'), status = folder.job.status; const statusBadge = element('span', statuses[status] || status, `badge ${status === 'success' ? 'ok' : ['running', 'queued'].includes(status) ? 'busy' : ['failed', 'interrupted'].includes(status) ? 'bad' : ''}`); statusBadge.title = folder.job.error || ''; state.className = 'job-state'; state.append(statusBadge); if (folder.job.error) state.append(element('small', folder.job.error, 'row-error')); row.append(state);
       const actions = element('td'), start = element('button', '↗ Sichern', 'row-action'), logs = element('button', 'Protokoll', 'row-action');
       start.dataset.start = folder.id; start.dataset.available = String(Boolean(folder.ok && data.config.repository && data.config.hasPassword));
@@ -72,7 +113,7 @@ $('#configForm').addEventListener('submit', async event => {
   const form = event.currentTarget, button = form.querySelector('[type=submit]'), data = { schedules: {} };
   data.repository = `${form.elements.authId.value.trim()}@${form.elements.server.value.trim()}:${form.elements.datastore.value.trim()}`;
   for (const key of ['password', 'fingerprint', 'namespace']) data[key] = form.elements[key].value;
-  for (const id of Object.keys(names)) data.schedules[id] = form.elements[`schedule-${id}`].value;
+  for (const id of Object.keys(names)) { const control = scheduleControls.get(id); data.schedules[id] = { days: control.mode.value === 'manual' ? [] : control.days, time: control.mode.value === 'manual' ? '' : control.time.value }; }
   button.disabled = true;
   try { await api('/api/config', data); loaded = false; notice('Einstellungen gespeichert.'); $('#connectionResult').textContent = 'Verbindung nach Änderung erneut prüfen.'; await refresh(); const result = await api('/api/connection', {}); $('#connectionResult').textContent = result.message; notice(result.message, !result.ok); } catch (e) { notice(e.message, true); } finally { button.disabled = false; }
 });
@@ -122,7 +163,7 @@ async function refreshActivity() {
       $('#activityTitle').textContent = 'Gerade läuft kein Backup';
       const latest = Object.entries(data.jobs).filter(([, job]) => job.endedAt).sort((a, b) => b[1].endedAt.localeCompare(a[1].endedAt))[0];
       if (latest && ['failed', 'interrupted'].includes(latest[1].status)) { $('#activityBadge').textContent = 'Letzter Lauf mit Fehler'; $('#activityBadge').className = 'badge bad'; }
-      $('#activityDescription').textContent = latest ? `Letzter Lauf: ${names[latest[0]]} · ${statuses[latest[1].status]} · ${date(latest[1].endedAt)}${latest[1].error ? ' · ' + latest[1].error : ''}` : 'Starte unten eine Sicherung oder hinterlege einen täglichen Zeitplan in den Einstellungen.';
+      $('#activityDescription').textContent = latest ? `Letzter Lauf: ${names[latest[0]]} · ${statuses[latest[1].status]} · ${date(latest[1].endedAt)}${latest[1].error ? ' · ' + latest[1].error : ''}` : 'Starte unten eine Sicherung oder hinterlege einen Wochenplan in den Einstellungen.';
       $('#liveDetails').hidden = true;
     }
     previousActive = data.active;

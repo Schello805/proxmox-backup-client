@@ -34,12 +34,13 @@ test('HTTP: Auth, Secret-Schutz, persistente Konfiguration und fehlende Mounts',
  assert.equal((await fetch(url + '/api/activity', { headers })).status, 200);
  const initial = await (await fetch(url + '/api/status', { headers })).json();
  assert.equal(initial.folders.length, 5); assert.equal(initial.config.password, '');
- const config = { ...initial.config, repository: 'backup@pbs@localhost:store', password: 'test-secret' };
+ const config = { ...initial.config, repository: 'backup@pbs@localhost:store', password: 'test-secret', schedules: { ...initial.config.schedules, software: { days: [1,3,5], time: '02:30' } } };
  assert.equal((await post('/api/config', config, { Origin: 'https://evil.example' })).status, 403);
  assert.equal((await post('/api/config', config)).status, 200);
  assert.equal(JSON.parse(fs.readFileSync(path.join(tmp, 'config.json'))).password, 'test-secret');
  const statusText = await (await fetch(url + '/api/status', { headers })).text();
  assert.ok(!statusText.includes('test-secret')); assert.equal(JSON.parse(statusText).config.hasPassword, true);
+ assert.deepEqual(JSON.parse(statusText).config.schedules.software, { days: [1,3,5], time: '02:30' });
  assert.equal((await post('/api/backup/unknown', {})).status, 400);
  if (os.platform() !== 'linux') {
    assert.equal((await post('/api/backup/software', {})).status, 202);

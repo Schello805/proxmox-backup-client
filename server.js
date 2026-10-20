@@ -6,7 +6,7 @@ const os = require('node:os');
 const crypto = require('node:crypto');
 const { spawn, execFile } = require('node:child_process');
 const { promisify } = require('node:util');
-const { FOLDERS, mountFor, validateConfig, scheduleKey } = require('./core');
+const { FOLDERS, mountFor, validateConfig, scheduleKey, scheduleDue } = require('./core');
 const run = promisify(execFile);
 const ROOT = __dirname, DATA = process.env.DATA_DIR || path.join(ROOT, 'data');
 const CONFIG = process.env.CONFIG_FILE || path.join(ROOT, 'config.json');
@@ -191,10 +191,10 @@ const server = http.createServer(async (req, res) => {
 });
 const timer = setInterval(() => {
   if (stopping) return;
-  const { day, time } = scheduleKey();
+  const now = scheduleKey();
   for (const folder of Object.keys(FOLDERS)) {
-    if (config.schedules[folder] !== time || state.triggered[folder] === day) continue;
-    state.triggered[folder] = day; persist();
+    if (!scheduleDue(config.schedules[folder], now, state.triggered[folder])) continue;
+    state.triggered[folder] = now.day; persist();
     try { enqueue(folder, 'schedule'); } catch (e) { log(folder, `\n${new Date().toISOString()} · Zeitplan übersprungen: ${e.message}\n`); }
   }
 }, 10000);

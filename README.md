@@ -85,7 +85,7 @@ Falls der Dienst wegen LXC/systemd-Isolierung nicht startet, den konkreten Journ
 3. Passwort bzw. API-Token-Secret hinterlegen. Bei selbst signiertem Zertifikat den **im PBS verifizierten** SHA-256-Fingerprint eintragen; optional den bereits angelegten Namespace.
 4. **Speichern & Verbindung prüfen** wählen. Dies prüft Anmeldung und Snapshot-Abfrage, nicht die Schreibrechte oder den Zustand aller Quelldateien.
 5. Mounts prüfen und einen Auftrag manuell sichern. Protokoll und Ergebnis kontrollieren, anschließend im PBS einen Restore testen.
-6. Tägliche Zeiten pro Ordner eintragen; leere Felder deaktivieren den Zeitplan.
+6. Pro Ordner eine Frequenz und Uhrzeit wählen: täglich, werktags, Wochenende, wöchentlich oder eigene Wochentage. Mehrere Tage sind kombinierbar; „Nur manuell“ deaktiviert den Zeitplan.
 
 Repository-Syntax, Umgebungsvariablen und Backup/Restore sind in der [Proxmox Client-Dokumentation](https://pbs.proxmox.com/docs/backup-client.html) beschrieben. PBS-Rechte einschließlich Token-Rechte und Rechte auf dem Namespace passend setzen. Die Verbindungstest-Abfrage kann zusätzliche Leserechte gegenüber einem reinen Backup-Zugang benötigen.
 
@@ -98,7 +98,7 @@ Passwörter werden nicht an die Oberfläche zurückgegeben. Ein leeres Passwortf
 - Zusätzliche untergeordnete Mounts werden vom Backup Client standardmäßig übersprungen. Für diesen Aufbau werden die fünf Quellordner einzeln gesichert. Symlinks werden als solche archiviert, nicht als zusätzliche Datenquellen verfolgt.
 - **Keine zusätzliche clientseitige Verschlüsselung** (`--crypt-mode none`). Transport zum PBS per TLS. Verschlüsselung mit Schlüsselverwaltung ist in dieser Version nicht implementiert.
 - Alle Aufträge laufen nacheinander, damit QNAP und Netzwerk nicht durch fünf gleichzeitige Läufe belastet werden.
-- Täglich in `Europe/Berlin`, höchstens ein automatischer Start pro Auftrag und Kalendertag. Uhrzeit muss während des laufenden Dienstes erreicht werden. Keine Nachholung verpasster Zeiten, keine Benachrichtigungen. Nicht existierende Uhrzeiten bei Sommerzeit werden übersprungen; doppelte Uhrzeiten lösen nur einmal aus.
+- An den gewählten Wochentagen in `Europe/Berlin`, höchstens ein automatischer Start pro Auftrag und Kalendertag. Uhrzeit muss während des laufenden Dienstes erreicht werden. Keine Nachholung verpasster Zeiten, keine Benachrichtigungen. Nicht existierende Uhrzeiten bei Sommerzeit werden übersprungen; doppelte Uhrzeiten lösen nur einmal aus.
 - Bei Dienstende werden laufende Prozesse beendet. Beim Neustart werden vorher laufende/wartende Aufträge als unterbrochen markiert, nicht automatisch wiederholt. Kein zweites App-Exemplar mit denselben Daten betreiben.
 - Konfiguration: `/var/lib/qnap-backup/config.json`; Status: `state.json`; letzter Lauf je Ordner: `<ordner>.log` (max. 256 KiB). Alle Dateien nur für den Dienstbenutzer lesbar. Kein vollständiges Protokollarchiv.
 - „Letzter Erfolg“ bedeutet Exit-Code 0 eines von dieser App gestarteten Backups, keine unabhängige Integritätsprüfung im PBS.
@@ -147,3 +147,9 @@ npm test
 ```
 
 Standard: `127.0.0.1:3000`, Anmeldung nur mit App-Passwort. Ohne Linux-Mountinfo und echte CIFS-Quellen werden alle Mounts als nicht verfügbar angezeigt und Backups gesperrt. Keine simulierten Erfolgsmeldungen. `config.json` und `data/` sind von Git ausgeschlossen. Getestet werden Mount-Erkennung, Validierung, Zeitpläne und die HTTP-Schnittstelle; der reale PBS-/QNAP-Betrieb muss im LXC geprüft werden.
+
+## Wochenpläne
+
+Pro Ordner wird ein Wochenplan als `{ "days": [1, 3, 5], "time": "02:30" }` gespeichert (1 = Montag, 7 = Sonntag). Das Beispiel sichert montags, mittwochs und freitags um 02:30 Uhr. Die Presets „Täglich“, „Werktags“, „Wochenende“ und „Wöchentlich“ setzen passende Tage; unter „Eigene Tage“ sind mehrere Tage frei wählbar. Eine gemeinsame Uhrzeit gilt für alle gewählten Tage. „Nur manuell“ entspricht `{ "days": [], "time": "" }`.
+
+Alte Konfigurationen mit einer einfachen Uhrzeit werden beim Laden automatisch als tägliche Pläne verstanden und beim nächsten Speichern im neuen Format abgelegt. Die Sicherung bleibt auf höchstens einen automatischen Start pro Ordner und Kalendertag begrenzt. Ausgefallene Zeiten werden weiterhin nicht nachgeholt.
