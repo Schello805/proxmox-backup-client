@@ -2,7 +2,7 @@
 
 Lokale Web-App für **QNAP → Proxmox-Host → Debian-LXC → Proxmox Backup Server**.
 
-Mount-Status und Ordnergrößen, manuelle Backups, Wochenpläne mit Zeitzone und Zeitplanvorschlägen, Gantt-Diagramm, PBS-Speicherstände, Fortschritt, Verlauf und optionale ntfy-Zusammenfassungen. Zwei Backup-Ziele auf demselben oder unterschiedlichen PBS; das Ziel ist je Quelle wählbar. Quellen lassen sich direkt aus der Übersicht bearbeiten. Ein kompakter Assistent führt durch neue Quellen und PBS-Ziele, inklusive Kopierbefehlen.
+Mount-Status und Ordnergrößen, manuelle Backups mit Abbruchfunktion, Wochenpläne mit Zeitzone und Zeitplanvorschlägen, Gantt-Diagramm, PBS-Speicherstände, Fortschritt, Verlauf und optionale ntfy-Zusammenfassungen. Zwei Backup-Ziele auf demselben oder unterschiedlichen PBS; das Ziel ist je Quelle wählbar. Quellen lassen sich direkt aus der Übersicht bearbeiten. Ein kompakter Assistent führt durch neue Quellen und PBS-Ziele, inklusive Kopierbefehlen.
 
 ![Backup Control – Übersicht](https://github.com/user-attachments/assets/6992b213-ba63-4d0f-922a-1ee99742ee03)
 
@@ -36,6 +36,8 @@ bash /opt/proxmox-backup-client/deploy/update.sh
 systemctl status qnap-backup
 journalctl -u qnap-backup -n 50
 ```
+
+Laufende und wartende Aufträge lassen sich in der Übersicht einzeln oder über **Alle abbrechen** stoppen. Vor einem Update warten, bis kein Auftrag mehr läuft oder wartet. Mount-Zuordnungen werden sofort aktualisiert; Lesbarkeit und Ordnergrößen werden im Hintergrund geprüft.
 
 Konfiguration und Verlauf: `/var/lib/qnap-backup/`. Backups laufen nacheinander als `.pxar`-Archive ohne zusätzliche clientseitige Verschlüsselung; die Übertragung erfolgt per TLS. Aufbewahrung und Verify-Jobs werden im PBS konfiguriert. Die App löscht keine PBS-Sicherungen.
 

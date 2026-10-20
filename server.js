@@ -45,6 +45,7 @@ const isMaintenance = () => fs.existsSync(path.join(DATA, 'maintenance'));
 const history = createHistory({ state, data: DATA, persist, getConfig, password: PASS });
 const notifier = createNotifier({ getConfig, state, persist });
 const inspectPath = createInspector(run);
+const mountStatus = require('./lib/mount-status').createMountStatus({ inspectPath });
 const discovery = createDiscovery({ getConfig });
 const sourceSizes = createSourceSizes({ run, inspectPath, isBusy: () => backups?.busy || isMaintenance() });
 function environment(target = 'primary') {
@@ -108,11 +109,12 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/refresh') {
       sourceSizes.invalidate();
-      return json(res, 202, { discovery: await discovery.refresh(), sizeDeferred: backups.busy || isMaintenance() });
+      return json(res, 202, { mounts: await mountStatus.read(getConfig().sources, true), discovery: await discovery.refresh(), sizeDeferred: backups.busy || isMaintenance() });
     }
     if (req.method === 'GET' && url.pathname === '/api/status') {
       const snapshot = configs.get();
-      const folders = await Promise.all(snapshot.sources.map(async source => ({ ...source, targetRepository: repositoryFor(snapshot, source.target), ...(await inspectPath(source.path, source.expectedSource)), job: state.jobs[source.id] || { status: 'idle' }, schedule: snapshot.schedules[source.id], health: healthFor(snapshot.schedules[source.id], snapshot.timezone, new Date(), state.watchSince[source.id], state.jobs[source.id], snapshot.staleAfterDays, state.triggered[source.id]) })));
+      const mounts = await mountStatus.read(snapshot.sources);
+      const folders = snapshot.sources.map((source, index) => ({ ...source, targetRepository: repositoryFor(snapshot, source.target), ...mounts[index], job: state.jobs[source.id] || { status: 'idle' }, schedule: snapshot.schedules[source.id], health: healthFor(snapshot.schedules[source.id], snapshot.timezone, new Date(), state.watchSince[source.id], state.jobs[source.id], snapshot.staleAfterDays, state.triggered[source.id]) }));
       sourceSizes.retain(snapshot.sources);
       for (const folder of folders) folder.size = sourceSizes.read(folder, folder.ok);
       return json(res, 200, { system: { ...await system.inspect(), timezone: snapshot.timezone }, folders, capacities: capacity.all(), timeline: createTimeline(snapshot, state), discovery: discovery.current(), targets: targetsFor(snapshot), connections: pbs.connections(), connection: pbs.lastConnection, config: configs.safe(snapshot), pbs: { checkedAt: pbs.current().checkedAt, count: pbs.current().count || 0, error: pbs.current().error || '' } });
@@ -173,6 +175,9 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { log: fs.readFileSync(path.join(DATA, 'history', history[1], history[2] + '.log'), 'utf8') });
     }
     if (req.method === 'POST' && url.pathname === '/api/connection') return json(res, 200, await pbs.connection((await body(req)).target || 'primary'));
+    if (req.method === 'POST' && url.pathname === '/api/backups/cancel') { backups.cancelAll(); return json(res, 202, { success: true }); }
+    const cancel = url.pathname.match(/^\/api\/backup\/([a-z][a-z0-9_-]{0,39})\/cancel$/);
+    if (req.method === 'POST' && cancel) { backups.cancel(cancel[1]); return json(res, 202, { success: true }); }
     const backup = url.pathname.match(/^\/api\/backup\/([a-z][a-z0-9_-]{0,39})$/);
     if (req.method === 'POST' && backup) { backups.enqueue(backup[1], 'manual'); return json(res, 202, { success: true }); }
     const logs = url.pathname.match(/^\/api\/logs\/([a-z][a-z0-9_-]{0,39})$/);

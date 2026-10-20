@@ -19,7 +19,7 @@ fi
 check_busy() {
   if [ -f scripts/check.js ]; then node scripts/check.js --busy; return; fi
   # Erster Wechsel von einer Version ohne Prüfskript: nur die Statusdatei lesen.
-  node -e 'const fs=require("fs"),file=process.argv[1];try{if(!fs.existsSync(file))process.exit(0);const state=JSON.parse(fs.readFileSync(file,"utf8"));if(Object.values(state.jobs||{}).some(job=>["running","queued"].includes(job.status))){console.error("Update abgebrochen: Backup läuft oder wartet.");process.exit(2);}}catch{console.error("Statusdatei unlesbar. Update abgebrochen.");process.exit(1);}' "$DATA_DIR/state.json"
+  node -e 'const fs=require("fs"),file=process.argv[1];try{if(!fs.existsSync(file))process.exit(0);const state=JSON.parse(fs.readFileSync(file,"utf8"));if(Object.values(state.jobs||{}).some(job=>["running","queued","cancelling"].includes(job.status))){console.error("Update abgebrochen: Backup läuft oder wartet.");process.exit(2);}}catch{console.error("Statusdatei unlesbar. Update abgebrochen.");process.exit(1);}' "$DATA_DIR/state.json"
 }
 check_busy
 if [ "${1:-}" = "--check" ]; then

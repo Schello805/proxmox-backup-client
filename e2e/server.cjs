@@ -19,6 +19,8 @@ process.on('message', message => {
 });
 const realDiscovery = require('../lib/discovery').createDiscovery;
 require('../lib/discovery').createDiscovery = options => realDiscovery({ ...options, readMountinfo: async () => [...actualMounts.values()].map(mount => `${mount.id} 1 ${mount.device} ${mount.root} ${mount.target} rw - ${mount.type} ${mount.source} rw`).join('\n') });
+const realMountStatus = require('../lib/mount-status').createMountStatus;
+require('../lib/mount-status').createMountStatus = options => realMountStatus({ ...options, readMountinfo: async () => [...actualMounts.values()].map(mount => `${mount.id} 1 ${mount.device} ${mount.root} ${mount.target} rw - ${mount.type} ${mount.source} rw`).join('\n') });
 const cp = require('node:child_process');
 const realExecFile = cp.execFile;
 cp.execFile = (file, args, options, callback) => {
@@ -29,8 +31,10 @@ cp.execFile = (file, args, options, callback) => {
 cp.execFile[require('node:util').promisify.custom] = (...args) => new Promise((resolve, reject) => cp.execFile(...args, (error, stdout, stderr) => error ? reject(error) : resolve({ stdout, stderr })));
 require('../lib/inspect').createInspector = () => async (target, expectedSource) => {
   const mount = actualMounts.get(target) || { source: '//test-nas/' + target.split('/').pop().toLowerCase(), target, type: 'cifs' };
-  const error = require('../lib/mounts').mountIssue(mount, expectedSource);
-  return { ok: !error, path: target, identityConfirmed: Boolean(expectedSource && !error), error, mount: { ...mount } };
+  const snapshot = { ...mount };
+  if (snapshot.checkDelayMs) await new Promise(resolve => setTimeout(resolve, snapshot.checkDelayMs));
+  const error = require('../lib/mounts').mountIssue(snapshot, expectedSource);
+  return { ok: !error, path: target, identityConfirmed: Boolean(expectedSource && !error), error, mount: snapshot };
 };
 const realBackups = require('../lib/backups').createBackups;
 let activeChild, activeJob;

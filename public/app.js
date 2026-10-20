@@ -12,7 +12,7 @@ let lastTargets = [], lastConnections = {}, lastPreferencesSnapshot = null;
 const refreshWaiters = [];
 const $ = selector => document.querySelector(selector);
 const names = { software: 'Software', filme: 'Filme', serien: 'Serien', hoerspiele: 'Hörspiele', musik: 'Musik', daten: 'Daten' };
-const statuses = { idle: 'Noch kein Lauf', queued: 'Wartet', running: 'Läuft', success: 'Erfolgreich', failed: 'Fehler', interrupted: 'Unterbrochen' };
+const statuses = { idle: 'Noch kein Lauf', queued: 'Wartet', running: 'Läuft', success: 'Erfolgreich', failed: 'Fehler', interrupted: 'Unterbrochen', cancelling: 'Wird abgebrochen', cancelled: 'Abgebrochen' };
 let loaded = false, polling = false, logFolder = null, noticeTimer, authenticated = false, activityPolling = false, previousActive = null, authEpoch = 0, activeTimezone = 'Europe/Berlin', savedConfig = null, folderData = [], lastHealth = {}, logRun = null, sourceEditing = null, pbsData = null, sourcePage = 0, lastMainSnapshot = null, lastNotifySnapshot = null, mountDiscovery = { candidates: [] };
 const api = createAPI(showLogin);
 const { element, date, nextText, renderJob, scheduleText, renderEstimate } = createViews(() => activeTimezone, statuses);
@@ -70,7 +70,7 @@ async function refresh() {
     authenticated = true; document.body.classList.remove('locked'); if ($('#loginDialog').open) $('#loginDialog').close();
     $('#updated').textContent = `Aktualisiert ${new Date().toLocaleTimeString('de-DE', { timeZone: activeTimezone })} · live`;
     $('#mountCount').textContent = `${data.folders.filter(f => f.ok).length} / ${data.folders.length}`;
-    $('#runningCount').textContent = data.folders.filter(f => ['running', 'queued'].includes(f.job.status)).length;
+    $('#runningCount').textContent = data.folders.filter(f => ['running', 'queued', 'cancelling'].includes(f.job.status)).length;
     $('#successCount').textContent = `${data.folders.filter(f => f.job.status === 'success').length} / ${data.folders.length}`;
     $('#targetStatus').textContent = data.connection ? (data.connection.ok ? 'Verbunden' : 'Prüfung fehlgeschlagen') : 'Ungeprüft';
     $('#targetName').textContent = data.targets?.map(target => target.name).join(' · ') || data.config.repository || 'Noch kein Repository';
@@ -83,7 +83,7 @@ async function refresh() {
     $('#previousSources').disabled = sourcePage === 0; $('#nextSources').disabled = (sourcePage + 1) * 6 >= data.folders.length;
     for (const folder of data.folders.slice(sourcePage * 6, (sourcePage + 1) * 6)) {
       const row = element('tr'); row.dataset.folder = folder.id; const source = element('td'); const sourceButton = element('button', names[folder.id], 'source-link'); sourceButton.title = 'Details, Zeitplan und Verlauf öffnen'; sourceButton.addEventListener('click', () => openHistory(folder.id)); const path = element('code', folder.path); path.title = folder.path; const target = element('small', folder.targetRepository?.split(':').at(-1) || 'Ziel fehlt', 'source-target'); target.title = folder.targetRepository || 'PBS-Ziel noch nicht konfiguriert'; const heading = element('div', undefined, 'source-heading'); heading.append(sourceButton, target); source.append(heading, path); row.append(source);
-      const mount = element('td'), badge = element('span', folder.ok ? '● Eingebunden' : ['cifs','smb3'].includes(folder.mount?.type) && folder.mount?.source && folder.expectedSource && folder.mount.source !== folder.expectedSource ? '● SMB geändert' : '● Nicht verfügbar', `badge ${folder.ok ? 'ok' : 'bad'}`); badge.title = folder.ok ? `${folder.mount.source} → ${folder.mount.target} (${folder.mount.type}) · ${folder.identityConfirmed ? 'SMB-Identität bestätigt' : 'SMB-Quelle noch nicht festgelegt: unter Quellen bestätigen'}` : `${folder.error}${folder.mount?.source ? ' Erkannt: ' + folder.mount.source : ''}`; mount.append(badge);
+      const mount = element('td'), badge = element('span', folder.ok ? '● Eingebunden' : folder.checking ? '● Prüfung läuft' : ['cifs','smb3'].includes(folder.mount?.type) && folder.mount?.source && folder.expectedSource && folder.mount.source !== folder.expectedSource ? '● SMB geändert' : '● Nicht verfügbar', `badge ${folder.ok ? 'ok' : folder.checking ? 'busy' : 'bad'}`); badge.title = folder.ok ? `${folder.mount.source} → ${folder.mount.target} (${folder.mount.type}) · ${folder.identityConfirmed ? 'SMB-Identität bestätigt' : 'SMB-Quelle noch nicht festgelegt: unter Quellen bestätigen'}` : `${folder.error}${folder.mount?.source ? ' Erkannt: ' + folder.mount.source : ''}`; if (folder.checking) badge.title += ' · Lesbarkeit wird im Hintergrund geprüft'; if (folder.checkedAt) badge.title += ' · Letzte Prüfung: ' + date(folder.checkedAt); mount.append(badge);
       const size = folder.size;
       const sizeLabel = size?.bytes != null ? new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 }).format(size.bytes / 1024 ** 3) + ' GiB' : ({ scanning: 'Größe wird ermittelt …', pending: 'Größe vorgemerkt …', error: 'Größe nicht verfügbar' }[size?.status] || (folder.mount?.source && !folder.ok ? 'Erkannt: ' + folder.mount.source : 'Größe: —'));
       const sizeInfo = element('small', sizeLabel, 'source-size');
@@ -95,12 +95,14 @@ async function refresh() {
       const actions = element('td'), start = element('button', '↗ Sichern', 'row-action'), logs = element('button', 'Protokoll', 'row-action');
       const targetReady = data.targets?.find(target => target.id === (folder.target || 'primary'))?.hasPassword ?? data.config.hasPassword;
       start.dataset.start = folder.id; start.dataset.available = String(Boolean(folder.ok && folder.targetRepository && targetReady));
-      start.disabled = !folder.ok || !folder.targetRepository || !targetReady || ['running', 'queued'].includes(status);
+      start.hidden = ['running','queued','cancelling'].includes(status);
+      start.disabled = !folder.ok || !folder.targetRepository || !targetReady || ['running', 'queued', 'cancelling'].includes(status);
       start.addEventListener('click', async () => { start.disabled = true; try { await api(`/api/backup/${folder.id}`, {}); notice(`${names[folder.id]} zur Sicherung vorgemerkt.`); await refresh(); } catch (e) { notice(e.message, true); start.disabled = false; } });
-      logs.addEventListener('click', () => openLog(folder.id)); actions.append(start, logs); row.append(actions); $('#folders').append(row);
+      logs.addEventListener('click', () => openLog(folder.id)); const cancel = element('button', 'Abbrechen', 'row-action'); cancel.dataset.cancel = folder.id; cancel.hidden = !['running','queued','cancelling'].includes(status); cancel.disabled = status === 'cancelling'; cancel.addEventListener('click', () => cancelBackup(folder.id)); actions.append(start, cancel, logs); row.append(actions); $('#folders').append(row);
     }
     $('#systemInfo').replaceChildren();
     for (const [label, value] of [['Host', data.system.hostname], ['System', data.system.platform], ['Backup Client', data.system.client], ['Zeitpläne', data.system.timezone]]) { const item = element('span'); item.append(element('strong', label), document.createTextNode(value)); $('#systemInfo').append(item); }
+    if (data.folders.some(folder => folder.checking)) setTimeout(() => { if (authenticated) void refresh(); }, 1000);
     fillForm(data.config); loaded = true; timeline?.update(data.timeline); operations?.update(data); if (sourceEditing) renderSourceProblem(sourceEditing);
     const connectionMessages = (data.targets || []).filter(target => data.connections?.[target.id]).map(target => `${target.name}: ${data.connections[target.id].message} (${date(data.connections[target.id].checkedAt)})`);
     $('#connectionResult').textContent = connectionMessages.join(' · ');
@@ -158,7 +160,7 @@ $('#refresh').addEventListener('click', async () => {
     const result = await api('/api/refresh', {});
     await refresh();
     setTimeout(() => { if (authenticated) void refresh(); }, 1500);
-    notice(result.discovery.error || (result.sizeDeferred ? 'Mounts neu geprüft. Größenmessungen warten auf das Ende laufender Sicherungen bzw. der Wartung.' : 'Mounts neu geprüft. Größen werden im Hintergrund neu ermittelt.') + (result.discovery.candidates.length ? ` ${result.discovery.candidates.length} neue SMB-Freigabe(n) erkannt.` : ''), Boolean(result.discovery.error));
+    notice(result.discovery.error || (result.sizeDeferred ? 'Mount-Zuordnung aktualisiert; Lesbarkeit wird im Hintergrund geprüft. Größenmessungen warten auf das Ende laufender Sicherungen bzw. der Wartung.' : 'Mount-Zuordnung aktualisiert. Lesbarkeit und Größen werden im Hintergrund geprüft.') + (result.discovery.candidates.length ? ` ${result.discovery.candidates.length} neue SMB-Freigabe(n) erkannt.` : ''), Boolean(result.discovery.error));
   } catch (e) { notice(e.message, true); }
   finally { button.disabled = false; button.textContent = '↻ Aktualisieren'; }
 });
@@ -210,6 +212,14 @@ function duration(start) {
   const seconds = Math.max(0, Math.floor((Date.now() - new Date(start)) / 1000));
   return `${Math.floor(seconds / 3600)} h ${Math.floor(seconds % 3600 / 60)} min ${seconds % 60} s`;
 }
+async function cancelBackup(id) {
+  try {
+    await api(id ? `/api/backup/${id}/cancel` : '/api/backups/cancel', {});
+    notice(id ? `${names[id]}: Abbruch angefordert.` : 'Alle Aufträge werden abgebrochen. Warte auf „Bereit“, bevor du aktualisierst.');
+    await refreshActivity(); await refresh();
+  } catch (e) { notice(e.message, true); }
+}
+$('#cancelAll').addEventListener('click', () => cancelBackup());
 async function refreshActivity() {
   if (!authenticated || activityPolling) return;
   activityPolling = true; const epoch = authEpoch;
@@ -217,14 +227,16 @@ async function refreshActivity() {
     const data = await api('/api/activity');
     if (epoch !== authEpoch) return;
     $('#activityMeta').replaceChildren();
-    $('#activityBadge').textContent = data.active ? '● Läuft' : '● Bereit';
+    $('#activityBadge').textContent = data.active ? data.jobs[data.active].status === 'cancelling' ? 'Abbruch läuft' : '● Läuft' : '● Bereit';
+    $('#cancelAll').hidden = !data.active && !data.queue.length;
+    $('#cancelAll').disabled = Boolean(data.active && data.jobs[data.active].status === 'cancelling' && !data.queue.length);
     $('#activityBadge').className = `badge ${data.active ? 'busy' : 'ok'}`;
     $('.activity').classList.toggle('running', Boolean(data.active));
     $('#runningCount').textContent = (data.active ? 1 : 0) + data.queue.length;
     let estimateJob = data.active ? data.jobs[data.active] : null;
     if (data.active) {
       const job = data.jobs[data.active];
-      $('#activityTitle').textContent = `${names[data.active]} · ${job.repository?.split(':').at(-1) || 'Ziel wird geprüft'} · ${data.phase === 'checking' ? 'Quelle wird geprüft' : 'Backup läuft'}`;
+      $('#activityTitle').textContent = `${names[data.active]} · ${job.repository?.split(':').at(-1) || 'Ziel wird geprüft'} · ${job.status === 'cancelling' ? 'Wird abgebrochen …' : data.phase === 'checking' ? 'Quelle wird geprüft' : 'Backup läuft'}`;
       $('#activityDescription').textContent = job.progress ? `Messwert: ${date(job.progress.updatedAt)} · Upload zählt die vom Client gemeldeten Daten; Komprimierung und Deduplizierung beeinflussen den Netzverkehr.` : 'Warte auf Messwerte des Clients. Ältere Clients liefern eventuell erst am Ende Werte; das Live-Protokoll bleibt verfügbar.';
       for (const [label, value] of [['Laufzeit', duration(job.startedAt)], ['Verarbeitet', formatBytes(job.progress?.processedBytes)], ['Upload (Client)', formatBytes(job.progress?.uploadedBytes)], ['Ø Verarbeitung', job.progress?.processingBytesPerSecond != null ? formatBytes(job.progress.processingBytesPerSecond) + '/s' : '—']]) { const item = element('span'); item.append(element('strong', label), document.createTextNode(value)); $('#activityMeta').append(item); }
       $('#liveDetails').hidden = false;
@@ -245,9 +257,10 @@ async function refreshActivity() {
     for (const row of document.querySelectorAll('[data-folder]')) {
       const job = data.jobs[row.dataset.folder] || { status: 'idle' }, state = row.querySelector('.job-state');
       const folder = folderData.find(item => item.id === row.dataset.folder); renderFolderState(state, folder, job, lastHealth[row.dataset.folder]);
+      const cancel = row.querySelector('[data-cancel]'); if (cancel) { cancel.hidden = !['running','queued','cancelling'].includes(job.status); cancel.disabled = job.status === 'cancelling'; }
       const next = row.querySelector('.next-run'); if (next) next.textContent = nextText(lastHealth[row.dataset.folder]);
       row.children[3].textContent = date(job.lastSuccess);
-      const start = row.querySelector('[data-start]'); start.disabled = start.dataset.available !== 'true' || ['running', 'queued'].includes(job.status);
+      const start = row.querySelector('[data-start]'); start.hidden = ['running','queued','cancelling'].includes(job.status); start.disabled = start.dataset.available !== 'true' || ['running', 'queued', 'cancelling'].includes(job.status);
     }
     $('#successCount').textContent = `${Object.values(data.jobs).filter(job => job.status === 'success').length} / ${Object.keys(names).length}`;
     if (!data.active) {
@@ -469,7 +482,7 @@ function openProblem(folder, issue) {
 }
 function renderFolderState(cell, folder, job, health) {
   renderJob(cell, job, health); const issue = issueFor(folder, job, health); if (!issue) return;
-  if (['mount','target'].includes(issue.kind) && !['running','queued'].includes(job.status)) { const badge = cell.querySelector('.badge'); badge.textContent = 'Handlungsbedarf'; badge.className = 'badge bad'; }
+  if (['mount','target'].includes(issue.kind) && !['running','queued','cancelling'].includes(job.status)) { const badge = cell.querySelector('.badge'); badge.textContent = 'Handlungsbedarf'; badge.className = 'badge bad'; }
   cell.querySelector('.row-error')?.remove(); const text = element('small', issue.message, 'row-error problem-message'); text.title = issue.message + ' ' + issue.help;
   const button = element('button', issue.action, 'row-action problem-action'); button.type = 'button'; button.addEventListener('click', () => openProblem(folder, issue)); cell.append(text, button);
 }

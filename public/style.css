@@ -2042,3 +2042,13 @@ a.nav { display: block; text-decoration: none; box-sizing: border-box; }
 .capacity-threshold { display: block; margin-top: 14px; font-size: 12px; }
 .capacity-threshold input { display: block; width: 120px; margin-top: 5px; }
 @media(max-width:760px) { .timeline-tools { width: 100%; flex-wrap: wrap; } .capacity-panel { padding: 12px; } .capacity-panel>.panel-title { flex-wrap: wrap; gap: 10px; } }
+
+/* Abbruch ersetzt den Startknopf; die Live-Karte bleibt kompakt. */
+#overview #cancelAll {
+  grid-column: 2;
+  grid-row: 4;
+  align-self: center;
+  padding: 7px 10px;
+  font-size: 11px;
+}
+#overview #queueInfo { grid-column: 1; }

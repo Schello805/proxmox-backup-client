@@ -25,7 +25,7 @@ function main() {
   const root = path.join(__dirname, '..'), data = process.env.DATA_DIR || path.join(root, 'data'), file = process.env.CONFIG_FILE || path.join(root, 'config.json');
   if (args.includes('--busy')) {
     const state = loadState(path.join(data, 'state.json'));
-    if (Object.values(state.jobs).some(job => ['running','queued'].includes(job.status))) { console.error('Update abgebrochen: Backup läuft oder wartet. Erst nach Auftragsende aktualisieren.'); return 2; }
+    if (Object.values(state.jobs).some(job => ['running','queued','cancelling'].includes(job.status))) { console.error('Update abgebrochen: Backup läuft oder wartet. Erst nach Auftragsende aktualisieren.'); return 2; }
     return 0;
   }
   const checks = checkRuntime({ data, configFile: file, port: Number(process.env.PORT ?? 3000) });
