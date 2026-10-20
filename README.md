@@ -220,3 +220,7 @@ Ein HTTP-Status `400` in der Browser-Konsole allein zeigt nicht die Ursache. Der
 Speichern, PBS-Verbindungstest und ntfy-Test sind getrennte Aktionen. Eingabefehler erscheinen direkt am Feld; der Server liefert ergänzend den Feldnamen. Noch nicht gespeicherte PBS-Werte, Zeitpläne, ntfy-Einstellungen und Auth-Auswahl bleiben bei automatischen Statusabfragen und Quellenänderungen erhalten. Änderungen während eines Speichervorgangs bleiben als ungespeichert markiert. Eine noch leere PBS-Einrichtung kann gespeichert werden; Backups bleiben bis zur vollständigen Einrichtung gesperrt.
 
 Konfigurationen besitzen ab Version 2 eine Schemaversion und werden bei der ersten Migration mit einer Kopie des Originals gesichert. `npm run check` prüft sie ohne Migration und ohne Änderungen an Status oder Verlauf. Details zu Modulen, Startprüfungen, Installation und Update stehen in [docs/OPERATIONS.md](docs/OPERATIONS.md).
+
+
+<img width="1615" height="774" alt="Bildschirmfoto 2026-10-20 um 18 18 03" src="https://github.com/user-attachments/assets/6992b213-ba63-4d0f-922a-1ee99742ee03" />
+
