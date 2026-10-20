@@ -8,6 +8,19 @@ Eine lokale Web-App für einen bestehenden Debian-12-LXC. Zeigt durchgereichte Q
 QNAP NAS ── SMB/CIFS ── Proxmox-Host ── Bind Mount ── Debian-12-LXC ── TLS ── PBS
 ```
 
+### Dokumentierter Ist-Stand
+
+Nach Angaben des Betreibers (20.10.2026):
+
+- Frischer **unprivilegierter Debian-12-LXC (Bookworm)**. Vorherige Versuche unter Ubuntu und Debian 13 hatten Paketprobleme mit `libfuse3-3`; Debian 12 ist die bestehende funktionierende Basis.
+- SMB-Anbindung am Proxmox-Host, Durchreichung als Bind-Mounts nach `/mnt/Daten/` im LXC. Im Container wird keine zusätzliche SMB-Anmeldung eingerichtet.
+- Datastore **`pbs1`** wurde bereits gelöscht und neu angelegt. Dies ist eine abgeschlossene historische Maßnahme, **kein Installationsschritt** dieser App.
+- Backup Client aus dem offiziellen Proxmox-Repository installiert; CLI-Verbindung mit `PBS_REPOSITORY` und `PBS_PASSWORD` eingerichtet.
+- Software-Backup mit `.pxar` und `--backup-id software` gestartet. Erfolgreicher Abschluss und Restore sind noch zu bestätigen.
+- Frühere KI-Vorlage: Node.js/Express/Tailwind mit `config.json`, `server.js`, `index.html`. Die hier bereitgestellte App verwendet Node.js ohne zusätzliche npm-Abhängigkeiten und eigenes CSS; Frontend-Dateien liegen ausschließlich in `public/`.
+
+Diese Angaben sind dokumentierter Bestand, keine automatische Live-Verifikation. Die App importiert weder CLI-Umgebungsvariablen noch historische Backup-Ergebnisse. Das vollständige Repository mit Ziel-Datastore `pbs1` muss in den App-Einstellungen eingetragen werden.
+
 Debian 12 und `proxmox-backup-client` sind im LXC bereits installiert. Bei Neuinstallation zuerst einen Debian-12-LXC anlegen und den Client entsprechend der [offiziellen Proxmox-Anleitung](https://pbs.proxmox.com/docs/installation.html) installieren. PBS, Datastore und ein berechtigter Backup-Benutzer bzw. API-Token müssen vorhanden sein.
 
 Die QNAP-Freigaben werden **am Proxmox-Host** per SMB eingebunden und über die LXC-Konfiguration durchgereicht. Beispiel (auf dem Host, vorhandene Konfiguration beachten):
@@ -20,11 +33,11 @@ mp0: /mnt/qnap,mp=/mnt/Daten,ro=1
 
 | Auftrag | Pfad | Backup-Gruppe |
 |---|---|---|
-| Software | `/mnt/Daten/Software` | `host/qnap-software` |
-| Filme | `/mnt/Daten/Filme` | `host/qnap-filme` |
-| Serien | `/mnt/Daten/Serien` | `host/qnap-serien` |
-| Hörspiele | `/mnt/Daten/Hoerspiele` | `host/qnap-hoerspiele` |
-| Musik | `/mnt/Daten/Musik` | `host/qnap-musik` |
+| Software | `/mnt/Daten/Software` | `host/software` |
+| Filme | `/mnt/Daten/Filme` | `host/filme` |
+| Serien | `/mnt/Daten/Serien` | `host/serien` |
+| Hörspiele | `/mnt/Daten/Hoerspiele` | `host/hoerspiele` |
+| Musik | `/mnt/Daten/Musik` | `host/musik` |
 
 Im LXC beispielsweise mit `findmnt -T /mnt/Daten/Software` prüfen. Der Dateisystemtyp muss `cifs` oder `smb3` sein. Der Host muss SMB vor dem LXC-Start einbinden. Beim Dienststart vorhandene Mounts werden in dessen durch systemd isolierte Mount-Umgebung übernommen; bei späteren Mount-Änderungen den Dienst neu starten und erneut prüfen.
 
@@ -80,7 +93,7 @@ Passwörter werden nicht an die Oberfläche zurückgegeben. Ein leeres Passwortf
 
 ## Betrieb und Datensicherheit
 
-- Pro Ordner ein Archiv `qnap-<ordner>.pxar` in einer eigenen Gruppe `host/qnap-<ordner>`. Bestehende Gruppen aus anderen Skripten werden nicht übernommen.
+- Pro Ordner ein Archiv `qnap-<ordner>.pxar` in einer eigenen Gruppe `host/<ordner>`. Die Backup-IDs entsprechen dem bisherigen CLI-Aufbau (`--backup-id software` usw.). Für die Fortsetzung einer bestehenden Gruppe müssen Repository, Namespace und Besitzer übereinstimmen. Bereits mit der ersten App-Version angelegte Gruppen `host/qnap-<ordner>` bleiben im PBS erhalten; sie werden nicht verschoben oder gelöscht.
 - Vor jedem Backup: Linux-Mountinfo auswerten und Quellverzeichnis öffnen. Ohne SMB/CIFS-Dateisystem kein Backup. Dies erkennt fehlende Mounts, **nicht die Identität** der erwarteten QNAP-Freigabe. Die Oberfläche zeigt die erkannte SMB-Quelle als Tooltip. Verbindungen können während des Backups ausfallen; den tatsächlichen Lauf und PBS-Verify prüfen.
 - Zusätzliche untergeordnete Mounts werden vom Backup Client standardmäßig übersprungen. Für diesen Aufbau werden die fünf Quellordner einzeln gesichert. Symlinks werden als solche archiviert, nicht als zusätzliche Datenquellen verfolgt.
 - **Keine zusätzliche clientseitige Verschlüsselung** (`--crypt-mode none`). Transport zum PBS per TLS. Verschlüsselung mit Schlüsselverwaltung ist in dieser Version nicht implementiert.
@@ -99,10 +112,10 @@ Am einfachsten im PBS-Webinterface eine Datei aus dem Snapshot herunterladen. Al
 ```sh
 proxmox-backup-client snapshot list
 mkdir -p /tmp/restore-test
-proxmox-backup-client restore 'host/qnap-software/<ZEITSTEMPEL>' qnap-software.pxar /tmp/restore-test
+proxmox-backup-client restore 'host/software/<ZEITSTEMPEL>' qnap-software.pxar /tmp/restore-test
 ```
 
-Snapshot-Namen aus der Liste übernehmen. Testdateien öffnen und mit der Quelle vergleichen. Nicht in produktive QNAP-Verzeichnisse zurückschreiben.
+Snapshot-Namen aus der Liste übernehmen. Bei älteren CLI-Sicherungen den tatsächlichen Archivnamen im PBS prüfen; `.pxar` allein legt den Archivnamen nicht fest. Testdateien öffnen und mit der Quelle vergleichen. Nicht in produktive QNAP-Verzeichnisse zurückschreiben.
 
 ## Updates
 

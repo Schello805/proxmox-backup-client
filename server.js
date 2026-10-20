@@ -71,7 +71,7 @@ async function drain() {
   if (stopping) return;
   if (!mount.ok) { finish(folder, null, mount.error); return; }
   log(folder, `SMB eingebunden: ${mount.mount.target} (${mount.mount.type})\nBackup startet …\n`);
-  const child = spawn('proxmox-backup-client', ['backup', `qnap-${folder}.pxar:${FOLDERS[folder]}`, '--backup-type', 'host', '--backup-id', `qnap-${folder}`, '--crypt-mode', 'none'], { env: environment(), stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn('proxmox-backup-client', ['backup', `qnap-${folder}.pxar:${FOLDERS[folder]}`, '--backup-type', 'host', '--backup-id', folder, '--crypt-mode', 'none'], { env: environment(), stdio: ['ignore', 'pipe', 'pipe'] });
   active.child = child;
   let error = '';
   child.stdout.on('data', data => log(folder, data.toString()));
