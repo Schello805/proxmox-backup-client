@@ -1,8 +1,14 @@
 {
   "name": "qnap-pbs-dashboard",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "Status und Backup-Steuerung für QNAP → Debian LXC → PBS",
-  "engines": { "node": ">=18" },
-  "scripts": { "start": "node server.js", "test": "node --test" }
+  "description": "Status und Backup-Steuerung f\u00fcr QNAP \u2192 Debian LXC \u2192 PBS",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test",
+    "check": "node scripts/check.js"
+  }
 }

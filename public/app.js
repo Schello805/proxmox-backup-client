@@ -1,39 +1,23 @@
+import { createAPI } from '/js/api.js';
+import { createViews, dayNames } from '/js/views.js';
+import { createFormState, clearFieldErrors, showFieldErrors, serverField, validateMainForm, validateNotifyForm, validateSourceForm } from '/js/forms.js';
 'use strict';
 const refreshWaiters = [];
 const $ = selector => document.querySelector(selector);
 const names = { software: 'Software', filme: 'Filme', serien: 'Serien', hoerspiele: 'Hörspiele', musik: 'Musik', daten: 'Daten' };
 const statuses = { idle: 'Noch kein Lauf', queued: 'Wartet', running: 'Läuft', success: 'Erfolgreich', failed: 'Fehler', interrupted: 'Unterbrochen' };
-let loaded = false, polling = false, logFolder = null, noticeTimer, authenticated = false, activityPolling = false, previousActive = null, authEpoch = 0, activeTimezone = 'Europe/Berlin', savedConfig = null, folderData = [], lastHealth = {}, logRun = null, sourceEditing = null, pbsData = null, sourcePage = 0;
-const date = value => value ? new Intl.DateTimeFormat('de-DE', { dateStyle: 'short', timeStyle: 'short', timeZone: activeTimezone }).format(new Date(value)) : 'Noch kein Erfolg';
+let loaded = false, polling = false, logFolder = null, noticeTimer, authenticated = false, activityPolling = false, previousActive = null, authEpoch = 0, activeTimezone = 'Europe/Berlin', savedConfig = null, folderData = [], lastHealth = {}, logRun = null, sourceEditing = null, pbsData = null, sourcePage = 0, lastMainSnapshot = null, lastNotifySnapshot = null;
+const api = createAPI(showLogin);
+const { element, date, nextText, renderJob, scheduleText } = createViews(() => activeTimezone, statuses);
+const formState = createFormState(['configForm', 'authForm', 'notifyForm'].map(id => document.getElementById(id)));
 function notice(message, error = false) {
   $('#notice').textContent = message; $('#notice').classList.toggle('error', error); $('#notice').hidden = false;
   clearTimeout(noticeTimer); noticeTimer = setTimeout(() => $('#notice').hidden = true, 12000);
 }
-async function api(url, data) {
-  const res = await fetch(url, data === undefined ? { signal: AbortSignal.timeout(25000) } : { signal: AbortSignal.timeout(25000), method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'qnap-dashboard' }, body: JSON.stringify(data) });
-  const result = await res.json();
-  if (res.status === 401 && url !== '/api/login') { showLogin(); throw new Error('Bitte anmelden.'); }
-  if (!res.ok) throw new Error(result.error || 'Anfrage fehlgeschlagen.'); return result;
-}
-function element(tag, text, className) { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; if (className) el.className = className; return el; }
-function nextText(health) { return health?.nextAt ? `Nächster: ${date(health.nextAt)}` : 'Kein automatischer Termin'; }
-function renderJob(cell, job, health) {
-  const warning = health?.message, label = warning && !['running','queued','failed','interrupted'].includes(job.status) ? (health.missed ? 'Überfällig' : 'Erfolg zu alt') : statuses[job.status];
-  cell.replaceChildren(element('span', label, `badge ${['failed','interrupted'].includes(job.status) ? 'bad' : ['running','queued'].includes(job.status) || warning ? 'busy' : job.status === 'success' ? 'ok' : ''}`));
-  const error = job.error || warning;
-  if (error) { const text = element('small', error, 'row-error'); text.title = error; cell.append(text); }
-}
-const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 const presets = { manual: [], daily: [1,2,3,4,5,6,7], weekdays: [1,2,3,4,5], weekend: [6,7] };
 const scheduleControls = new Map();
-function scheduleText(schedule) {
-  if (!schedule.days.length) return 'Nur manuell';
-  const days = schedule.days.join(',');
-  const label = days === '1,2,3,4,5,6,7' ? 'Täglich' : days === '1,2,3,4,5' ? 'Mo–Fr' : days === '6,7' ? 'Sa–So' : schedule.days.map(day => dayNames[day - 1]).join(', ');
-  return `${label} · ${schedule.time}`;
-}
 function buildSchedule(id, name, schedule) {
-  const row = element('div', undefined, 'schedule-row'), title = element('strong', name);
+  const row = element('div', undefined, 'schedule-row'); row.dataset.schedule = id; const title = element('strong', name);
   const mode = element('select'); mode.name = `frequency-${id}`; mode.setAttribute('aria-label', `Häufigkeit ${name}`);
   for (const [value, text] of [['manual','Nur manuell'],['daily','Täglich'],['weekdays','Werktags (Mo–Fr)'],['weekend','Wochenende'],['weekly','Wöchentlich'],['custom','Eigene Tage']]) { const option = element('option', text); option.value = value; mode.append(option); }
   const time = element('input'); time.type = 'time'; time.name = `schedule-${id}`; time.setAttribute('aria-label', `Uhrzeit ${name}`); time.value = schedule.time;
@@ -47,6 +31,7 @@ function buildSchedule(id, name, schedule) {
     const button = element('button', dayNames[day - 1]); button.type = 'button'; button.dataset.day = day;
     button.setAttribute('aria-label', `${name}: ${['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'][day - 1]}`);
     button.addEventListener('click', () => {
+      formState.touch('configForm');
       if (control.days.includes(day)) { if (control.days.length === 1) return; control.days = control.days.filter(value => value !== day); }
       else control.days = [...control.days, day].sort((a,b) => a-b);
       mode.value = control.days.length === 1 ? 'weekly' : 'custom'; paint();
@@ -67,6 +52,9 @@ function buildSchedule(id, name, schedule) {
   row.append(title, mode, time, days, hint); $('#schedules').append(row); paint();
 }
 function fillForm(config) {
+  const mainSnapshot = JSON.stringify([config.repository, config.fingerprint, config.namespace, config.timezone, config.staleAfterDays, config.sources, config.schedules, config.hasPassword]);
+  if (!formState.dirty('configForm') && mainSnapshot !== lastMainSnapshot) {
+  lastMainSnapshot = mainSnapshot;
   const form = $('#configForm');
   const at = config.repository.lastIndexOf('@'), colon = config.repository.lastIndexOf(':');
   form.elements.authId.value = at > 0 ? config.repository.slice(0, at) : '';
@@ -77,13 +65,15 @@ function fillForm(config) {
   form.elements.password.value = '';
   form.elements.timezone.value = config.timezone;
   form.elements.staleAfterDays.value = config.staleAfterDays;
-  $('#authForm').elements.authEnabled.checked = config.authEnabled;
-  $('#authResult').textContent = config.authEnabled ? 'Passwortschutz ist eingeschaltet.' : 'Zugriff im Netzwerk ohne App-Passwort.';
-  $('#logout').hidden = !config.authEnabled;
-  fillNotifications(config.notifications);
   $('#passwordHint').textContent = config.hasPassword ? 'PBS-Passwort gespeichert · leer lassen zum Beibehalten.' : 'PBS-Passwort noch nicht hinterlegt.';
-  $('#schedules').replaceChildren(); scheduleControls.clear();
-  for (const [id, name] of Object.entries(names)) buildSchedule(id, name, config.schedules[id]);
+    $('#schedules').replaceChildren(); scheduleControls.clear();
+  }
+  if (!formState.dirty('authForm')) { $('#authForm').elements.authEnabled.checked = config.authEnabled; $('#authResult').textContent = config.authEnabled ? 'Passwortschutz ist eingeschaltet.' : 'Zugriff im Netzwerk ohne App-Passwort.'; }
+  $('#logout').hidden = !config.authEnabled;
+  const notifySnapshot = JSON.stringify(config.notifications);
+  if (!formState.dirty('notifyForm') && notifySnapshot !== lastNotifySnapshot) { fillNotifications(config.notifications); lastNotifySnapshot = notifySnapshot; }
+  for (const [id, control] of scheduleControls) if (!names[id]) { document.querySelector(`[data-schedule="${id}"]`)?.remove(); scheduleControls.delete(id); }
+  for (const [id, name] of Object.entries(names)) if (!scheduleControls.has(id)) buildSchedule(id, name, config.schedules[id]);
 }
 async function refresh() {
   if (polling) return new Promise(resolve => refreshWaiters.push(resolve)); polling = true; const epoch = authEpoch;
@@ -92,6 +82,8 @@ async function refresh() {
     if (epoch !== authEpoch) return;
     savedConfig = data.config; activeTimezone = data.config.timezone; folderData = data.folders;
     for (const key of Object.keys(names)) delete names[key]; for (const source of data.config.sources) names[source.id] = source.name;
+    $('#appVersion').textContent = `v${data.system.version}`;
+    $('#systemChecks').replaceChildren(...data.system.checks.map(check => element('li', `${check.ok ? '✓' : '⚠'} ${check.name}: ${check.message}`, check.ok ? 'check-ok' : 'check-warning')));
     $('#sidebarTimezone').textContent = activeTimezone; $('#sourceCount').textContent = data.folders.length;
     authenticated = true; document.body.classList.remove('locked'); if ($('#loginDialog').open) $('#loginDialog').close();
     $('#updated').textContent = `Aktualisiert ${new Date().toLocaleTimeString('de-DE', { timeZone: activeTimezone })} · live`;
@@ -118,7 +110,7 @@ async function refresh() {
     }
     $('#systemInfo').replaceChildren();
     for (const [label, value] of [['Host', data.system.hostname], ['System', data.system.platform], ['Backup Client', data.system.client], ['Zeitpläne', data.system.timezone]]) { const item = element('span'); item.append(element('strong', label), document.createTextNode(value)); $('#systemInfo').append(item); }
-    if (!loaded) { fillForm(data.config); loaded = true; }
+    fillForm(data.config); loaded = true;
     if (data.connection) $('#connectionResult').textContent = `${data.connection.message} (${date(data.connection.checkedAt)})`;
     await refreshActivity();
   } catch (e) { $('#updated').textContent = 'Aktualisierung fehlgeschlagen'; if (authenticated) notice(e.message, true); } finally { polling = false; if (refreshWaiters.length) { const waiters = refreshWaiters.splice(0); await refresh(); for (const resolve of waiters) resolve(); } }
@@ -135,13 +127,17 @@ $('#nextSources').addEventListener('click', () => { sourcePage++; void refresh()
 $('#configForm').addEventListener('submit', async event => {
   event.preventDefault(); if (!loaded) return notice('Konfiguration zuerst laden.', true);
   const form = event.currentTarget, button = form.querySelector('[type=submit]'), data = { schedules: {} };
-  data.repository = `${form.elements.authId.value.trim()}@${form.elements.server.value.trim()}:${form.elements.datastore.value.trim()}`;
+  const target = Object.fromEntries(['server','authId','datastore'].map(key => [key, form.elements[key].value.trim()]));
+  data.repository = target.server || target.authId || form.elements.password.value ? `${target.authId}@${target.server}:${target.datastore}` : '';
   for (const key of ['password', 'fingerprint', 'namespace', 'timezone']) data[key] = form.elements[key].value;
   data.staleAfterDays = Number(form.elements.staleAfterDays.value);
   data.sources = savedConfig.sources;
   for (const id of Object.keys(names)) { const control = scheduleControls.get(id); data.schedules[id] = { days: control.mode.value === 'manual' ? [] : control.days, time: control.mode.value === 'manual' ? '' : control.time.value }; }
+  const errors = validateMainForm({ ...target, ...data }); showFieldErrors(form, errors);
+  if (Object.keys(errors).length) { $('#settingsResult').textContent = 'Bitte die markierten Felder korrigieren.'; return; }
+  const stamp = formState.capture('configForm');
   button.disabled = true; $('#settingsResult').textContent = '';
-  try { await api('/api/config', data); loaded = false; notice('Einstellungen gespeichert.'); $('#settingsResult').textContent = 'Einstellungen gespeichert.'; $('#connectionResult').textContent = 'Verbindung nach Änderung erneut prüfen.'; await refresh(); const result = await api('/api/connection', {}); $('#connectionResult').textContent = result.message; notice(result.message, !result.ok); } catch (e) { $('#settingsResult').textContent = e.message; notice(e.message, true); } finally { button.disabled = false; }
+  try { await api('/api/config', data); const clean = formState.clean('configForm', stamp); if (clean) lastMainSnapshot = null; loaded = false; await refresh(); $('#settingsResult').textContent = clean ? 'Gespeichert. Die Verbindung kannst du separat prüfen.' : 'Gespeichert. Neuere Eingaben sind noch ungespeichert.'; } catch (e) { const field = serverField(e); if (field) showFieldErrors(form, { [field]: e.message }); $('#settingsResult').textContent = e.message; notice(e.message, true); } finally { button.disabled = false; }
 });
 $('#testConnection').addEventListener('click', async event => {
   const button = event.currentTarget; button.disabled = true; $('#connectionResult').textContent = 'Verbindung wird geprüft …';
@@ -206,6 +202,7 @@ async function refreshActivity() {
       const warnings = Object.values(lastHealth).filter(item => item.missed || item.stale).length;
       if (warnings) { $('#activityBadge').textContent = `${warnings} Hinweis${warnings > 1 ? 'e' : ''}`; $('#activityBadge').className = 'badge busy'; }
     }
+    if (data.maintenance && !data.active) { $('#activityTitle').textContent = 'Wartung / Update'; $('#activityBadge').textContent = 'Pausiert'; $('#activityBadge').className = 'badge busy'; $('#activityDescription').textContent = 'Neue Backups sind während des Updates gesperrt.'; }
     if (data.notification && !$('#notifyDetails').open) $('#notificationResult').textContent = `${data.notification.message} (${date(data.notification.at)})`;
     if (logFolder) await refreshLog();
   } catch (e) { if (authenticated) { $('#activityBadge').textContent = 'Verbindung unterbrochen'; $('#activityBadge').className = 'badge bad'; notice(e.message, true); } }
@@ -216,7 +213,7 @@ for (const zone of timezones) { const option = element('option'); option.value =
 document.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click', () => $('#' + button.dataset.close).close()));
 $('#manageSources').addEventListener('click', () => { if (!savedConfig) return; renderSources(); resetSource(); $('#sourcesDialog').showModal(); });
 function resetSource() {
-  sourceEditing = null; $('#sourceForm').reset(); $('#sourceForm').elements.id.readOnly = false; $('#sourceFormTitle').textContent = 'Quelle hinzufügen'; $('#sourceResult').textContent = '';
+  sourceEditing = null; clearFieldErrors($('#sourceForm')); $('#sourceForm').reset(); $('#sourceForm').elements.id.readOnly = false; $('#sourceFormTitle').textContent = 'Quelle hinzufügen'; $('#sourceResult').textContent = '';
 }
 function renderSources() {
   $('#sourceList').replaceChildren();
@@ -226,7 +223,7 @@ function renderSources() {
     const detected = folderData.find(item => item.id === source.id)?.mount?.source; if (detected) info.append(element('small', `Aktuell erkannt: ${detected}`, 'hint'));
     const actions = element('div', undefined, 'source-editor-actions');
     const edit = element('button', 'Bearbeiten', 'row-action'); edit.addEventListener('click', () => {
-      sourceEditing = source.id; const form = $('#sourceForm'); for (const key of ['id','name','path','expectedSource']) form.elements[key].value = source[key]; form.elements.id.readOnly = true; $('#sourceFormTitle').textContent = `Quelle bearbeiten · ${source.name}`; $('#sourceResult').textContent = '';
+      sourceEditing = source.id; const form = $('#sourceForm'); clearFieldErrors(form); for (const key of ['id','name','path','expectedSource']) form.elements[key].value = source[key]; form.elements.id.readOnly = true; $('#sourceFormTitle').textContent = `Quelle bearbeiten · ${source.name}`; $('#sourceResult').textContent = '';
     });
     const pin = element('button', 'SMB bestätigen', 'row-action'); pin.addEventListener('click', async () => {
       pin.disabled = true;
@@ -251,9 +248,11 @@ $('#sourceForm').addEventListener('submit', async event => {
   event.preventDefault(); const form = event.currentTarget, button = form.querySelector('[type=submit]'); button.disabled = true;
   try {
     const source = {}; for (const key of ['id','name','path','expectedSource']) source[key] = form.elements[key].value.trim();
+    const errors = validateSourceForm(source, savedConfig.sources, sourceEditing); showFieldErrors(form, errors);
+    if (Object.keys(errors).length) throw new Error('Bitte die markierten Quellenfelder korrigieren.');
     const sources = sourceEditing ? savedConfig.sources.map(item => item.id === sourceEditing ? source : item) : [...savedConfig.sources, source];
     await api('/api/sources', { sources }); loaded = false; await refresh(); renderSources(); resetSource(); $('#sourceResult').textContent = 'Quelle gespeichert. Zeitplan unter Einstellungen festlegen.';
-  } catch (e) { $('#sourceResult').textContent = e.message; } finally { button.disabled = false; }
+  } catch (e) { const field = serverField(e); if (field) showFieldErrors(form, { [field]: e.message }); $('#sourceResult').textContent = e.message; } finally { button.disabled = false; }
 });
 async function openHistory(id) {
   $('#historyTitle').textContent = `Verlauf · ${names[id]}`; $('#historySummary').textContent = 'Wird geladen …'; $('#historyRows').replaceChildren(); $('#historyDialog').showModal();
@@ -295,23 +294,24 @@ function fillNotifications(settings) {
 }
 function notificationPayload() {
   const form = $('#notifyForm'), enabled = form.elements.enabled.checked, server = form.elements.server.value.trim().replace(/\/+$/, ''), topic = form.elements.topic.value.trim();
-  if (enabled && !topic) throw new Error('Bitte ein ntfy-Topic angeben, z. B. mein-backup-topic.');
+  const errors = validateNotifyForm({ enabled, server, topic }); showFieldErrors(form, errors);
+  if (Object.keys(errors).length) throw new Error('Bitte die markierten ntfy-Felder korrigieren.');
   return { enabled, url: topic ? `${server}/${encodeURIComponent(topic)}` : '', token: form.elements.token.value.trim() };
 }
 function updateNotifyDestination() {
-  try { const settings = notificationPayload(); $('#notifyDestination').textContent = settings.url ? `Ziel: ${settings.url}` : 'Server und Topic eintragen. ntfy wird separat gespeichert.'; }
+  try { const form = $('#notifyForm'); const settings = { url: form.elements.topic.value.trim() ? form.elements.server.value.trim().replace(/\/+$/, '') + '/' + encodeURIComponent(form.elements.topic.value.trim()) : '' }; $('#notifyDestination').textContent = settings.url ? `Ziel: ${settings.url}` : 'Server und Topic eintragen. ntfy wird separat gespeichert.'; }
   catch (e) { $('#notifyDestination').textContent = e.message; }
 }
 $('#notifyForm').addEventListener('input', () => { updateNotifyDestination(); $('#notificationResult').textContent = ''; });
 $('#notifyForm').addEventListener('submit', async event => {
   event.preventDefault(); const button = event.currentTarget.querySelector('[type=submit]'); button.disabled = true;
-  try { const payload = notificationPayload(); await api('/api/notifications', payload); $('#notifyForm').elements.token.value = ''; $('#notificationResult').textContent = payload.enabled ? 'ntfy aktiviert und gespeichert. Jetzt kannst du die Verbindung testen.' : 'ntfy deaktiviert und gespeichert.'; }
-  catch (e) { $('#notificationResult').textContent = e.message; }
+  try { const payload = notificationPayload(), stamp = formState.capture('notifyForm'); await api('/api/notifications', payload); if (formState.clean('notifyForm', stamp)) $('#notifyForm').elements.token.value = ''; $('#notificationResult').textContent = payload.enabled ? 'ntfy aktiviert und gespeichert. Jetzt kannst du die Verbindung testen.' : 'ntfy deaktiviert und gespeichert.'; }
+  catch (e) { const field = serverField(e); if (field) showFieldErrors($('#notifyForm'), { [field]: e.message }); $('#notificationResult').textContent = e.message; }
   finally { button.disabled = false; }
 });
 $('#authForm').addEventListener('submit', async event => {
-  event.preventDefault(); const button = event.currentTarget.querySelector('button'), enabled = event.currentTarget.elements.authEnabled.checked; button.disabled = true;
-  try { await api('/api/auth', { enabled }); $('#logout').hidden = !enabled; $('#authResult').textContent = enabled ? 'Passwortschutz eingeschaltet.' : 'Passwortschutz ausgeschaltet. Zugriff im Netzwerk ohne Anmeldung.'; }
+  event.preventDefault(); const button = event.currentTarget.querySelector('button'), enabled = event.currentTarget.elements.authEnabled.checked, stamp = formState.capture('authForm'); button.disabled = true;
+  try { await api('/api/auth', { enabled }); formState.clean('authForm', stamp); $('#logout').hidden = !enabled; $('#authResult').textContent = enabled ? 'Passwortschutz eingeschaltet.' : 'Passwortschutz ausgeschaltet. Zugriff im Netzwerk ohne Anmeldung.'; }
   catch (e) { $('#authResult').textContent = e.message; }
   finally { button.disabled = false; }
 });

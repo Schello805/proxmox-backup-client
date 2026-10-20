@@ -37,7 +37,7 @@ test('HTTP: Auth, Secret-Schutz, persistente Konfiguration und fehlende Mounts',
  assert.equal((await fetch(url + '/', { headers })).status, 200);
  assert.equal((await fetch(url + '/api/activity', { headers })).status, 200);
  const initial = await (await fetch(url + '/api/status', { headers })).json();
- assert.equal(initial.folders.length, 6); assert.equal(initial.folders.find(source => source.id === 'daten').path, '/mnt/Daten/Daten'); assert.equal(initial.config.password, '');
+ assert.equal(initial.system.version,require('../package.json').version); assert.ok(initial.system.checks.length>=4); assert.equal(initial.folders.length, 6); assert.equal(initial.folders.find(source => source.id === 'daten').path, '/mnt/Daten/Daten'); assert.equal(initial.config.password, '');
  const config = { ...initial.config, repository: 'backup@pbs@localhost:store', password: 'test-secret', timezone: 'UTC', notifications: { enabled: false, url: 'http://127.0.0.1/test-topic', token: 'notify-secret' }, schedules: { ...initial.config.schedules, software: { days: [1,3,5], time: '02:30' } } };
  assert.equal((await post('/api/config', config, { Origin: 'https://evil.example' })).status, 403);
  assert.equal((await post('/api/config', config)).status, 200);
@@ -48,6 +48,7 @@ test('HTTP: Auth, Secret-Schutz, persistente Konfiguration und fehlende Mounts',
  assert.equal((await post('/api/backup/unknown', {})).status, 400);
  const sources = [...initial.config.sources, { id:'testquelle',name:'Testquelle',path:'/mnt/Daten/Fehlt-' + Date.now(),expectedSource:'' }];
  assert.equal((await post('/api/sources', { sources })).status,200);
+ fs.writeFileSync(path.join(tmp,'maintenance'),'');assert.equal((await post('/api/backup/testquelle',{})).status,409);fs.unlinkSync(path.join(tmp,'maintenance'));
  assert.equal((await post('/api/sources/probe', {path:'/etc'})).status,400);
  for (let n=0;n<12;n++) {
    assert.equal((await post('/api/backup/testquelle',{})).status,202);
@@ -70,7 +71,7 @@ test('HTTP: Auth, Secret-Schutz, persistente Konfiguration und fehlende Mounts',
  const stalePBS = await (await post('/api/pbs/refresh',{})).json(); assert.ok(stalePBS.error); assert.equal(stalePBS.snapshots.length,1); assert.equal(stalePBS.checkedAt,pbs.checkedAt);
 
  const invalid = await post('/api/config', { ...config, namespace:'../ungueltig' });
- assert.equal(invalid.status,400); assert.match((await invalid.json()).error,/Namespace/);
+ assert.equal(invalid.status,400); const invalidBody=await invalid.json(); assert.match(invalidBody.error,/Namespace/); assert.equal(invalidBody.field,'namespace');
  const missingTopic = await post('/api/notifications',{enabled:true,url:'https://ntfy.sh',token:''});
  assert.equal(missingTopic.status,400); assert.match((await missingTopic.json()).error,/Topic/);
  let delivered=''; const notifyServer=http.createServer(async(req,res)=>{for await(const chunk of req)delivered+=chunk;res.end('{}');});

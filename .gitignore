@@ -3,3 +3,7 @@ data/
 .env
 node_modules/
 .DS_Store
+
+config.json.pre-v*.json
+config.json.*.tmp
+.instance-lock

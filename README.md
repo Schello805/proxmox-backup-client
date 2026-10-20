@@ -1,5 +1,7 @@
 # QNAP → Proxmox Backup Control
 
+Version 2.0.0 · [Betrieb, sichere Updates und Fehlerbehebung](docs/OPERATIONS.md)
+
 Eine lokale Web-App für einen bestehenden Debian-12-LXC. Zeigt durchgereichte QNAP-SMB-Freigaben, startet den Proxmox Backup Client und dokumentiert den Aufbau. Ohne npm-Abhängigkeiten; Node.js ab Version 18.
 
 ## Bestehender Aufbau / Vorbereitung
@@ -85,7 +87,7 @@ Falls der Dienst wegen LXC/systemd-Isolierung nicht startet, den konkreten Journ
 1. Web-App öffnen und im App-Modal mit dem Passwort aus `/etc/qnap-backup.env` anmelden.
 2. Unter **Einstellungen** PBS-Adresse (z. B. `192.168.1.20`), Datastore (`pbs1`) und PBS-Benutzer (z. B. `backup@pbs`) eintragen. Mit API-Token lautet der Benutzer z. B. `backup@pbs!qnap`. Die App setzt daraus das Repository zusammen.
 3. Passwort bzw. API-Token-Secret hinterlegen. Bei selbst signiertem Zertifikat den **im PBS verifizierten** SHA-256-Fingerprint eintragen; optional den bereits angelegten Namespace.
-4. **Speichern & Verbindung prüfen** wählen. Dies prüft Anmeldung und Snapshot-Abfrage, nicht die Schreibrechte oder den Zustand aller Quelldateien.
+4. **Einstellungen speichern** und danach separat **Verbindung prüfen** wählen. Dies prüft Anmeldung und Snapshot-Abfrage, nicht die Schreibrechte oder den Zustand aller Quelldateien.
 5. Mounts prüfen und einen Auftrag manuell sichern. Protokoll und Ergebnis kontrollieren, anschließend im PBS einen Restore testen.
 6. Pro Ordner eine Frequenz und Uhrzeit wählen: täglich, werktags, Wochenende, wöchentlich oder eigene Wochentage. Mehrere Tage sind kombinierbar; „Nur manuell“ deaktiviert den Zeitplan.
 
@@ -131,15 +133,13 @@ Bestehende PBS-Einstellungen, Zeitpläne und Ergebnisse bleiben erhalten. Nach d
 
 ## Updates
 
+Für bestehende Installationen ab Version 2:
+
 ```sh
-systemctl stop qnap-backup
-cd /opt/proxmox-backup-client
-git pull --ff-only
-npm test
-systemctl start qnap-backup
+bash /opt/proxmox-backup-client/deploy/update.sh
 ```
 
-Konfiguration und Ergebnisse unter `/var/lib/qnap-backup` bleiben erhalten. Vor Updates dieses Verzeichnis separat sichern; es enthält Zugangsdaten.
+Das Skript verweigert laufende Backups, sichert Daten und prüft die neue Version vor dem Neustart. Für den ersten Wechsel und den Rückweg siehe [Betriebsanleitung](docs/OPERATIONS.md). Konfiguration und Ergebnisse unter `/var/lib/qnap-backup` bleiben erhalten; Sicherungen enthalten Zugangsdaten.
 
 ## Lokale Entwicklung
 
@@ -190,4 +190,10 @@ Meldungen werden pro Ereignis dedupliziert. Fehlgeschlagene Zustellungen erschei
 
 ### Fehlermeldung beim Speichern
 
-Ein HTTP-Status `400` in der Browser-Konsole allein zeigt nicht die Ursache. Der Server liefert zusätzlich JSON mit `error`; die App zeigt diese Meldung dauerhaft im betroffenen Formular. Passwortschutz und ntfy besitzen eigene Speichern-Schaltflächen und benötigen keine vollständigen PBS-Einstellungen. Allgemeine PBS-/Zeitplanfehler stehen direkt unter „Speichern & Verbindung prüfen“.
+Ein HTTP-Status `400` in der Browser-Konsole allein zeigt nicht die Ursache. Der Server liefert zusätzlich JSON mit `error`; die App zeigt diese Meldung dauerhaft im betroffenen Formular. Passwortschutz und ntfy besitzen eigene Speichern-Schaltflächen und benötigen keine vollständigen PBS-Einstellungen. Allgemeine PBS-/Zeitplanfehler stehen direkt unter „Einstellungen speichern“.
+
+## Formulare und Konfigurationspflege
+
+Speichern, PBS-Verbindungstest und ntfy-Test sind getrennte Aktionen. Eingabefehler erscheinen direkt am Feld; der Server liefert ergänzend den Feldnamen. Noch nicht gespeicherte PBS-Werte, Zeitpläne, ntfy-Einstellungen und Auth-Auswahl bleiben bei automatischen Statusabfragen und Quellenänderungen erhalten. Änderungen während eines Speichervorgangs bleiben als ungespeichert markiert. Eine noch leere PBS-Einrichtung kann gespeichert werden; Backups bleiben bis zur vollständigen Einrichtung gesperrt.
+
+Konfigurationen besitzen ab Version 2 eine Schemaversion und werden bei der ersten Migration mit einer Kopie des Originals gesichert. `npm run check` prüft sie ohne Migration und ohne Änderungen an Status oder Verlauf. Details zu Modulen, Startprüfungen, Installation und Update stehen in [docs/OPERATIONS.md](docs/OPERATIONS.md).
