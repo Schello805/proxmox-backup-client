@@ -98,8 +98,9 @@ export function installAssistant({ api, getConfig, refresh, openSource }) {
       text(config.repository && !pbs.ownServer ? `Weiterer Datastore auf ${config.repository.slice(config.repository.lastIndexOf('@') + 1, config.repository.lastIndexOf(':'))}. Verwendet denselben Zugang und Namespace.` : 'Vorhandenen PBS verbinden. Debian-LXC und Backup Client sind bereits eingerichtet.');
       if (config.repository) { const own = field('Zusätzlicher PBS mit eigenem Zugang', 'ownServer', pbs.ownServer, 'checkbox'); own.querySelector('input').addEventListener('change', render); $('#assistantBody').append(own); }
       const grid = document.createElement('div'); grid.className = 'assistant-fields'; grid.append(field('Neuer Datastore', 'datastore', pbs.datastore), field('Datastore muss noch angelegt werden', 'create', pbs.create, 'checkbox'));
-      if (!config.repository || pbs.ownServer) grid.append(field('PBS-Adresse', 'server', pbs.server), field('PBS-Benutzer', 'authId', pbs.authId), field('PBS-Passwort / Token', 'password', pbs.password, 'password'), field('Zertifikats-Fingerprint (optional)', 'fingerprint', pbs.fingerprint), field('Namespace (optional)', 'namespace', pbs.namespace));
+      if (!config.repository || pbs.ownServer) grid.append(field('PBS-Adresse', 'server', pbs.server), field('PBS-Benutzer', 'authId', pbs.authId), field('PBS-Passwort / Token', 'password', pbs.password, 'password'), field(pbs.ownServer ? 'PBS-2-Fingerprint' : 'PBS-1-Fingerprint', 'fingerprint', pbs.fingerprint), field('Namespace (optional)', 'namespace', pbs.namespace));
       $('#assistantBody').append(grid);
+      if (!config.repository || pbs.ownServer) text('Fingerprint dieses PBS verwenden: auf genau diesem Server „proxmox-backup-manager cert info“ ausführen. Bei vertrauenswürdigem CA-Zertifikat kann das Feld leer bleiben.');
       if (config.secondaryDatastore) text('Beide Ziele sind belegt. Unter Einstellungen kannst du sie bearbeiten.');
     } else if (step === 1) {
       if (pbs.create) {

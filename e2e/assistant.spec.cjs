@@ -64,10 +64,12 @@ test('PBS-Assistent: eigener Server mit getrenntem Zugang, Backup und dauerhaft 
   await wizard.getByRole('textbox', { name: 'PBS-Adresse', exact: true }).fill('pbs2.local');
   await wizard.getByRole('textbox', { name: 'PBS-Benutzer', exact: true }).fill('archive@pbs');
   await wizard.getByLabel('PBS-Passwort / Token', { exact: true }).fill('e2e-second-secret');
+  const secondFingerprint = 'ab:'.repeat(31) + 'ab';
+  await wizard.getByRole('textbox', { name: 'PBS-2-Fingerprint', exact: true }).fill(secondFingerprint);
   await wizard.getByRole('textbox', { name: 'Namespace (optional)', exact: true }).fill('archive');
   await wizard.getByRole('button', { name: 'Weiter', exact: true }).click(); await wizard.getByRole('button', { name: 'Weiter', exact: true }).click();
   await wizard.getByRole('button', { name: 'Ziel speichern & prüfen', exact: true }).click(); await expect(wizard.locator('#assistantResult')).toContainText('PBS erreichbar');
-  const data = await (await page.request.get('/api/status')).json(); expect(data.targets[1].repository).toBe('archive@pbs@pbs2.local:test-store'); expect(data.config.secondaryPBS.hasPassword).toBe(true); expect(JSON.stringify(data)).not.toContain('e2e-second-secret');
+  const data = await (await page.request.get('/api/status')).json(); expect(data.targets[1].repository).toBe('archive@pbs@pbs2.local:test-store'); expect(data.config.secondaryPBS.hasPassword).toBe(true); expect(data.config.secondaryPBS.fingerprint).toBe(secondFingerprint); expect(data.config.fingerprint).toBe(''); expect(JSON.stringify(data)).not.toContain('e2e-second-secret');
   await page.getByRole('link', { name: 'Zur Übersicht', exact: true }).click();
   await page.locator('tr[data-folder="software"]').getByRole('button', { name: 'Zeitplan Software bearbeiten' }).click();
   const detail = page.locator('#sourceDetail'); await detail.getByRole('combobox', { name: 'Backup-Ziel', exact: true }).selectOption('secondary'); await detail.getByRole('button', { name: 'Quelle speichern', exact: true }).click(); await expect(detail.locator('#sourceResult')).toContainText('gespeichert');
@@ -77,9 +79,16 @@ test('PBS-Assistent: eigener Server mit getrenntem Zugang, Backup und dauerhaft 
   app.finish(); await expect(page.locator('tr[data-folder="software"] .job-state')).toContainText('Erfolgreich');
   await page.getByRole('link', { name: /Backup-Ziele$/ }).click();
   await expect(page.getByRole('textbox', { name: 'PBS-2-Adresse', exact: true })).toHaveValue('pbs2.local');
+  await expect(page.getByRole('textbox', { name: 'PBS-1-Fingerprint', exact: true })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'PBS-2-Fingerprint', exact: true })).toHaveValue(secondFingerprint);
+  await page.getByRole('textbox', { name: 'PBS-2-Fingerprint', exact: true }).fill('invalid');
+  await page.getByRole('button', { name: 'Backup-Ziele speichern', exact: true }).click();
+  await expect(page.locator('[name=secondaryFingerprint]')).toHaveAttribute('aria-invalid','true');
+  await expect(page.locator('[name=fingerprint]')).not.toHaveAttribute('aria-invalid','true');
+  await page.locator('[name=secondaryFingerprint]').fill(secondFingerprint);
   await page.getByRole('button', { name: 'Backup-Ziele speichern', exact: true }).click(); await expect(page.locator('#settingsResult')).toContainText('Gespeichert');
   await page.reload(); await expect(page.getByRole('textbox', { name: 'PBS-2-Namespace (optional)', exact: true })).toHaveValue('archive');
-  const saved = await (await page.request.get('/api/status')).json(); expect(saved.config.secondaryPBS.hasPassword).toBe(true); expect(saved.targets[1].repository).toBe('archive@pbs@pbs2.local:test-store');
+  const saved = await (await page.request.get('/api/status')).json(); expect(saved.config.secondaryPBS.hasPassword).toBe(true); expect(saved.config.secondaryPBS.fingerprint).toBe(secondFingerprint); expect(saved.config.fingerprint).toBe(''); expect(saved.targets[1].repository).toBe('archive@pbs@pbs2.local:test-store');
 });
 
 test('PBS-Assistent: erste Verbindung und fehlgeschlagene Prüfung ohne doppelte Einrichtung', async ({ page }) => {

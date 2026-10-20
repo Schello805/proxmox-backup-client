@@ -28,7 +28,7 @@ export function showFieldErrors(form, errors) {
 export function serverField(error) {
   if (error.field?.startsWith('sources.')) return error.field.split('.').at(-1);
   if (error.field?.startsWith('schedules.')) return `schedule-${error.field.split('.')[1]}`;
-  return ({ repository: 'server', 'notifications.url': 'server', 'notifications.token': 'token', 'notifications.enabled': 'enabled' })[error.field] || error.field;
+  return ({ 'secondaryPBS.fingerprint': 'secondaryFingerprint', 'secondaryPBS.namespace': 'secondaryNamespace', 'secondaryPBS.password': 'secondaryPassword', repository: 'server', 'notifications.url': 'server', 'notifications.token': 'token', 'notifications.enabled': 'enabled' })[error.field] || error.field;
 }
 export function validateMainForm(values) {
   const errors = {}, needsTarget = Boolean(values.server || values.authId || values.password);
