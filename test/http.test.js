@@ -24,8 +24,8 @@ test('HTTP: Auth, Secret-Schutz, persistente Konfiguration und fehlende Mounts',
  const unauth = await fetch(url + '/api/status');
  assert.equal(unauth.status, 401); assert.equal(unauth.headers.get('www-authenticate'), null);
  assert.equal((await fetch(url + '/api/activity')).status, 401);
- for (const route of ['/api/updates','/api/diagnostics']) assert.equal((await fetch(url + route)).status,401);
- for (const route of ['/api/updates/check','/api/diagnostics','/api/refresh','/api/targets/setup','/api/preferences','/api/targets']) assert.equal((await fetch(url + route,{method:'POST',headers:{'X-Requested-With':'qnap-dashboard'}})).status,401);
+ for (const route of ['/api/updates','/api/diagnostics','/api/planning']) assert.equal((await fetch(url + route)).status,401);
+ for (const route of ['/api/updates/check','/api/diagnostics','/api/refresh','/api/targets/setup','/api/preferences','/api/targets','/api/capacity/refresh','/api/planning/apply']) assert.equal((await fetch(url + route,{method:'POST',headers:{'X-Requested-With':'qnap-dashboard'}})).status,401);
  assert.equal((await login('wrong')).status, 401);
  assert.equal((await login('123456', { Origin: 'https://evil.example' })).status, 403);
  const loggedIn = await login('123456'); assert.equal(loggedIn.status, 200);

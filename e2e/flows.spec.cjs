@@ -106,7 +106,7 @@ test.describe('Ohne Quellgröße', () => {
   test('zeigt keine erfundene Prozentzahl oder Restzeit', async ({ page }) => {
     await login(page); await page.locator('tr[data-folder="software"]').getByRole('button', { name: '↗ Sichern', exact: true }).click();
     await expect(page.locator('#progressEstimate')).toContainText('Quellgröße noch nicht verfügbar');
-    await expect(page.getByRole('progressbar')).toHaveCount(0);
+    await expect(page.getByRole('progressbar', { name: 'Geschätzter Backup-Fortschritt' })).toHaveCount(0);
   });
 });
 

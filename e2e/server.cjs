@@ -23,7 +23,7 @@ const cp = require('node:child_process');
 const realExecFile = cp.execFile;
 cp.execFile = (file, args, options, callback) => {
   if (file === 'du') return setImmediate(() => process.env.E2E_SOURCE_SIZE === 'false' ? callback(new Error('Size unavailable')) : callback(null, `${actualMounts.get(args.at(-1))?.bytes ?? 10737418240}\t${args.at(-1)}\n`, ''));
-  if (file === 'proxmox-backup-client') return setImmediate(() => callback(null, args[0] === 'version' ? 'test-client' : JSON.stringify([{ 'backup-type': 'host', 'backup-id': options.env?.PBS_REPOSITORY?.endsWith(':archive-store') ? 'daten' : 'software', 'backup-time': 1792454400, files: ['qnap-software.pxar.didx'], size: 1024 }]), ''));
+  if (file === 'proxmox-backup-client') return setImmediate(() => callback(null, args[0] === 'version' ? 'test-client' : args[0] === 'status' ? JSON.stringify({total:1099511627776,used:options.env?.PBS_REPOSITORY?.endsWith(':archive-store')?824633720832:549755813888,avail:options.env?.PBS_REPOSITORY?.endsWith(':archive-store')?274877906944:549755813888}) : JSON.stringify([{ 'backup-type': 'host', 'backup-id': options.env?.PBS_REPOSITORY?.endsWith(':archive-store') ? 'daten' : 'software', 'backup-time': 1792454400, files: ['qnap-software.pxar.didx'], size: 1024 }]), ''));
   return realExecFile(file, args, options, callback);
 };
 cp.execFile[require('node:util').promisify.custom] = (...args) => new Promise((resolve, reject) => cp.execFile(...args, (error, stdout, stderr) => error ? reject(error) : resolve({ stdout, stderr })));
@@ -42,7 +42,9 @@ require('../lib/backups').createBackups = options => realBackups({ ...options, s
   return child;
 } });
 process.on('message', message => { if (message?.type === 'finish' && activeChild) { const child = activeChild; if (Number.isFinite(message.durationSeconds) && message.durationSeconds >= 0) activeJob.startedAt = new Date(Date.now() - message.durationSeconds * 1000).toISOString(); activeChild = null; child.emit('close', message.code, null); } });
-require('../notifications').sendNotification = async () => {};
+const sentNotifications=[];
+require('../notifications').sendNotification = async (settings,message,options) => { sentNotifications.push({message,options}); };
+process.on('message',message=>{if(message?.type==='notifications')process.send({ack:message.request,messages:sentNotifications});});
 require('../lib/updates').createUpdates = () => ({
   installed: async () => ({ version: require('../package.json').version, commit: 'a'.repeat(40), modified: false }),
   current: () => null,

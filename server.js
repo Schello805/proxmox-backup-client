@@ -18,6 +18,9 @@ const { createDiscovery } = require('./lib/discovery');
 const { createSystem } = require('./lib/system');
 const { createUpdates } = require('./lib/updates');
 const { createDiagnostics } = require('./lib/diagnostics');
+const { createCapacity } = require('./lib/capacity');
+const { planSuggestions } = require('./lib/plan-suggestions');
+const { backupSummary } = require('./lib/backup-summary');
 const { createTimeline } = require('./lib/timeline');
 const { healthFor } = require('./lib/planning');
 const { estimateProgress } = require('./lib/progress');
@@ -35,8 +38,8 @@ const initial = loadConfig(CONFIG, path.join(ROOT, 'config.example.json'), PASS)
 const STATE = path.join(DATA, 'state.json'), state = loadState(STATE);
 const persist = () => saveJSON(STATE, state);
 for (const source of initial.sources) state.watchSince[source.id] ||= new Date().toISOString();
-let backups, pbs;
-const configs = createConfigService({ initial, state, write: value => saveJSON(CONFIG, value), persist, password: PASS, isBusy: () => backups?.busy || pbs?.busy, onChange: (previous, next) => { if (['repository','secondaryDatastore','password','fingerprint','namespace','secondaryPBS'].some(key => JSON.stringify(previous[key]) !== JSON.stringify(next[key]))) pbs.invalidate(); } });
+let backups, pbs, capacity;
+const configs = createConfigService({ initial, state, write: value => saveJSON(CONFIG, value), persist, password: PASS, isBusy: () => backups?.busy || pbs?.busy || capacity?.busy, onChange: (previous, next) => { if (['repository','secondaryDatastore','password','fingerprint','namespace','secondaryPBS'].some(key => JSON.stringify(previous[key]) !== JSON.stringify(next[key]))) pbs.invalidate(); } });
 const getConfig = configs.get;
 const isMaintenance = () => fs.existsSync(path.join(DATA, 'maintenance'));
 const history = createHistory({ state, data: DATA, persist, getConfig, password: PASS });
@@ -49,9 +52,13 @@ function environment(target = 'primary') {
   for (const key of Object.keys(env)) if (key.startsWith('PBS_')) delete env[key];
   return { ...env, PBS_REPOSITORY: config.repository, PBS_PASSWORD: config.password, PBS_FINGERPRINT: config.fingerprint, PBS_NAMESPACE: config.namespace };
 }
-backups = createBackups({ state, data: DATA, persist, getConfig, inspectPath, environment, log: history.log, archive: history.archive, notify: notifier.notify, isMaintenance, getSourceSize: source => sourceSizes.peek(source) });
+backups = createBackups({ state, data: DATA, persist, getConfig, inspectPath, environment, log: history.log, archive: history.archive, notify: notifier.notify, isMaintenance, getSourceSize: source => sourceSizes.peek(source), onBatchComplete: batch => notifier.notify('summary/'+batch.id, backupSummary(batch), {success:true,warning:batch.results.some(result=>result.status!=='success')}) });
 const scheduler = createScheduler({ getConfig, state, persist, backups, log: history.log, notify: notifier.notify, isMaintenance });
 pbs = createPBS({ getConfig, environment, run, cacheFile: path.join(DATA, 'pbs.json'), save: saveJSON });
+capacity = createCapacity({getConfig,environment,run,save:saveJSON,cacheFile:path.join(DATA,'capacity.json')});
+async function pollCapacity(){ if(backups.busy||pbs.busy||capacity.busy||isMaintenance())return; for(const target of targetsFor(getConfig())){if(backups.busy||isMaintenance())break;if(capacity.due(target.id))await capacity.refresh(target.id);} }
+const capacityTimer=setInterval(()=>void pollCapacity().catch(()=>console.warn('Speicherstand konnte nicht gespeichert werden.')),60000);
+void pollCapacity().catch(()=>console.warn('Speicherstand konnte nicht gespeichert werden.'));
 const system = createSystem({ run, getConfig, storageChecks });
 const updates = createUpdates({ run, root: ROOT });
 void updates.installed();
@@ -74,7 +81,7 @@ const server = http.createServer(async (req, res) => {
       if (req.headers['x-requested-with'] !== 'qnap-dashboard') return json(res, 403, { error: 'Anfrage-Header fehlt.' });
     }
     // Nur die App-Hülle ist öffentlich. Daten und Aktionen benötigen eine Sitzung.
-    const assets = { '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], ...Object.fromEntries(['api','views','forms','maintenance','assistant','timeline','problems'].map(name => ['/js/' + name + '.js', ['js/' + name + '.js', 'text/javascript']])) };
+    const assets = { '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], ...Object.fromEntries(['api','views','forms','maintenance','assistant','timeline','problems','operations'].map(name => ['/js/' + name + '.js', ['js/' + name + '.js', 'text/javascript']])) };
     if (req.method === 'GET' && assets[url.pathname]) {
       const [file, type] = assets[url.pathname]; res.writeHead(200, { 'Content-Type': `${type}; charset=utf-8`, 'Cache-Control': 'no-cache' });
       return res.end(fs.readFileSync(path.join(ROOT, 'public', file)));
@@ -108,7 +115,14 @@ const server = http.createServer(async (req, res) => {
       const folders = await Promise.all(snapshot.sources.map(async source => ({ ...source, targetRepository: repositoryFor(snapshot, source.target), ...(await inspectPath(source.path, source.expectedSource)), job: state.jobs[source.id] || { status: 'idle' }, schedule: snapshot.schedules[source.id], health: healthFor(snapshot.schedules[source.id], snapshot.timezone, new Date(), state.watchSince[source.id], state.jobs[source.id], snapshot.staleAfterDays, state.triggered[source.id]) })));
       sourceSizes.retain(snapshot.sources);
       for (const folder of folders) folder.size = sourceSizes.read(folder, folder.ok);
-      return json(res, 200, { system: { ...await system.inspect(), timezone: snapshot.timezone }, folders, timeline: createTimeline(snapshot, state), discovery: discovery.current(), targets: targetsFor(snapshot), connections: pbs.connections(), connection: pbs.lastConnection, config: configs.safe(snapshot), pbs: { checkedAt: pbs.current().checkedAt, count: pbs.current().count || 0, error: pbs.current().error || '' } });
+      return json(res, 200, { system: { ...await system.inspect(), timezone: snapshot.timezone }, folders, capacities: capacity.all(), timeline: createTimeline(snapshot, state), discovery: discovery.current(), targets: targetsFor(snapshot), connections: pbs.connections(), connection: pbs.lastConnection, config: configs.safe(snapshot), pbs: { checkedAt: pbs.current().checkedAt, count: pbs.current().count || 0, error: pbs.current().error || '' } });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/capacity/refresh') { await Promise.all(targetsFor(getConfig()).map(target=>capacity.refresh(target.id))); return json(res,200,{capacities:capacity.all()}); }
+    if (req.method === 'GET' && url.pathname === '/api/planning') return json(res,200,planSuggestions(getConfig(),state));
+    if (req.method === 'POST' && url.pathname === '/api/planning/apply') {
+      const input=await body(req), plan=planSuggestions(getConfig(),state), suggestion=plan.suggestions.find(item=>item.id===input.id&&item.time===input.time);
+      if(input.revision!==plan.revision||!suggestion) return json(res,409,{error:'Zeitplan oder Messwerte haben sich geändert. Vorschläge neu prüfen.'});
+      configs.apply({...getConfig(),schedules:{...getConfig().schedules,[input.id]:{...getConfig().schedules[input.id],time:suggestion.time}}});return json(res,200,{success:true});
     }
     if (req.method === 'POST' && url.pathname === '/api/config') {
       configs.apply(await body(req));
@@ -120,7 +134,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/targets') {
       const input = await body(req), changes = {};
-      for (const key of ['repository','password','fingerprint','namespace','secondaryDatastore','secondaryPBS']) if (Object.hasOwn(input, key)) changes[key] = input[key];
+      for (const key of ['repository','password','fingerprint','namespace','secondaryDatastore','secondaryPBS','capacityWarnPercent']) if (Object.hasOwn(input, key)) changes[key] = input[key];
       configs.apply({ ...configs.get(), ...changes });
       return json(res, 200, { success: true });
     }
@@ -174,7 +188,7 @@ scheduler.start();
 server.on('error', error => { console.error(error.code === 'EADDRINUSE' ? `Port ${PORT} ist bereits belegt.` : `Webserver konnte nicht starten: ${error.code || 'unbekannter Fehler'}`); scheduler.stop(); process.exitCode = 1; });
 server.listen(PORT, HOST, () => console.log(`QNAP Backup: http://${HOST}:${server.address().port}`));
 function shutdown() {
-  scheduler.stop(); sourceSizes.invalidate(); backups.stop();
+  clearInterval(capacityTimer); scheduler.stop(); sourceSizes.invalidate(); backups.stop();
   server.close(() => { if (!backups.active?.child) process.exit(0); });
   setTimeout(() => { backups.stop('SIGKILL'); process.exit(0); }, 8000).unref();
 }

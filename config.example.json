@@ -52,7 +52,8 @@
   "notifications": {
     "enabled": false,
     "url": "",
-    "token": ""
+    "token": "",
+    "success": false
   },
   "schedules": {
     "software": {
@@ -82,5 +83,6 @@
   },
   "secondaryDatastore": "",
   "schemaVersion": 4,
-  "secondaryPBS": null
+  "secondaryPBS": null,
+  "capacityWarnPercent": 90
 }

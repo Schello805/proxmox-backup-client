@@ -1,3 +1,4 @@
+import { installOperations } from '/js/operations.js';
 import { installTimeline } from '/js/timeline.js';
 import { sourceProblem } from '/js/problems.js';
 import { installAssistant } from '/js/assistant.js';
@@ -6,7 +7,7 @@ import { createAPI } from '/js/api.js';
 import { createViews, dayNames } from '/js/views.js';
 import { createFormState, clearFieldErrors, showFieldErrors, serverField, validateMainForm, validateNotifyForm, validateSourceForm } from '/js/forms.js';
 'use strict';
-let assistant, timeline;
+let assistant, timeline, operations;
 let lastTargets = [], lastConnections = {}, lastPreferencesSnapshot = null;
 const refreshWaiters = [];
 const $ = selector => document.querySelector(selector);
@@ -22,7 +23,7 @@ function notice(message, error = false) {
 }
 const presets = { manual: [], daily: [1,2,3,4,5,6,7], weekdays: [1,2,3,4,5], weekend: [6,7] };
 function fillForm(config) {
-  const mainSnapshot = JSON.stringify([config.repository, config.secondaryDatastore, config.secondaryPBS, config.fingerprint, config.namespace, config.hasPassword]);
+  const mainSnapshot = JSON.stringify([config.repository, config.secondaryDatastore, config.secondaryPBS, config.fingerprint, config.namespace, config.capacityWarnPercent, config.hasPassword]);
   if (!formState.dirty('configForm') && mainSnapshot !== lastMainSnapshot) {
   lastMainSnapshot = mainSnapshot;
   const form = $('#configForm');
@@ -30,6 +31,7 @@ function fillForm(config) {
   form.elements.authId.value = at > 0 ? config.repository.slice(0, at) : '';
   form.elements.server.value = at > 0 && colon > at ? config.repository.slice(at + 1, colon) : '';
   form.elements.datastore.value = colon > at ? config.repository.slice(colon + 1) : 'pbs1';
+  form.elements.capacityWarnPercent.value = config.capacityWarnPercent;
   form.elements.secondaryDatastore.value = config.secondaryDatastore || '';
   form.elements.secondaryOwnServer.checked = Boolean(config.secondaryPBS); $('#secondaryFields').hidden = !config.secondaryPBS; $('#secondaryAccess').open = Boolean(config.secondaryPBS);
   for (const [field, key] of [['secondaryServer','server'],['secondaryAuthId','authId'],['secondaryFingerprint','fingerprint'],['secondaryNamespace','namespace']]) form.elements[field].value = config.secondaryPBS?.[key] || '';
@@ -99,7 +101,7 @@ async function refresh() {
     }
     $('#systemInfo').replaceChildren();
     for (const [label, value] of [['Host', data.system.hostname], ['System', data.system.platform], ['Backup Client', data.system.client], ['Zeitpläne', data.system.timezone]]) { const item = element('span'); item.append(element('strong', label), document.createTextNode(value)); $('#systemInfo').append(item); }
-    fillForm(data.config); loaded = true; timeline?.update(data.timeline); if (sourceEditing) renderSourceProblem(sourceEditing);
+    fillForm(data.config); loaded = true; timeline?.update(data.timeline); operations?.update(data); if (sourceEditing) renderSourceProblem(sourceEditing);
     const connectionMessages = (data.targets || []).filter(target => data.connections?.[target.id]).map(target => `${target.name}: ${data.connections[target.id].message} (${date(data.connections[target.id].checkedAt)})`);
     $('#connectionResult').textContent = connectionMessages.join(' · ');
     await refreshActivity();
@@ -168,6 +170,7 @@ $('#configForm').addEventListener('submit', async event => {
   const target = Object.fromEntries(['server','authId','datastore'].map(key => [key, form.elements[key].value.trim()]));
   data.repository = target.server || target.authId || form.elements.password.value ? `${target.authId}@${target.server}:${target.datastore}` : '';
   for (const key of ['password', 'fingerprint', 'namespace', 'secondaryDatastore']) data[key] = form.elements[key].value;
+  data.capacityWarnPercent = Number(form.elements.capacityWarnPercent.value);
   data.secondaryPBS = form.elements.secondaryOwnServer.checked ? Object.fromEntries([['server','secondaryServer'],['authId','secondaryAuthId'],['password','secondaryPassword'],['fingerprint','secondaryFingerprint'],['namespace','secondaryNamespace']].map(([key, field]) => [key, form.elements[field].value])) : null;
   const errors = validateMainForm({ ...savedConfig, ...target, ...data }); showFieldErrors(form, errors);
   if (Object.keys(errors).length) { $('#settingsResult').textContent = 'Bitte die markierten Felder korrigieren.'; return; }
@@ -352,7 +355,7 @@ function renderPBS() {
   for (const snapshot of snapshots.slice(0,200)) { const row = element('tr'), size = snapshot.size === null ? '—' : `${(snapshot.size / 1024 ** 3).toFixed(2)} GiB`; row.append(element('td', snapshot.group + (snapshot.protected ? ' 🔒' : '')), element('td',date(snapshot.time)), element('td',size), element('td',snapshot.files.join(', ') || '—')); $('#pbsRows').append(row); }
 }
 function fillNotifications(settings) {
-  const form = $('#notifyForm'); form.elements.enabled.checked = settings.enabled;
+  const form = $('#notifyForm'); form.elements.enabled.checked = settings.enabled; form.elements.success.checked = settings.success || false;
   let server = 'https://ntfy.sh', topic = '';
   if (settings.url) { const url = new URL(settings.url); const slash = url.pathname.lastIndexOf('/'); server = url.origin + url.pathname.slice(0,slash); try { topic = decodeURIComponent(url.pathname.slice(slash + 1)); } catch { topic = url.pathname.slice(slash + 1); } }
   form.elements.server.value = server; form.elements.topic.value = topic; form.elements.token.value = '';
@@ -363,7 +366,7 @@ function notificationPayload() {
   const form = $('#notifyForm'), enabled = form.elements.enabled.checked, server = form.elements.server.value.trim().replace(/\/+$/, ''), topic = form.elements.topic.value.trim();
   const errors = validateNotifyForm({ enabled, server, topic }); showFieldErrors(form, errors);
   if (Object.keys(errors).length) throw new Error('Bitte die markierten ntfy-Felder korrigieren.');
-  return { enabled, url: topic ? `${server}/${encodeURIComponent(topic)}` : '', token: form.elements.token.value.trim() };
+  return { enabled, success: form.elements.success.checked, url: topic ? `${server}/${encodeURIComponent(topic)}` : '', token: form.elements.token.value.trim() };
 }
 function updateNotifyDestination() {
   try { const form = $('#notifyForm'); const settings = { url: form.elements.topic.value.trim() ? form.elements.server.value.trim().replace(/\/+$/, '') + '/' + encodeURIComponent(form.elements.topic.value.trim()) : '' }; $('#notifyDestination').textContent = settings.url ? `Ziel: ${settings.url}` : 'Server und Topic eintragen. ntfy wird separat gespeichert.'; }
@@ -477,3 +480,5 @@ function renderSourceProblem(id) {
   else { const button = element('button', issue.action, 'secondary'); button.type = 'button'; button.addEventListener('click', () => openProblem(folder, issue)); box.append(button); }
 }
 timeline = installTimeline({ element, openSource: id => editSource(id, true) });
+
+operations = installOperations({api,element,refresh,date});

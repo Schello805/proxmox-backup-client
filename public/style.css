@@ -2027,3 +2027,18 @@ a.nav { display: block; text-decoration: none; box-sizing: border-box; }
 .legend-unknown { background: #fff; border: 1px solid #528675; box-sizing: border-box; }
 .legend-overlap { background: #c08a26; }
 @media(max-width:760px) { .preferences-grid { grid-template-columns: 1fr; } .timeline-panel { padding: 12px; } .timeline-panel .panel-title { align-items: flex-start; flex-direction: column; } .timeline-control { width: 100%; justify-content: space-between; } .gantt-source { padding-left: 8px; } }
+
+.timeline-tools { display: flex; align-items: center; gap: 12px; }
+.planning-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #dac794; background: #fffaf0; border-radius: 6px; padding: 10px 12px; margin: 8px 0; font-size: 12px; }
+.planning-row small { display: block; margin-top: 4px; }
+.capacity-panel { padding: 18px; margin-top: 18px; }
+.capacity-panel h2 { font-size: 16px; }
+.capacity-cards { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,320px),1fr)); gap: 12px; margin-top: 12px; }
+.capacity-card { border: 1px solid var(--line); padding: 12px; border-radius: 7px; min-width: 0; }
+.capacity-card strong { font-size: 12px; }
+.capacity-card p { font-size: 11px; overflow-wrap: anywhere; }
+.capacity-card progress { width: 100%; height: 8px; accent-color: var(--green); }
+.capacity-card .hint { display: block; font-size: 10px; }
+.capacity-threshold { display: block; margin-top: 14px; font-size: 12px; }
+.capacity-threshold input { display: block; width: 120px; margin-top: 5px; }
+@media(max-width:760px) { .timeline-tools { width: 100%; flex-wrap: wrap; } .capacity-panel { padding: 12px; } .capacity-panel>.panel-title { flex-wrap: wrap; gap: 10px; } }

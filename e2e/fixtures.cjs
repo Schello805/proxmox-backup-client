@@ -18,7 +18,7 @@ const test = base.extend({
         child.once('exit', code => { clearTimeout(timer); reject(new Error('E2E-Server beendet: ' + code + ' ' + diagnostics)); });
         child.stdout.on('data', data => { const match = String(data).match(/http:\/\/127\.0\.0\.1:\d+/); if (match) { clearTimeout(timer); resolve(match[0]); } });
       });
-      await use({ url, finish: (code = 0, durationSeconds) => child.send({ type: 'finish', code, durationSeconds }), setMount: (mountPath, values) => new Promise((resolve, reject) => {
+      await use({ url, notifications: () => new Promise((resolve,reject) => { const request=require('node:crypto').randomUUID();const handler=message=>{if(message.ack===request){clearTimeout(timer);child.off('message',handler);resolve(message.messages);}};const timer=setTimeout(()=>{child.off('message',handler);reject(Error('Notification snapshot timeout'));},3000);child.on('message',handler);child.send({type:'notifications',request});}), finish: (code = 0, durationSeconds) => child.send({ type: 'finish', code, durationSeconds }), setMount: (mountPath, values) => new Promise((resolve, reject) => {
         const request = require('node:crypto').randomUUID();
         const handler = message => { if (message.ack === request) { clearTimeout(timer); child.off('message', handler); resolve(); } };
         const timer = setTimeout(() => { child.off('message', handler); reject(new Error('Mount-Teststeuerung überschritten')); }, 3000);

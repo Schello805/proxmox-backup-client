@@ -2,7 +2,7 @@
 
 Lokale Web-App für **QNAP → Proxmox-Host → Debian-LXC → Proxmox Backup Server**.
 
-Mount-Status und Ordnergrößen, manuelle Backups, Wochenpläne mit Zeitzone, Fortschritt, Verlauf und ntfy-Fehlermeldungen. Zwei Backup-Ziele auf demselben oder unterschiedlichen PBS; das Ziel ist je Quelle wählbar. Quellen lassen sich direkt aus der Übersicht bearbeiten. Ein kompakter Assistent führt durch neue Quellen und PBS-Ziele, inklusive Kopierbefehlen.
+Mount-Status und Ordnergrößen, manuelle Backups, Wochenpläne mit Zeitzone und Zeitplanvorschlägen, Gantt-Diagramm, PBS-Speicherstände, Fortschritt, Verlauf und optionale ntfy-Zusammenfassungen. Zwei Backup-Ziele auf demselben oder unterschiedlichen PBS; das Ziel ist je Quelle wählbar. Quellen lassen sich direkt aus der Übersicht bearbeiten. Ein kompakter Assistent führt durch neue Quellen und PBS-Ziele, inklusive Kopierbefehlen.
 
 ![Backup Control – Übersicht](https://github.com/user-attachments/assets/6992b213-ba63-4d0f-922a-1ee99742ee03)
 
