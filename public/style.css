@@ -3,11 +3,11 @@
 :root {
   font-family: Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   color: #22322e;
-  background: #f5f7f6;
+  background: #f3f7f6;
   font-size: 14px;
   --green: #16745c;
-  --muted: #74817c;
-  --line: #e4eae6;
+  --muted: #637870;
+  --line: #dfe9e4;
 }
 
 * {
@@ -15,6 +15,8 @@
 }
 
 body {
+  background: radial-gradient(ellipse at 90% 0, #def0e9 0, transparent 48%);
+  min-height: 100vh;
   margin: 0;
 }
 
@@ -22,7 +24,8 @@ aside {
   position: fixed;
   inset: 0 auto 0 0;
   width: 232px;
-  background: #142c26;
+  background: radial-gradient(ellipse at 0 0, #214e42, transparent 65%), linear-gradient(165deg, #142f2b, #0a2024);
+  box-shadow: 5px 0 24px #102e2b0c;
   color: #c8d7d0;
   padding: 34px 22px;
   display: flex;
@@ -41,10 +44,9 @@ aside {
 }
 
 .brand-icon {
-  background: #2f8d6d;
-  border-radius: 9px;
-  padding: 4px 10px;
-  font-size: 25px;
+  display: inline-flex;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px #0003;
 }
 
 .brand-light {
@@ -76,7 +78,8 @@ aside {
 }
 
 .nav.active {
-  background: #28473b;
+  background: linear-gradient(100deg, #36836a55, #36836a22);
+  box-shadow: inset 3px 0 #79dfb5;
   color: #e5fff3;
 }
 
@@ -173,14 +176,15 @@ button:disabled {
 }
 
 .primary,.secondary {
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 10px 15px;
   font-size: 12px;
   font-weight: 600;
 }
 
 .primary {
-  background: var(--green);
+  background: linear-gradient(135deg, #20866a, #12634f);
+  box-shadow: 0 3px 8px #16745c20;
   border: 1px solid var(--green);
   color: white;
 }
@@ -201,7 +205,8 @@ button:disabled {
 .stats article {
   background: white;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: 12px;
+  box-shadow: 0 3px 12px #163f2f05;
   padding: 23px;
 }
 
@@ -232,6 +237,7 @@ button:disabled {
 }
 
 .panel {
+  box-shadow: 0 4px 20px #163f2f06;
   background: white;
   border: 1px solid var(--line);
   border-radius: 9px;
@@ -360,7 +366,7 @@ th {
   font-size: 9px;
   letter-spacing: .7px;
   color: #7b8981;
-  background: #fbfcfb;
+  background: #f5f9f7;
   padding: 17px 18px;
   font-weight: 600;
 }
@@ -385,7 +391,7 @@ td code {
 .badge {
   display: inline-block;
   padding: 5px 8px;
-  border-radius: 4px;
+  border-radius: 6px;
   font-size: 10px;
   background: #f0f3f1;
   color: #708076;
@@ -575,7 +581,8 @@ dialog::backdrop {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   max-height: 65vh;
-  background: #142c26;
+  background: radial-gradient(ellipse at 0 0, #214e42, transparent 65%), linear-gradient(165deg, #142f2b, #0a2024);
+  box-shadow: 5px 0 24px #102e2b0c;
   color: #d1e4d7;
   min-height: 200px;
 }
@@ -789,6 +796,7 @@ body.locked>aside,body.locked>main {
 }
 
 .activity {
+  background: linear-gradient(110deg, #eef9f3, #ffffff 75%);
   padding: 26px;
   margin-bottom: 22px;
   border-left: 4px solid var(--green);
@@ -828,7 +836,8 @@ body.locked>aside,body.locked>main {
   max-height: 260px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  background: #142c26;
+  background: radial-gradient(ellipse at 0 0, #214e42, transparent 65%), linear-gradient(165deg, #142f2b, #0a2024);
+  box-shadow: 5px 0 24px #102e2b0c;
   color: #d1e4d7;
 }
 
@@ -1529,7 +1538,7 @@ body[data-page=overview] #notice {
   outline: 2px solid #8bc7ab;
 }
 
-.next-run {
+.next-run, .source-size {
   display: block;
   font-size: 9px;
   color: var(--muted);
@@ -1865,3 +1874,18 @@ form[data-dirty=true]::after {
 .check-ok {
   color: #537460;
 }
+
+/* Interaction polish without changing the compact layout. */
+button, a { -webkit-tap-highlight-color: transparent; }
+button { transition: background-color .16s, box-shadow .16s, border-color .16s; }
+button:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid #268b70; outline-offset: 3px; }
+.secondary:hover:not(:disabled) { background: #f1f9f5; border-color: #a2c9b7; box-shadow: 0 2px 6px #163f2f09; }
+.primary:hover:not(:disabled) { filter: brightness(1.08); }
+.nav:hover:not(.active) { background: #ffffff09; color: #fff; }
+#folders tr:hover { background: #f6fbf8; }
+.stats article:nth-child(2) { border-top-color: #8bbcaf; }
+.stats article:nth-child(3) { border-top-color: #b5caa0; }
+.stats article:nth-child(4) { border-top-color: #9dbbcc; }
+.stats strong { font-variant-numeric: tabular-nums; color: #1c5141; }
+.dot { box-shadow: 0 0 0 3px #58c18e15; }
+@media (prefers-reduced-motion: reduce) { button { transition: none; } }
