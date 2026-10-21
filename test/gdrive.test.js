@@ -61,5 +61,5 @@ test('Google Drive nutzt eigenes Upload-Limit und meldet Fehler, aber keine Abbr
   const unlimited=fixture();unlimited.config.backupPolicy.driveRateMiB=0;unlimited.drive.start();await tick();await tick();await tick();assert.ok(!unlimited.calls.find(call=>call.args[0]==='copy').args.includes('--bwlimit'));unlimited.drive.cancel();await tick();
 });
 test('Google-Quote läuft nicht parallel zur Kopie; Aufträge warten auf eine laufende Prüfung',async()=>{
-  const f=fixture();const checking=f.drive.check();f.drive.start();assert.equal(f.state.drive.status,'queued');assert.equal(f.children.length,0);await checking;f.drive.tick();await tick();await tick();await tick();assert.equal(f.children.length,1);assert.equal((await f.drive.refreshCapacity()).deferred,true);f.drive.cancel();await tick();
+  const f=fixture();const checking=f.drive.check();f.drive.start();assert.equal(f.state.drive.status,'queued');assert.equal(f.children.length,0);f.drive.cancel();assert.equal(f.state.drive.status,'cancelled');await checking;f.drive.tick();assert.equal(f.children.length,0);f.drive.start();await tick();await tick();await tick();assert.equal(f.children.length,1);assert.equal((await f.drive.refreshCapacity()).deferred,true);f.drive.cancel();await tick();
 });
