@@ -2109,3 +2109,32 @@ aside a.system-link { display:flex; align-items:center; justify-content:center; 
   aside .nav-secondary { margin-top:0; padding-top:6px; border-top:1px solid #ffffff14; }
   aside a.system-link { width:100%; height:36px; margin:0; padding:7px; }
 }
+.dashboard-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:14px 0; }
+.dashboard-panel { padding:16px; min-width:0; }
+.dashboard-panel h2 { font-size:15px; }
+.dashboard-panel .panel-title { margin-bottom:10px; gap:10px; }
+.dashboard-mounts { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-bottom:10px; }
+.dashboard-mount { display:flex; align-items:center; justify-content:space-between; gap:5px; padding:8px; background:#f7faf8; border:1px solid var(--line); border-radius:6px; color:inherit; cursor:pointer; min-width:0; }
+.dashboard-mount strong { overflow:hidden; text-overflow:ellipsis; font-size:11px; }
+.dashboard-target { display:grid; grid-template-columns:1fr auto; align-items:center; gap:4px 8px; padding:8px 0; border-bottom:1px solid var(--line); }
+.dashboard-target strong { font-size:12px; }
+.dashboard-target small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; }
+.dashboard-target .row-action { font-size:10px; }
+.dashboard-issue { display:block; padding:6px 0; text-align:left; background:none; color:#925b20; border:0; cursor:pointer; font:inherit; font-size:10px; }
+.sources-toolbar { display:flex; gap:14px; align-items:end; flex-wrap:wrap; padding:14px 0; }
+.sources-toolbar label { margin:0; flex:1; min-width:160px; }
+.sources-table-scroll { max-height:52vh; overflow:auto; border:1px solid var(--line); border-radius:8px; }
+.sources-table { min-width:900px; width:100%; }
+.sources-table thead th { position:sticky; top:0; z-index:2; background:#edf5f1; }
+#sourcesDialog { max-height:none; overflow:visible; }
+#sourceList .source-editor-row { display:table-row; }
+#sourceList .source-editor-row>td { padding:12px; vertical-align:top; }
+#sourceList .source-editor-actions { display:table-cell; white-space:nowrap; }
+#sourceList .source-editor-actions button { display:block; margin-bottom:6px; }
+#sourceList td strong, #sourceList td code, #sourceList td small { display:block; }
+#sourceList td code { white-space:normal; overflow-wrap:anywhere; }
+#sourceOverviewDetails>summary, #overviewPlan>summary { cursor:pointer; }
+@media(max-width:760px) { .dashboard-grid { grid-template-columns:1fr; } .sources-table-scroll { max-height:60vh; } }
+.sources-toolbar input, .sources-toolbar select { padding:9px 10px; border:1px solid var(--line); border-radius:6px; background:#fff; font:inherit; }
+#sourceList .source-editor-actions button { display:inline-block; margin:0 8px 0 0; }
+.sources-table td { font-size:12px; }

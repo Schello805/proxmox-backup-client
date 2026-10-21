@@ -4,6 +4,8 @@ Lokale Web-App für **QNAP → Proxmox-Host → Debian-LXC → Proxmox Backup Se
 
 Mount-Status und Ordnergrößen, manuelle Backups mit Abbruchfunktion, Wochen- und Monatspläne mit Zeitzone und Zeitplanvorschlägen, Gantt-Diagramm, PBS-Speicherstände, Fortschritt, Laufvergleiche, bearbeitbare Warteschlange, Startfenster, Upload-Limit, Einstellungs-Export und optionale ntfy-Zusammenfassungen. Zwei Backup-Ziele auf demselben oder unterschiedlichen PBS; das Ziel ist je Quelle wählbar. Ein Gesundheitsstatus je Quelle führt zur passenden Aktion; die Wiederherstellungsansicht öffnet den PBS-Datastore und zeigt Snapshot und kurze Prüfschritte. Quellen lassen sich direkt aus der Übersicht bearbeiten. Ein kompakter Assistent führt durch neue Quellen und PBS-Ziele, inklusive Kopierbefehlen.
 
+Das Dashboard zeigt Mounts, Zielzustand, laufende Aufträge und Hinweise; ausführliche Auftragsdetails und Gantt sind aufklappbar. Unter Quellen stehen alle Datenquellen in einer durchsuchbaren Tabelle mit Statusfilter und feststehendem Tabellenkopf.
+
 Die Navigation steht links: Übersicht, Quellen und Backup-Ziele oben; Einstellungen, Anleitung und das System-Zahnrad unten über dem Controller-Hinweis. Der PBS-Bestand ist direkt bei der PBS-Konfiguration erreichbar; Diagnose und Updates stehen unter System.
 
 ## Voraussetzungen

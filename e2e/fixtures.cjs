@@ -40,10 +40,12 @@ const test = base.extend({
     await use(page); expect(errors).toEqual([]);
   }
 });
-async function login(page) {
+// Source-operation tests expand the optional details; dashboard tests use sourceDetails:false.
+async function login(page, { sourceDetails = true } = {}) {
   await page.goto('/'); await page.getByLabel('Passwort', { exact: true }).fill('123456');
   await page.getByRole('button', { name: 'Entsperren', exact: true }).click();
   await expect(page.locator('#loginDialog')).not.toBeVisible();
   await expect(page.locator('#folders tr')).toHaveCount(6);
+  if (sourceDetails) for (const id of ['sourceOverviewDetails','overviewPlan']) if ((await page.locator('#'+id).getAttribute('open')) === null) await page.locator('#'+id+'>summary').click();
 }
 module.exports = { test, expect, login };

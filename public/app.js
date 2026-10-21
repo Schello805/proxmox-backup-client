@@ -1,3 +1,4 @@
+import { installDashboard } from '/js/dashboard.js';
 import { installDrive } from '/js/gdrive.js';
 import { installRestore } from '/js/restore.js';
 import { installControls } from '/js/controls.js';
@@ -10,7 +11,7 @@ import { createAPI } from '/js/api.js';
 import { createViews, dayNames } from '/js/views.js';
 import { createFormState, clearFieldErrors, showFieldErrors, serverField, validateMainForm, validateNotifyForm, validateSourceForm } from '/js/forms.js';
 'use strict';
-let assistant, timeline, operations, controls, restore, drive;
+let assistant, timeline, operations, controls, restore, drive, dashboard;
 let lastTargets = [], lastConnections = {}, lastCapacities = {}, lastPreferencesSnapshot = null;
 const refreshWaiters = [];
 const $ = selector => document.querySelector(selector);
@@ -106,7 +107,7 @@ async function refresh() {
     $('#systemInfo').replaceChildren();
     for (const [label, value] of [['Host', data.system.hostname], ['System', data.system.platform], ['Backup Client', data.system.client], ['Zeitpläne', data.system.timezone]]) { const item = element('span'); item.append(element('strong', label), document.createTextNode(value)); $('#systemInfo').append(item); }
     if (data.folders.some(folder => folder.checking)) setTimeout(() => { if (authenticated) void refresh(); }, 1000);
-    fillForm(data.config); drive?.update(data.drive); loaded = true; $('#backupAll').disabled = false; timeline?.update(data.timeline); operations?.update(data); controls?.update(data); if (sourceEditing) renderSourceProblem(sourceEditing);
+    fillForm(data.config); drive?.update(data.drive); loaded = true; $('#backupAll').disabled = false; timeline?.update(data.timeline); operations?.update(data); dashboard?.update(data); controls?.update(data); if (document.body.dataset.page === 'sourcesDialog' && !$('#sourceList').contains(document.activeElement)) renderSources(); if (sourceEditing) renderSourceProblem(sourceEditing);
     const connectionMessages = (data.targets || []).filter(target => data.connections?.[target.id]).map(target => `${target.name}: ${data.connections[target.id].message} (${date(data.connections[target.id].checkedAt)})`);
     $('#connectionResult').textContent = connectionMessages.join(' · ');
     await refreshActivity();
@@ -247,7 +248,7 @@ async function refreshActivity() {
   try {
     const data = await api('/api/activity');
     if (epoch !== authEpoch) return;
-    drive?.update(data.drive);
+    drive?.update(data.drive); dashboard?.activity(data);
     $('#activityMeta').replaceChildren();
     $('#activityBadge').textContent = data.active ? data.jobs[data.active].status === 'cancelling' ? 'Abbruch läuft' : '● Läuft' : '● Bereit';
     $('#cancelAll').hidden = !data.active && !data.queue.length;
@@ -318,12 +319,19 @@ function renderSources() {
   $('#sourceForm').elements.target.value = selected;
   renderDiscovered();
   $('#sourceList').replaceChildren();
-  for (const source of savedConfig.sources) {
-    const row = element('div', undefined, 'source-editor-row'), info = element('div');
+  const query = $('#sourceSearch').value.trim().toLocaleLowerCase('de'), filter = $('#sourceStatusFilter').value;
+  const sources = savedConfig.sources.filter(source => {
+    const folder=folderData.find(item=>item.id===source.id);
+    return (!$('#sourceSearch').dataset.exactId || source.id === $('#sourceSearch').dataset.exactId) && [source.name,source.path,source.expectedSource,folder?.mount?.source].join(' ').toLocaleLowerCase('de').includes(query) && (filter==='all'||filter==='available'&&folder?.ok||filter==='unavailable'&&!folder?.ok&&!folder?.checking);
+  });
+  $('#sourceListCount').textContent = `${sources.length} von ${savedConfig.sources.length} Quellen`;
+  for (const source of sources) {
+    const row = element('tr', undefined, 'source-editor-row'), info = element('td'); row.dataset.sourceId=source.id;
+    const folder=folderData.find(item=>item.id===source.id)||{};
     info.append(element('strong', source.name), element('code', source.path), element('small', source.expectedSource || 'SMB-Identität noch nicht festgelegt', 'hint'));
-    info.append(element('small', 'Ziel: ' + (backupTargets().find(target => target.id === (source.target || 'primary'))?.name || 'Nicht konfiguriert'), 'hint'));
+
     const detected = folderData.find(item => item.id === source.id)?.mount?.source; if (detected) info.append(element('small', `Aktuell erkannt: ${detected}`, 'hint'));
-    const actions = element('div', undefined, 'source-editor-actions');
+    const actions = element('td', undefined, 'source-editor-actions');
     const edit = element('button', 'Bearbeiten', 'row-action'); edit.addEventListener('click', () => {
       editSource(source.id);
     });
@@ -337,9 +345,15 @@ function renderSources() {
       try { await api('/api/sources', { sources: savedConfig.sources.filter(item => item.id !== source.id) }); loaded = false; await refresh(); renderSources(); if (sourceEditing === source.id) resetSource(); $('#sourceResult').textContent = 'Quelle aus der App entfernt. Dateien und Sicherungen bleiben erhalten.'; }
       catch (e) { $('#sourceResult').textContent = e.message; remove.disabled = false; }
     });
-    actions.append(edit,pin,remove); row.append(info,actions); $('#sourceList').append(row);
+    const mount=element('td');mount.append(element('span',folder.ok?'Eingebunden':folder.checking?'Wird geprüft':'Nicht verfügbar','badge '+(folder.ok?'ok':folder.checking?'busy':'bad')));if(folder.error)mount.append(element('small',folder.error,'row-error'));
+    const size=element('td',folder.size?.bytes!=null?new Intl.NumberFormat('de-DE',{maximumFractionDigits:1}).format(folder.size.bytes/1024**3)+' GiB':'Noch nicht ermittelt');
+    const target=element('td');target.append(element('span',backupTargets().find(target=>target.id===(source.target||'primary'))?.name||'PBS fehlt'));if(savedConfig.gdrive.sources.includes(source.id))target.append(element('small','+ Google Drive','hint'));
+    const plan=element('td',scheduleText(savedConfig.schedules[source.id]));
+    actions.append(edit,pin,remove);row.append(info,mount,size,target,plan,actions);$('#sourceList').append(row);
   }
 }
+$('#sourceSearch').addEventListener('input', () => { delete $('#sourceSearch').dataset.exactId; renderSources(); });
+$('#sourceStatusFilter').addEventListener('change', renderSources);
 $('#resetSource').addEventListener('click', resetSource);
 $('#probeSource').addEventListener('click', async event => {
   const button = event.currentTarget; button.disabled = true;
@@ -537,10 +551,11 @@ function renderSourceProblem(id) {
 }
 timeline = installTimeline({ element, openSource: id => editSource(id, true) });
 
-for (const details of document.querySelectorAll('#targets>.target-accordion')) {
+for (const details of document.querySelectorAll('#targets>.target-accordion, #sourceOverviewDetails, #overviewPlan')) {
   try { details.open = localStorage.getItem('backup-target-' + details.id) === 'open'; } catch {}
   details.addEventListener('toggle', () => { try { localStorage.setItem('backup-target-' + details.id, details.open ? 'open' : 'closed'); } catch {} });
 }
+dashboard = installDashboard({ element, date, openSource: source => { $('#sourceSearch').value = source.name; $('#sourceSearch').dataset.exactId=source.id; location.hash = 'sourcesDialog'; renderSources(); }, resolveProblem: (source, issue) => { if (issue.view === 'source') editSource(source.id, true); else if (issue.view === 'log') void openLog(source.id); else if (issue.view === 'backup') void runSource(source.id); else { $('#pbsSettings').open=true;location.hash='targets'; } } });
 drive = installDrive({ api, element, notice, scheduleText, date });
 operations = installOperations({api,element,refresh,date});
 

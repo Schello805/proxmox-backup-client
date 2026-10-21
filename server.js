@@ -87,7 +87,7 @@ const server = http.createServer(async (req, res) => {
       if (req.headers['x-requested-with'] !== 'qnap-dashboard') return json(res, 403, { error: 'Anfrage-Header fehlt.' });
     }
     // Nur die App-Hülle ist öffentlich. Daten und Aktionen benötigen eine Sitzung.
-    const assets = { '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], ...Object.fromEntries(['gdrive','api','views','forms','maintenance','assistant','timeline','problems','operations','controls','restore'].map(name => ['/js/' + name + '.js', ['js/' + name + '.js', 'text/javascript']])) };
+    const assets = { '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], ...Object.fromEntries(['dashboard','gdrive','api','views','forms','maintenance','assistant','timeline','problems','operations','controls','restore'].map(name => ['/js/' + name + '.js', ['js/' + name + '.js', 'text/javascript']])) };
     if (req.method === 'GET' && assets[url.pathname]) {
       const [file, type] = assets[url.pathname]; res.writeHead(200, { 'Content-Type': `${type}; charset=utf-8`, 'Cache-Control': 'no-cache' });
       return res.end(fs.readFileSync(path.join(ROOT, 'public', file)));

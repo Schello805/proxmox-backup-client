@@ -77,7 +77,7 @@ test('Backup starten: Prozent, Restzeit, Live-Protokoll und Verlauf', async ({ p
   await expect(page.locator('#progressEstimate')).toContainText('ca. 50 %'); await expect(page.locator('#progressEstimate')).toContainText('Restzeit ca. 2 min');
   await expect(page.getByRole('progressbar', { name: 'Geschätzter Backup-Fortschritt' })).toHaveJSProperty('value', 50);
   await expect(row.getByRole('button', { name: 'Abbrechen', exact: true })).toBeEnabled();
-  expect(await page.locator('#folders').evaluate(element => element.getBoundingClientRect().bottom <= innerHeight)).toBe(true);
+  expect(await page.locator('#statusDashboard').evaluate(element => element.getBoundingClientRect().bottom <= innerHeight)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('progress.png') });
   await page.getByRole('button', { name: 'Live-Protokoll ↗' }).click(); await expect(page.locator('#logText')).toContainText('processed 5 GiB');
   await page.locator('#closeDetail').click();
