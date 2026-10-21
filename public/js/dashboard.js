@@ -2,6 +2,12 @@ import { latestConnection, sourceProblem } from '/js/problems.js';
 export function installDashboard({ element, date, openSource, resolveProblem }) {
   const $ = selector => document.querySelector(selector);
   let snapshot;
+  function openTarget(id) {
+    const panel=$('#'+id);panel.open=true;
+    const scroll=()=>panel.scrollIntoView({block:'start'});
+    if(location.hash==='#targets') scroll();
+    else { window.addEventListener('hashchange',()=>requestAnimationFrame(scroll),{once:true});location.hash='targets'; }
+  }
   function render() {
     if (!snapshot) return;
     const folders = snapshot.folders, mounts = $('#dashboardMounts'), targets = $('#dashboardTargets'), issues = $('#dashboardIssues');
@@ -32,10 +38,10 @@ export function installDashboard({ element, date, openSource, resolveProblem }) 
       const latest=related.map(source=>source.job).filter(Boolean).sort((a,b)=>Date.parse(b.lastSuccess||0)-Date.parse(a.lastSuccess||0))[0]||{};
       const active=related.find(source=>['running','queued','cancelling'].includes(source.job?.status));
       const changed=related.map(source=>source.pbsCheckAfter).filter(Boolean).sort().at(-1);
-      card('PBS · '+target.name,`${related.length} Quellen · ${target.repository || 'Zugang fehlt'}`,latestConnection(latest,snapshot.connections?.[target.id],snapshot.capacities?.[target.id],changed),Boolean(target.repository&&target.hasPassword),()=>{location.hash='targets';$('#pbsSettings').open=true;},active?{label:active.job.status==='queued'?'Sicherung wartet':active.job.status==='cancelling'?'Abbruch läuft':'Sicherung läuft',tone:'busy'}:null);
+      card('PBS · '+target.name,`${related.length} Quellen · ${target.repository || 'Zugang fehlt'}`,latestConnection(latest,snapshot.connections?.[target.id],snapshot.capacities?.[target.id],changed),Boolean(target.repository&&target.hasPassword),()=>openTarget('pbsSettings'),active?{label:active.job.status==='queued'?'Sicherung wartet':active.job.status==='cancelling'?'Abbruch läuft':'Sicherung läuft',tone:'busy'}:null);
     }
     const drive=snapshot.drive||{}, busy=['queued','running','cancelling'].includes(drive.status);
-    card('Google Drive',drive.settings?.sources.length?`${drive.settings.sources.length} Quellen · ${drive.settings.folder}`:'Keine Quellen ausgewählt',latestConnection({lastSuccess:drive.lastSuccess},drive.connection,snapshot.capacities?.gdrive),Boolean(drive.settings?.sources.length),()=>{location.hash='targets';$('#driveSettings').open=true;},busy?{label:drive.status==='queued'?'Wartet':drive.status==='cancelling'?'Abbruch läuft':'Kopie läuft',tone:'busy'}:drive.status==='failed'?{label:'Kopie fehlgeschlagen',tone:'bad'}:null);
+    card('Google Drive',drive.settings?.sources.length?`${drive.settings.sources.length} Quellen · ${drive.settings.folder}`:'Keine Quellen ausgewählt',latestConnection({lastSuccess:drive.lastSuccess},drive.connection,snapshot.capacities?.gdrive),Boolean(drive.settings?.sources.length),()=>openTarget('driveSettings'),busy?{label:drive.status==='queued'?'Wartet':drive.status==='cancelling'?'Abbruch läuft':'Kopie läuft',tone:'busy'}:drive.status==='failed'?{label:'Kopie fehlgeschlagen',tone:'bad'}:null);
     const problems = folders.map(source=>({source,issue:sourceProblem(source,source.job,source.health,snapshot.targets.find(target=>target.id===(source.target||'primary')),latestConnection(source.job,snapshot.connections?.[source.target||'primary'],snapshot.capacities?.[source.target||'primary'],source.pbsCheckAfter))})).filter(item=>item.issue);
     $('#targetStatus').textContent=`${reachable} / ${configuredTargets} erreichbar`;
     $('#targetName').textContent=configuredTargets?'Zuletzt bestätigte Zielverbindungen':'Noch kein Ziel eingerichtet';
