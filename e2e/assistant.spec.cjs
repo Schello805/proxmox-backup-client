@@ -77,7 +77,7 @@ test('PBS-Assistent: eigener Server mit getrenntem Zugang, Backup und dauerhaft 
   await page.locator('tr[data-folder="software"]').getByRole('button', { name: '↗ Sichern', exact: true }).click(); await page.getByRole('button', { name: 'Live-Protokoll ↗' }).click();
   await expect(page.locator('#logText')).toContainText('archive@pbs@pbs2.local:test-store'); await expect(page.locator('#logText')).toContainText('E2E namespace: archive'); await expect(page.locator('#logText')).toContainText('E2E credential match: true');
   app.finish(); await expect(page.locator('tr[data-folder="software"] .job-state')).toContainText('Erfolgreich');
-  await page.getByRole('link', { name: /Backup-Ziele$/ }).click();
+  await page.getByRole('link', { name: /Backup-Ziele$/ }).click(); if ((await page.locator('#pbsSettings').getAttribute('open')) === null) await page.locator('#pbsSettings>summary').click();
   await expect(page.getByRole('textbox', { name: 'PBS-2-Adresse', exact: true })).toHaveValue('pbs2.local');
   await expect(page.getByRole('textbox', { name: 'PBS-1-Fingerprint', exact: true })).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'PBS-2-Fingerprint', exact: true })).toHaveValue(secondFingerprint);

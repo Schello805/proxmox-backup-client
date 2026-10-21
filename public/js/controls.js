@@ -6,7 +6,7 @@ export function installControls({ api, element, refresh, refreshActivity, notice
   policyForm.addEventListener('submit', async event => {
     event.preventDefault(); const button = policyForm.querySelector('button'), stamp = policyStamp; button.disabled = true;
     try {
-      await api('/api/backup-policy', { windowEnabled: policyForm.elements.windowEnabled.checked, start: policyForm.elements.start.value, end: policyForm.elements.end.value, rateMiB: Number(policyForm.elements.rateMiB.value) });
+      await api('/api/backup-policy', { windowEnabled: policyForm.elements.windowEnabled.checked, start: policyForm.elements.start.value, end: policyForm.elements.end.value, rateMiB: Number(policyForm.elements.rateMiB.value), driveRateMiB: Number(policyForm.elements.driveRateMiB.value) });
       if (policyStamp === stamp) policyDirty = false;
       $('#policyResult').textContent = 'Gespeichert. Gilt für den nächsten Start; laufende Backups werden fertiggestellt.'; await refresh();
     } catch(e) { $('#policyResult').textContent = e.message; } finally { button.disabled = false; }
@@ -78,7 +78,7 @@ export function installControls({ api, element, refresh, refreshActivity, notice
     root.append(cards, element('p', 'Verglichen werden erfolgreiche Läufe mit demselben Pfad, PBS-Ziel und Namespace. Verarbeitung und Upload sind Client-Messwerte, keine Liste geänderter Dateien.', 'hint'));
   }
   return { activity, comparison, update(data) {
-    if (!policyDirty) { const policy = data.config.backupPolicy; policyForm.elements.windowEnabled.checked = policy.windowEnabled; policyForm.elements.start.value = policy.start; policyForm.elements.end.value = policy.end; policyForm.elements.rateMiB.value = policy.rateMiB; }
+    if (!policyDirty) { const policy = data.config.backupPolicy; policyForm.elements.windowEnabled.checked = policy.windowEnabled; policyForm.elements.start.value = policy.start; policyForm.elements.end.value = policy.end; policyForm.elements.rateMiB.value = policy.rateMiB; policyForm.elements.driveRateMiB.value = policy.driveRateMiB; }
     $('#policyTimezone').textContent = data.config.timezone;
   } };
 }

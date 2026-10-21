@@ -42,7 +42,7 @@ export function installDrive({ api, element, notice, scheduleText, date }) {
     if (loading) return; loading = true;
     try {
       const data = await api('/api/gdrive'); render(data.job);
-      $('#driveTimezone').textContent = 'Zeitzone: ' + data.timezone + ' · Startfenster, Pause und Upload-Limit aus den Einstellungen gelten auch hier.';
+      $('#driveTimezone').textContent = 'Zeitzone: ' + data.timezone + ' · Startfenster und Pause gelten auch hier; das eigene Google-Drive-Upload-Limit steht unter Einstellungen.';
       if (!dirty) {
         form.elements.remote.value = data.config.remote; form.elements.folder.value = data.config.folder;
         const schedule = data.config.schedule;
@@ -83,9 +83,10 @@ export function installDrive({ api, element, notice, scheduleText, date }) {
     else window.addEventListener('hashchange', () => requestAnimationFrame(action), { once:true });
   }
   for (const link of document.querySelectorAll('[data-open-drive-guide]')) link.addEventListener('click', () => afterNavigation('#guide', () => { $('#driveSetupGuide').open = true; $('#driveSetupGuide').scrollIntoView({block:'start'}); }));
-  for (const link of document.querySelectorAll('[data-open-drive-settings]')) link.addEventListener('click', () => afterNavigation('#targets', () => { $('#drivePanel').scrollIntoView({block:'start'}); void load(); }));
+  for (const link of document.querySelectorAll('[data-open-drive-settings]')) link.addEventListener('click', () => afterNavigation('#targets', () => { $('#driveSettings').open = true; $('#drivePanel').scrollIntoView({block:'start'}); void load(); }));
   for (const button of document.querySelectorAll('[data-drive-copy]')) button.addEventListener('click', async () => { try { const text = document.getElementById(button.dataset.driveCopy).textContent; if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(text); else { const input = element('textarea'); input.value = text; document.body.append(input); input.select(); const copied = document.execCommand('copy'); input.remove(); if (!copied) throw new Error('clipboard'); } button.textContent = 'Kopiert'; } catch { notice('Befehl markieren und kopieren. Die Zwischenablage benötigt HTTPS.', true); } });
-  $('#configureDrive').addEventListener('click', () => { $('#drivePanel').scrollIntoView({ behavior: 'smooth', block: 'start' }); void load(); });
+  $('#configureDrive').addEventListener('click', () => { $('#driveSettings').open = true; $('#drivePanel').scrollIntoView({ behavior: 'smooth', block: 'start' }); void load(); });
+  $('#driveSettings').addEventListener('toggle', () => { if ($('#driveSettings').open) void load(); });
   window.addEventListener('hashchange', () => { if (location.hash === '#targets') void load(); });
   return { update(job) { render(job); if (!initialized && location.hash === '#targets') void load(); }, load };
 }

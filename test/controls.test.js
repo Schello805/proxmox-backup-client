@@ -11,7 +11,7 @@ test('Start windows honor timezone, midnight, exclusive end and DST; default is 
  const c=config();assert.equal(inWindow(c,new Date()),true);c.backupPolicy={windowEnabled:true,start:'22:00',end:'06:00',rateMiB:10};
  for(const[date,expected]of[['2026-10-20T20:00:00Z',true],['2026-10-21T03:59:00Z',true],['2026-10-21T04:00:00Z',false],['2026-10-21T12:00:00Z',false],['2026-10-25T00:30:00Z',true],['2026-10-25T01:30:00Z',true]])assert.equal(inWindow(c,new Date(date)),expected,date);
  c.backupPolicy.start='08:00';c.backupPolicy.end='18:00';assert.equal(inWindow(c,new Date('2026-10-21T12:00:00Z')),true);assert.deepEqual(rateArgs(c),['--rate','10485760','--burst','10485760']);
- for(const value of [{rateMiB:-1},{rateMiB:1.2},{rateMiB:'10'},{windowEnabled:true,start:'22:00',end:'22:00'},{start:'25:00'}])assert.throws(()=>validatePolicy(value));
+ for(const value of [{rateMiB:-1},{rateMiB:1.2},{rateMiB:'10'},{driveRateMiB:-1},{driveRateMiB:1.5},{driveRateMiB:'10'},{windowEnabled:true,start:'22:00',end:'22:00'},{start:'25:00'}])assert.throws(()=>validatePolicy(value));
 });
 test('Export redacts secrets by default, explicit export includes them and preview does not mutate config',()=>{
  const c=config();c.secondaryDatastore='other';c.secondaryPBS={server:'pbs2.local',authId:'other@pbs',password:'secondary-secret',fingerprint:'',namespace:''};const original=JSON.stringify(c);

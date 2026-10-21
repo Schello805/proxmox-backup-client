@@ -506,7 +506,7 @@ function openProblem(folder, issue) {
   else if (issue.view === 'source') editSource(folder.id, true);
   else if (issue.view === 'log') void openLog(folder.id);
   else if (issue.view === 'backup') void runSource(folder.id);
-  else { location.hash = 'targets'; setTimeout(() => $('#configForm').elements[folder.target === 'secondary' && savedConfig.secondaryPBS ? 'secondaryServer' : 'server'].focus(), 0); }
+  else { $('#pbsSettings').open = true; location.hash = 'targets'; setTimeout(() => $('#configForm').elements[folder.target === 'secondary' && savedConfig.secondaryPBS ? 'secondaryServer' : 'server'].focus(), 0); }
 }
 function renderSourceHealth(cell, folder, job, health) {
   if (!folder) return;
@@ -530,6 +530,10 @@ function renderSourceProblem(id) {
 }
 timeline = installTimeline({ element, openSource: id => editSource(id, true) });
 
+for (const details of document.querySelectorAll('#targets>.target-accordion')) {
+  try { details.open = localStorage.getItem('backup-target-' + details.id) === 'open'; } catch {}
+  details.addEventListener('toggle', () => { try { localStorage.setItem('backup-target-' + details.id, details.open ? 'open' : 'closed'); } catch {} });
+}
 drive = installDrive({ api, element, notice, scheduleText, date });
 operations = installOperations({api,element,refresh,date});
 

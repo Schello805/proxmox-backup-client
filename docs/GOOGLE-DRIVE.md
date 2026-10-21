@@ -69,13 +69,17 @@ Eine Liste ohne Fehler bestätigt den Lesetest; bei leerer Ablage ist eine leere
 
 ## 6. App und erster Test
 
-1. **Backup-Ziele → Google Drive** öffnen. Remote `gdrive`, Zielordner beispielsweise `QNAP-Backup`, zunächst eine kleine Quelle auswählen.
+1. **Backup-Ziele → Akkordeon Google Drive** öffnen. Remote `gdrive`, Zielordner beispielsweise `QNAP-Backup`, zunächst eine kleine Quelle auswählen.
 2. Optional täglichen, wöchentlichen oder monatlichen Zeitplan einstellen. Die Zeitzone steht unter Einstellungen. Fehlende Monatstage werden auf den letzten Monatstag gelegt.
 3. **Google Drive speichern → Google Drive prüfen → Jetzt nach Drive kopieren**. Der Verbindungstest liest; Schreibrechte werden beim Kopieren geprüft.
 4. Die Übersicht zeigt Quellen, Plan, nächsten Termin, letzten Erfolg und laufenden Fortschritt. Kopien dort starten oder abbrechen.
 5. Nach Erfolg in Google Drive `QNAP-Backup/<Backup-ID>/` öffnen, eine Datei herunterladen und ihren Inhalt prüfen. Erst dann weitere Quellen aktivieren.
 
-Neue Drive-Aufträge warten auf PBS-Aufträge, Pause und Startfenster. Ein laufender Auftrag wird fertiggestellt. Das Upload-Limit gilt auch für Drive. Jede Quelle hat einen eigenen Unterordner. Änderungen ersetzen vorhandene Dateien; gelöschte Quelldateien bleiben im Ziel. Die App verwaltet keine eigenen Drive-Versionen. Zum Wiederherstellen Dateien aus Drive herunterladen und zunächst separat prüfen.
+Neue Drive-Aufträge warten auf PBS-Aufträge, Pause und Startfenster. Ein laufender Auftrag wird fertiggestellt. Unter **Einstellungen → Startfenster & Bandbreite** hat Google Drive ein eigenes Upload-Limit (MiB/s; 0 = unbegrenzt), unabhängig vom PBS-Limit. Jede Quelle hat einen eigenen Unterordner. Änderungen ersetzen vorhandene Dateien; gelöschte Quelldateien bleiben im Ziel. Die App verwaltet keine eigenen Drive-Versionen. Zum Wiederherstellen Dateien aus Drive herunterladen und zunächst separat prüfen.
+
+Unter **Backup-Ziele → Speicherstände** und auf der Übersicht wird auch die Google-Kontoquote angezeigt. Andere Google-Dienste und der Papierkorb werden getrennt genannt, soweit Google Werte liefert. Geteilte Ablagen können ohne eigene Speicherquote erscheinen. Der Abruf erfolgt im Hintergrund oder per „Speicher aktualisieren“; bei Fehlern bleibt der letzte Stand erkennbar erhalten.
+
+Aktiviertes ntfy meldet auch fehlgeschlagene Drive-Kopien, Verbindungs- und Speicherprüfungen. Abbrüche sind keine Fehler. Mit aktivierter Erfolgszusammenfassung wird auch eine erfolgreiche Drive-Kopie gemeldet.
 
 ## Bei Fehlern
 

@@ -1,7 +1,7 @@
 'use strict';
 const {test,expect,login}=require('./fixtures.cjs');
 test('Google Drive einrichten, Monatsplan speichern, prüfen, kopieren und abbrechen',async({page},testInfo)=>{
-  await login(page);await page.getByRole('link',{name:/Backup-Ziele$/}).click();
+  await login(page);await page.getByRole('link',{name:/Backup-Ziele$/}).click();await page.locator('#driveSettings>summary').click();
   const panel=page.locator('#drivePanel');await expect(panel.getByLabel('Rclone-Remote')).toHaveValue('gdrive');
   await panel.getByLabel('Daten',{exact:true}).check();await panel.getByLabel('Frequenz',{exact:true}).selectOption('monthly');await panel.getByLabel('Monatstag',{exact:true}).selectOption('last');await panel.getByLabel('Uhrzeit',{exact:true}).fill('04:15');
   await panel.getByRole('button',{name:'Google Drive speichern',exact:true}).click();await expect(page.locator('#driveResult')).toContainText('gespeichert');
@@ -14,7 +14,7 @@ test('Google Drive einrichten, Monatsplan speichern, prüfen, kopieren und abbre
   await page.locator('#driveCancel').click();await expect(page.locator('#driveStatus')).toHaveText('Abgebrochen');await expect(page.locator('#driveHistory')).toContainText('Abgebrochen');await page.request.post('/api/backups/cancel',{headers:{'X-Requested-With':'qnap-dashboard'},data:{}});
 });
 test('Google-Drive-Kopie bleibt bei falscher SMB-Zuordnung gesperrt',async({page,app})=>{
-  await login(page);await page.getByRole('link',{name:/Backup-Ziele$/}).click();await page.locator('#drivePanel').getByLabel('Daten',{exact:true}).check();await page.getByRole('button',{name:'Google Drive speichern',exact:true}).click();await expect(page.locator('#driveResult')).toContainText('gespeichert');
+  await login(page);await page.getByRole('link',{name:/Backup-Ziele$/}).click();await page.locator('#driveSettings>summary').click();await page.locator('#drivePanel').getByLabel('Daten',{exact:true}).check();await page.getByRole('button',{name:'Google Drive speichern',exact:true}).click();await expect(page.locator('#driveResult')).toContainText('gespeichert');
   await app.setMount('/mnt/Daten/Daten',{source:'//test-nas/software'});await page.locator('#driveStart').click();await expect(page.locator('#driveStatus')).toHaveText('Fehlgeschlagen');await expect(page.locator('#driveMessage')).toContainText(/SMB|Freigabe|Quelle/);await page.setViewportSize({width:390,height:844});await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 test('Übersicht zeigt den Drive-Plan und unterstützt Start, Fortschritt und Abbruch direkt',async({page},testInfo)=>{
@@ -32,4 +32,19 @@ test('Drive-Anleitung führt von der Übersicht durch jede Rclone-Abfrage und zu
   await guide.getByText('3 · Alle Rclone-Abfragen beantworten',{exact:true}).click();await expect(guide).toContainText('service_account_file');await expect(guide).toContainText('Edit advanced config?');await expect(guide).toContainText('config_token');
   await guide.getByText('5 · Speichern und Rclone beenden',{exact:true}).click();await expect(guide).toContainText('qnap-backup -- rclone lsd');await expect(guide).toContainText('q');
   await guide.getByText('6 · In der App aktivieren und erste Datei prüfen',{exact:true}).click();await guide.getByRole('link',{name:'Google-Drive-Einstellungen öffnen',exact:true}).click();await expect(page.locator('#drivePanel')).toBeInViewport();await page.setViewportSize({width:390,height:844});await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+});
+
+test('Ziele sind Akkordeons; Google-Speicherquote und getrennte Upload-Limits bleiben sichtbar',async({page},testInfo)=>{
+  await login(page);await page.getByRole('link',{name:/Backup-Ziele$/}).click();
+  for(const id of ['pbsSettings','driveSettings','targetStorage'])await expect(page.locator('#'+id)).not.toHaveAttribute('open','');
+  await page.locator('#driveSettings>summary').click();await page.locator('#drivePanel').getByLabel('Daten',{exact:true}).check();await page.getByRole('button',{name:'Google Drive speichern',exact:true}).click();await expect(page.locator('#driveResult')).toContainText('gespeichert');
+  await page.locator('#targetStorage>summary').click();await page.locator('#refreshTargetCapacity').click();await expect(page.locator('#targetCapacityResult')).toContainText('aktualisiert');const card=page.locator('#targetCapacityCards [data-capacity-target="gdrive"]');await expect(card).toContainText('30 GiB frei');await expect(card).toContainText('20 GiB in Drive');await expect(card).toContainText('40 GiB andere Google-Dienste');await expect(card).toContainText('70 % belegt');await page.screenshot({path:testInfo.outputPath('target-accordions.png'),fullPage:true});
+  await page.getByRole('link',{name:/^⚙.*Einstellungen$/}).click();await page.locator('#policySettings>summary').click();await page.getByLabel('PBS-Upload-Limit (MiB/s)',{exact:true}).fill('9');await page.getByLabel('Google-Drive-Upload-Limit (MiB/s)',{exact:true}).fill('3');await page.getByRole('button',{name:'Backup-Regeln speichern',exact:true}).click();await expect(page.locator('#policyResult')).toContainText('Gespeichert');await page.reload();await page.locator('#policySettings>summary').click();await expect(page.getByLabel('Google-Drive-Upload-Limit (MiB/s)',{exact:true})).toHaveValue('3');await expect(page.getByLabel('PBS-Upload-Limit (MiB/s)',{exact:true})).toHaveValue('9');
+  await page.getByRole('link',{name:/Übersicht/}).click();await page.locator('#overviewStorage>summary').click();await expect(page.locator('#capacityCards [data-capacity-target="gdrive"]')).toContainText('30 GiB frei');
+});
+test('Aktiviertes ntfy meldet Google-Drive-Fehler ohne Zugangsdaten',async({page,app})=>{
+  await login(page);const headers={'X-Requested-With':'qnap-dashboard'};
+  expect((await page.request.post('/api/notifications',{headers,data:{enabled:true,success:false,url:'https://ntfy.example/test',token:'private-ntfy-test-token'}})).ok()).toBe(true);
+  expect((await page.request.post('/api/gdrive',{headers,data:{remote:'gdrive',folder:'QNAP',sources:['daten'],schedule:''}})).ok()).toBe(true);await app.setMount('/mnt/Daten/Daten',{source:'//test-nas/wrong'});expect((await page.request.post('/api/gdrive/start',{headers,data:{}})).ok()).toBe(true);
+  await expect.poll(async()=>(await app.notifications()).filter(item=>item.message.startsWith('Google Drive: Kopie fehlgeschlagen')).length).toBe(1);const messages=await app.notifications();expect(JSON.stringify(messages)).not.toContain('private-ntfy-test-token');expect(JSON.stringify(messages)).not.toContain('/mnt/Daten');
 });

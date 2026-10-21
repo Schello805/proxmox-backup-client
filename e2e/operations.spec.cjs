@@ -3,9 +3,9 @@ const {test,expect,login}=require('./fixtures.cjs');
 
 test('Speicherstände je Datastore und einstellbare Warnschwelle bleiben getrennt',async({page},testInfo)=>{
   await login(page);const current=(await(await page.request.get('/api/status')).json()).config;const setup=await page.request.post('/api/targets/setup',{headers:{'X-Requested-With':'qnap-dashboard'},data:{datastore:'archive-store'}});expect(setup.ok()).toBe(true);await page.reload();
-  await page.locator('#refreshCapacity').click();const cards=page.locator('#capacityCards .capacity-card');await expect(cards).toHaveCount(2);await expect(cards.nth(0)).toContainText('512 GiB frei');await expect(cards.nth(1)).toContainText('256 GiB frei');
-  await page.getByRole('link',{name:/Backup-Ziele$/}).click();await page.getByLabel('Speicherwarnung ab Belegung (%)',{exact:true}).fill('50');await page.getByRole('button',{name:'Backup-Ziele speichern',exact:true}).click();await expect(page.locator('#settingsResult')).toContainText('Gespeichert');
-  await expect(page.locator('#targetCapacityCards .capacity-card').nth(0)).toContainText('Wenig Platz');await page.reload();await expect(page.getByLabel('Speicherwarnung ab Belegung (%)',{exact:true})).toHaveValue('50');
+  await page.locator('#overviewStorage>summary').click();await page.locator('#refreshCapacity').click();const cards=page.locator('#capacityCards .capacity-card');await expect(cards).toHaveCount(3);await expect(cards.nth(0)).toContainText('512 GiB frei');await expect(cards.nth(1)).toContainText('256 GiB frei');
+  await page.getByRole('link',{name:/Backup-Ziele$/}).click(); if ((await page.locator('#pbsSettings').getAttribute('open')) === null) await page.locator('#pbsSettings>summary').click();await page.getByLabel('Speicherwarnung ab Belegung (%)',{exact:true}).fill('50');await page.getByRole('button',{name:'Backup-Ziele speichern',exact:true}).click();await expect(page.locator('#settingsResult')).toContainText('Gespeichert');
+  await page.locator('#targetStorage>summary').click();await expect(page.locator('#targetCapacityCards .capacity-card').nth(0)).toContainText('Wenig Platz');await page.reload();await expect(page.getByLabel('Speicherwarnung ab Belegung (%)',{exact:true})).toHaveValue('50');
   const after=(await(await page.request.get('/api/status')).json()).config;expect(after.schedules).toEqual(current.schedules);await page.screenshot({path:testInfo.outputPath('capacity-targets.png'),fullPage:true});
 });
 

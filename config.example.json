@@ -89,7 +89,8 @@
     "windowEnabled": false,
     "start": "22:00",
     "end": "06:00",
-    "rateMiB": 0
+    "rateMiB": 0,
+    "driveRateMiB": 0
   },
   "gdrive": {
     "remote": "gdrive",

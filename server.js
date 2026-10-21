@@ -57,12 +57,12 @@ function environment(target = 'primary') {
   return { ...env, PBS_REPOSITORY: config.repository, PBS_PASSWORD: config.password, PBS_FINGERPRINT: config.fingerprint, PBS_NAMESPACE: config.namespace };
 }
 backups = createBackups({ state, data: DATA, persist, getConfig, inspectPath, environment, log: history.log, archive: history.archive, notify: notifier.notify, isMaintenance, isBlocked: () => drive?.active, getSourceSize: source => sourceSizes.peek(source), onBatchComplete: batch => notifier.notify('summary/'+batch.id, backupSummary(batch), {success:true,warning:batch.results.some(result=>result.status!=='success')}) });
-drive = require('./lib/gdrive').createDrive({ getConfig, state, persist, data: DATA, inspectPath, blocked: () => backups.busy || pbs?.busy || capacity?.busy || isMaintenance() || backups.paused });
+drive = require('./lib/gdrive').createDrive({ getConfig, state, persist, data: DATA, inspectPath, notify: notifier.notify, blocked: () => backups.busy || pbs?.busy || capacity?.busy || isMaintenance() || backups.paused });
 const driveTimer = setInterval(() => drive.tick(), 10000);
 const scheduler = createScheduler({ getConfig, state, persist, backups, log: history.log, notify: notifier.notify, isMaintenance });
 pbs = createPBS({ getConfig, environment, run, cacheFile: path.join(DATA, 'pbs.json'), save: saveJSON });
 capacity = createCapacity({getConfig,environment,run,save:saveJSON,cacheFile:path.join(DATA,'capacity.json')});
-async function pollCapacity(){ if(backups.busy||drive.busy||pbs.busy||capacity.busy||isMaintenance())return; for(const target of targetsFor(getConfig())){if(backups.busy||isMaintenance())break;if(capacity.due(target.id))await capacity.refresh(target.id);} }
+async function pollCapacity(){ if(backups.busy||drive.busy||pbs.busy||capacity.busy||isMaintenance())return; for(const target of targetsFor(getConfig())){if(backups.busy||isMaintenance())break;if(capacity.due(target.id))await capacity.refresh(target.id);} if(drive.capacityDue())await drive.refreshCapacity(); }
 const capacityTimer=setInterval(()=>void pollCapacity().catch(()=>console.warn('Speicherstand konnte nicht gespeichert werden.')),60000);
 void pollCapacity().catch(()=>console.warn('Speicherstand konnte nicht gespeichert werden.'));
 const system = createSystem({ run, getConfig, storageChecks });
@@ -127,9 +127,9 @@ const server = http.createServer(async (req, res) => {
       const folders = snapshot.sources.map((source, index) => ({ ...source, targetRepository: repositoryFor(snapshot, source.target), ...mounts[index], pbsCheckAfter: state.pbsCheckAfter[source.target || 'primary'] || null, comparison: compareRuns(source, snapshot, state), job: state.jobs[source.id] || { status: 'idle' }, schedule: snapshot.schedules[source.id], health: healthFor(snapshot.schedules[source.id], snapshot.timezone, new Date(), state.watchSince[source.id], state.jobs[source.id], snapshot.staleAfterDays, state.triggered[source.id]) }));
       sourceSizes.retain(snapshot.sources);
       for (const folder of folders) folder.size = sourceSizes.read(folder, folder.ok);
-      return json(res, 200, { system: { ...await system.inspect(), timezone: snapshot.timezone }, drive: drive.snapshot(), folders, capacities: capacity.all(), timeline: createTimeline(snapshot, state), discovery: discovery.current(), targets: targetsFor(snapshot), connections: pbs.connections(), connection: pbs.lastConnection, config: configs.safe(snapshot), pbs: { checkedAt: pbs.current().checkedAt, count: pbs.current().count || 0, error: pbs.current().error || '' } });
+      return json(res, 200, { system: { ...await system.inspect(), timezone: snapshot.timezone }, drive: drive.snapshot(), folders, capacities: { ...capacity.all(), gdrive: drive.capacity() }, timeline: createTimeline(snapshot, state), discovery: discovery.current(), targets: targetsFor(snapshot), connections: pbs.connections(), connection: pbs.lastConnection, config: configs.safe(snapshot), pbs: { checkedAt: pbs.current().checkedAt, count: pbs.current().count || 0, error: pbs.current().error || '' } });
     }
-    if (req.method === 'POST' && url.pathname === '/api/capacity/refresh') { await Promise.all(targetsFor(getConfig()).map(target=>capacity.refresh(target.id))); return json(res,200,{capacities:capacity.all()}); }
+    if (req.method === 'POST' && url.pathname === '/api/capacity/refresh') { if (backups.busy || drive.busy || isMaintenance()) return json(res, 200, { capacities:{ ...capacity.all(), gdrive:drive.capacity() }, deferred:true }); await Promise.all(targetsFor(getConfig()).map(target=>capacity.refresh(target.id))); const google = await drive.refreshCapacity(); return json(res,200,{capacities:{ ...capacity.all(), gdrive:google }, deferred:Boolean(google.deferred)}); }
     if (req.method === 'GET' && url.pathname === '/api/planning') return json(res,200,planSuggestions(getConfig(),state));
     if (req.method === 'POST' && url.pathname === '/api/planning/apply') {
       const input=await body(req), plan=planSuggestions(getConfig(),state), suggestion=plan.suggestions.find(item=>item.id===input.id&&item.time===input.time);

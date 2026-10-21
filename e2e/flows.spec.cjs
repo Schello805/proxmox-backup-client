@@ -131,7 +131,7 @@ test('Mobile Navigation und Einstellungen ohne horizontales Seiten-Scrollen', as
 
 
 test('Zweiten Datastore einrichten, Quelle zuweisen und getrennten PBS-Bestand prüfen', async ({ page, app }, testInfo) => {
-  await login(page); await page.getByRole('link', { name: /Backup-Ziele$/ }).click();
+  await login(page); await page.getByRole('link', { name: /Backup-Ziele$/ }).click(); if ((await page.locator('#pbsSettings').getAttribute('open')) === null) await page.locator('#pbsSettings>summary').click();
   await page.getByRole('textbox', { name: /^Datastore 2/ }).fill('archive-store');
   await page.getByRole('button', { name: 'Backup-Ziele speichern' }).click(); await expect(page.locator('#settingsResult')).toContainText(/gespeichert/i);
   await page.getByRole('button', { name: 'Verbindung prüfen', exact: true }).click();
@@ -158,7 +158,7 @@ test('Zweiten Datastore einrichten, Quelle zuweisen und getrennten PBS-Bestand p
   await page.getByRole('region', { name: 'Sicherungen auf dem PBS' }).getByRole('button', { name: 'Schließen' }).click();
   await page.screenshot({ path: testInfo.outputPath('two-datastores.png') });
   await page.reload(); await expect(page.locator('tr[data-folder="software"] .source-target')).toHaveText('archive-store');
-  await page.getByRole('link', { name: /Backup-Ziele$/ }).click();
+  await page.getByRole('link', { name: /Backup-Ziele$/ }).click(); if ((await page.locator('#pbsSettings').getAttribute('open')) === null) await page.locator('#pbsSettings>summary').click();
   await page.getByRole('textbox', { name: /^Datastore 2/ }).fill(''); await page.getByRole('button', { name: 'Backup-Ziele speichern' }).click();
   await expect(page.locator('#settingsResult')).toContainText('noch von Quellen verwendet');
 });
@@ -232,7 +232,7 @@ test('Navigation als Seiten und Drilldown: Quelle und Wochenplan direkt in der �
   await page.goBack(); await expect(detail.getByLabel('Uhrzeit', { exact: true })).toHaveValue('04:25');
   await page.reload(); await expect(detail).toBeVisible(); await expect(detail.getByLabel('Name', { exact: true })).toHaveValue('Software neu');
   await detail.getByRole('button', { name: 'Schließen', exact: true }).click(); await expect(detail).not.toBeVisible();
-  await page.getByRole('link', { name: /Backup-Ziele$/ }).click();
+  await page.getByRole('link', { name: /Backup-Ziele$/ }).click(); if ((await page.locator('#pbsSettings').getAttribute('open')) === null) await page.locator('#pbsSettings>summary').click();
   const first = await page.getByRole('textbox', { name: 'Datastore 1', exact: true }).boundingBox();
   const second = await page.getByRole('textbox', { name: /^Datastore 2/ }).boundingBox();
   expect(Math.abs(first.y - second.y)).toBeLessThan(2);

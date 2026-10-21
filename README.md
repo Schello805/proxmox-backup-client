@@ -49,7 +49,7 @@ Konfiguration und Verlauf: `/var/lib/qnap-backup/`. Backups laufen nacheinander 
 
 [Vollständige Google-Drive-Einrichtung](docs/GOOGLE-DRIVE.md): Google-Client-ID, jede Rclone-Abfrage, Anmeldung ohne Browser und erster Test. Auch direkt in der App unter **Anleitung → Google Drive vollständig einrichten**.
 
-Die Übersicht zeigt Drive-Quellen, eigenen Zeitplan, nächsten Termin, letzten Erfolg und Fortschritt; Kopien lassen sich dort starten und abbrechen. Normale Dateien je Quelle in einem eigenen Zielunterordner: Änderungen ersetzen vorhandene Dateien, entfernte Quelldateien bleiben im Ziel. Keine eigene Versionsaufbewahrung. Die Google-Anmeldung in `rclone.conf` separat schützen und sichern; sie gehört nicht zum Einstellungs-Export.
+Backup-Ziele und Speicherstände sind aufklappbar; die Google-Kontoquote ergänzt die PBS-Speicherstände. PBS und Google Drive haben getrennte Upload-Limits; aktiviertes ntfy meldet auch Drive-Fehler. Die Übersicht zeigt Drive-Quellen, eigenen Zeitplan, nächsten Termin, letzten Erfolg und Fortschritt; Kopien lassen sich dort starten und abbrechen. Normale Dateien je Quelle in einem eigenen Zielunterordner: Änderungen ersetzen vorhandene Dateien, entfernte Quelldateien bleiben im Ziel. Keine eigene Versionsaufbewahrung. Die Google-Anmeldung in `rclone.conf` separat schützen und sichern; sie gehört nicht zum Einstellungs-Export.
 
 ## Entwicklung
 

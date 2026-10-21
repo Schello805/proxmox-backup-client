@@ -2113,3 +2113,10 @@ a.nav { display: block; text-decoration: none; box-sizing: border-box; }
 @media(max-width:760px) { .drive-overview-main { min-width:0; flex-basis:100%; } .drive-overview .hint { overflow-wrap:anywhere; } }
 .drive-overview:not(.is-configured) .drive-overview-main>.hint { display:none; }
 #driveOverview { margin-top:12px; }
+.target-accordion { margin:0 0 14px; }
+.target-accordion>summary { padding:18px 22px; cursor:pointer; color:var(--green); font-weight:650; }
+.target-accordion[open]>summary { border-bottom:1px solid var(--line); }
+#driveSettings #drivePanel { margin-top:0; }
+#targetStorage>.capacity-panel, #overviewStorage>.capacity-panel { padding:22px; }
+#pbsSettings .form-panel { margin:0; }
+@media(max-width:760px) { .target-accordion>summary { padding:16px 14px; } #targetStorage>.capacity-panel, #overviewStorage>.capacity-panel { padding:14px; } }
