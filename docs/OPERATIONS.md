@@ -217,3 +217,20 @@ Unter **Einstellungen → Benachrichtigungen über ntfy → Auch Erfolgszusammen
 In der Übersicht **Abbrechen** am Auftrag oder **Alle abbrechen** wählen. Letzteres entfernt zuerst die Warteschlange und stoppt danach den aktiven Client. Während **Wird abgebrochen** bleibt das Update gesperrt. Falls nötig folgt nach fünf Sekunden ein erzwungener Prozessabbruch; freigegeben wird erst nach dem tatsächlichen Prozessende. Abgebrochene Aufträge bleiben im Verlauf und werden nicht als erfolgreiche Sicherung gewertet. Vorhandene PBS-Sicherungen werden nicht gelöscht.
 
 Bei älteren Versionen ohne Abbruchfunktion kann `systemctl restart qnap-backup` laufende App-Sicherungen beenden. Wartende Aufträge werden beim Neustart als unterbrochen archiviert. Danach das reguläre Update ausführen.
+
+
+### Warteschlange und Startfenster
+
+Unter der Quellentabelle die Warteschlange öffnen: wartende Aufträge nach oben/unten verschieben, entfernen oder nach dem aktuellen Backup pausieren. „Fortsetzen“ gibt die verbleibenden Aufträge frei. Die Pause bleibt bei einem Dienstneustart erhalten; offene Aufträge werden wie bisher beim Neustart als unterbrochen archiviert und müssen neu gestartet werden. Vor einem App-Update die Warteschlange abschließen oder abbrechen.
+
+Unter Einstellungen ein globales Startfenster festlegen (auch über Mitternacht). Es gilt in der eingestellten Zeitzone für manuelle und geplante Aufträge. Außerhalb warten neue Aufträge; laufende Sicherungen werden fertiggestellt. Die Warteschlange prüft etwa alle zehn Sekunden, ob sie weiterlaufen darf. Das ist kein hartes Ende laufender Backups am Fensterende.
+
+Upload-Limit in MiB/s: 0 bedeutet unbegrenzt. Änderungen gelten beim nächsten Client-Start, auch wenn Aufträge bereits warten. Technisch werden `--rate` und `--burst` in Bytes an den Client übergeben; siehe [Proxmox-Client-Dokumentation](https://pbs.proxmox.com/docs/proxmox-backup-client/man1.html).
+
+### Laufvergleich und Einstellungen sichern
+
+Quelle anklicken → Verlauf: letzte erfolgreiche Dauer, verarbeitete Daten und Upload mit Vergleich zum vorherigen erfolgreichen Lauf am selben Pfad, Ziel und Namespace. Fehlende Client-Messwerte bleiben unbekannt. Die Kennzahlen sind keine Dateiliste und keine Aussage über eine vollständige inhaltliche Änderungserkennung.
+
+Einstellungen → Export: standardmäßig ohne PBS-Passwörter oder ntfy-Token. Nur die ausdrückliche Auswahl exportiert Zugangsdaten im Klartext; das App-Passwort aus der Environment-Datei wird nie exportiert. Beim Wiederherstellen zuerst Datei prüfen und Änderungsvorschau lesen, dann übernehmen. Die App-Anmeldung bleibt unverändert. Fehlende Zugangsdaten werden nur bei unveränderter Server-/Benutzer-Zuordnung übernommen, ansonsten müssen sie neu eingetragen werden. Der zweite PBS kann dafür als noch nicht vollständig eingerichtetes Ziel gespeichert werden; Backups bleiben ohne Zugang gesperrt.
+
+Vor dem Übernehmen alle Aufträge beenden. Der Server prüft die Datei erneut, weist eine veraltete Vorschau ab und sichert den bisherigen Stand unter `/var/lib/qnap-backup/config-before-restore-*.json` (nur für den Dienstbenutzer lesbar). Konfigurationsdateien enthalten Geheimnisse und gehören nicht ins Repository. Historie und PBS-Sicherungen bleiben erhalten. Mounts und Pakete werden durch den Import nicht eingerichtet.

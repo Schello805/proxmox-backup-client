@@ -10,7 +10,7 @@ test('Neustart archiviert unterbrochene Läufe einmalig und erhält Beobachtungs
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(),'qnap-restart-'));
   const configFile=path.join(tmp,'config.json'), stateFile=path.join(tmp,'state.json');
   fs.writeFileSync(configFile,JSON.stringify({repository:'',password:'',fingerprint:'',namespace:'',schedules:{software:'02:30'}}));
-  fs.writeFileSync(stateFile,JSON.stringify({jobs:{software:{status:'running',startedAt:'2026-10-19T00:00:00Z'}},triggered:{},watchSince:{software:'2026-10-18T00:00:00Z'}}));
+  fs.writeFileSync(stateFile,JSON.stringify({jobs:{software:{status:'running',startedAt:'2026-10-19T00:00:00Z'}},queueControl:{paused:true},triggered:{},watchSince:{software:'2026-10-18T00:00:00Z'}}));
   fs.writeFileSync(path.join(tmp,'software.log'),'Unterbrochenes Testprotokoll');
   let child;
   t.after(async()=>{ if(child && child.exitCode===null){child.kill('SIGTERM');await once(child,'exit');} fs.rmSync(tmp,{recursive:true,force:true}); });
@@ -20,7 +20,7 @@ test('Neustart archiviert unterbrochene Läufe einmalig und erhält Beobachtungs
   }
   await start();
   let state=JSON.parse(fs.readFileSync(stateFile));
-  assert.equal(state.jobs.software.status,'interrupted'); assert.equal(state.history.software.length,1); assert.equal(state.watchSince.software,'2026-10-18T00:00:00Z');
+  assert.equal(state.queueControl.paused,true); assert.equal(state.jobs.software.status,'interrupted'); assert.equal(state.history.software.length,1); assert.equal(state.watchSince.software,'2026-10-18T00:00:00Z');
   const id=state.history.software[0].runId; assert.match(fs.readFileSync(path.join(tmp,'history','software',id+'.log'),'utf8'),/Testprotokoll/);
   child.kill('SIGTERM');await once(child,'exit'); await start();
   state=JSON.parse(fs.readFileSync(stateFile)); assert.equal(state.history.software.length,1); assert.equal(state.history.software[0].runId,id);

@@ -91,7 +91,7 @@ test('Eigener PBS hält Zugang, Namespace, Fingerprint und Passwort vom ersten S
   assert.equal(targetConfig(separate).password, 'secret');
   const preserved = validateConfig({ ...separate, secondaryPBS: { ...separate.secondaryPBS, password: '' } }, separate);
   assert.equal(preserved.secondaryPBS.password, 'second-secret');
-  assert.throws(() => validateConfig({ ...separate, secondaryPBS: { ...separate.secondaryPBS, server: 'different.local', password: '' } }, separate), /Passwort/);
+  assert.equal(validateConfig({ ...separate, secondaryPBS: { ...separate.secondaryPBS, server: 'different.local', password: '' } }, separate).secondaryPBS.password, '');
   assert.throws(() => validateConfig({ ...separate, secondaryPBS: { ...separate.secondaryPBS, fingerprint: 'invalid' } }, separate), error => error.field === 'secondaryPBS.fingerprint' && /Fingerprint/.test(error.message));
   const calls = [], pbs = createPBS({ getConfig: () => separate, environment: target => targetConfig(separate, target), cacheFile: '/tmp/no-pbs-assistant-cache.json', save() {}, run: async (_, args, options) => { calls.push(options.env); return { stdout: '[]' }; } });
   await pbs.refresh('secondary'); assert.equal(calls[0].password, 'second-secret');

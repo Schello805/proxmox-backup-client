@@ -7,6 +7,8 @@ const { promisify } = require('node:util');
 const { loadConfig, loadState, saveJSON, checkRuntime, acquireLock } = require('./lib/storage');
 const { createConfigService } = require('./lib/config-service');
 const { createHistory } = require('./lib/history');
+const { exportConfig, previewRestore, revision } = require('./lib/config-backup');
+const { compareRuns } = require('./lib/run-comparison');
 const { createBackups } = require('./lib/backups');
 const { createScheduler } = require('./lib/scheduler');
 const { createPBS } = require('./lib/pbs');
@@ -82,7 +84,7 @@ const server = http.createServer(async (req, res) => {
       if (req.headers['x-requested-with'] !== 'qnap-dashboard') return json(res, 403, { error: 'Anfrage-Header fehlt.' });
     }
     // Nur die App-Hülle ist öffentlich. Daten und Aktionen benötigen eine Sitzung.
-    const assets = { '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], ...Object.fromEntries(['api','views','forms','maintenance','assistant','timeline','problems','operations'].map(name => ['/js/' + name + '.js', ['js/' + name + '.js', 'text/javascript']])) };
+    const assets = { '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], ...Object.fromEntries(['api','views','forms','maintenance','assistant','timeline','problems','operations','controls'].map(name => ['/js/' + name + '.js', ['js/' + name + '.js', 'text/javascript']])) };
     if (req.method === 'GET' && assets[url.pathname]) {
       const [file, type] = assets[url.pathname]; res.writeHead(200, { 'Content-Type': `${type}; charset=utf-8`, 'Cache-Control': 'no-cache' });
       return res.end(fs.readFileSync(path.join(ROOT, 'public', file)));
@@ -105,7 +107,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/logout') { auth.logout(req, res); return json(res, 200, { success: true }); }
     if (req.method === 'GET' && url.pathname === '/api/activity') {
       const file = backups.active ? path.join(DATA, backups.active.folder + '.log') : null;
-      return json(res, 200, { maintenance: isMaintenance(), health: Object.fromEntries(configs.get().sources.map(source => [source.id, scheduler.health(source.id)])), notification: state.notification || null, jobs: Object.fromEntries(configs.get().sources.map(source => [source.id, { ...(state.jobs[source.id] || { status: 'idle' }), estimate: estimateProgress(state.jobs[source.id]) }])), active: backups.active?.folder || null, phase: backups.active ? (backups.active.child ? 'backup' : 'checking') : 'idle', queue: backups.queue, log: file && fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '' });
+      return json(res, 200, { maintenance: isMaintenance(), health: Object.fromEntries(configs.get().sources.map(source => [source.id, scheduler.health(source.id)])), notification: state.notification || null, jobs: Object.fromEntries(configs.get().sources.map(source => [source.id, { ...(state.jobs[source.id] || { status: 'idle' }), estimate: estimateProgress(state.jobs[source.id]) }])), active: backups.active?.folder || null, phase: backups.active ? (backups.active.child ? 'backup' : 'checking') : 'idle', queue: backups.queue, paused: backups.paused, waitingReason: backups.waitingReason, backupPolicy: getConfig().backupPolicy, timezone: getConfig().timezone, log: file && fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '' });
     }
     if (req.method === 'POST' && url.pathname === '/api/refresh') {
       sourceSizes.invalidate();
@@ -114,7 +116,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/status') {
       const snapshot = configs.get();
       const mounts = await mountStatus.read(snapshot.sources);
-      const folders = snapshot.sources.map((source, index) => ({ ...source, targetRepository: repositoryFor(snapshot, source.target), ...mounts[index], job: state.jobs[source.id] || { status: 'idle' }, schedule: snapshot.schedules[source.id], health: healthFor(snapshot.schedules[source.id], snapshot.timezone, new Date(), state.watchSince[source.id], state.jobs[source.id], snapshot.staleAfterDays, state.triggered[source.id]) }));
+      const folders = snapshot.sources.map((source, index) => ({ ...source, targetRepository: repositoryFor(snapshot, source.target), ...mounts[index], comparison: compareRuns(source, snapshot, state), job: state.jobs[source.id] || { status: 'idle' }, schedule: snapshot.schedules[source.id], health: healthFor(snapshot.schedules[source.id], snapshot.timezone, new Date(), state.watchSince[source.id], state.jobs[source.id], snapshot.staleAfterDays, state.triggered[source.id]) }));
       sourceSizes.retain(snapshot.sources);
       for (const folder of folders) folder.size = sourceSizes.read(folder, folder.ok);
       return json(res, 200, { system: { ...await system.inspect(), timezone: snapshot.timezone }, folders, capacities: capacity.all(), timeline: createTimeline(snapshot, state), discovery: discovery.current(), targets: targetsFor(snapshot), connections: pbs.connections(), connection: pbs.lastConnection, config: configs.safe(snapshot), pbs: { checkedAt: pbs.current().checkedAt, count: pbs.current().count || 0, error: pbs.current().error || '' } });
@@ -129,6 +131,19 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/config') {
       configs.apply(await body(req));
       return json(res, 200, { success: true });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/queue') { const input = await body(req); backups.control(input.action, input.id, input.direction); return json(res, 200, { success: true }); }
+    if (req.method === 'POST' && url.pathname === '/api/backup-policy') { configs.setPolicy(await body(req)); backups.tick(); return json(res, 200, { success: true }); }
+    if (req.method === 'POST' && url.pathname === '/api/config/export') return json(res, 200, exportConfig(getConfig(), (await body(req)).includeSecrets ?? false));
+    if (req.method === 'POST' && ['/api/config/restore/preview','/api/config/restore/apply'].includes(url.pathname)) {
+      const input = await body(req), prepared = previewRestore(input.backup, getConfig());
+      if (url.pathname.endsWith('/preview')) return json(res, 200, prepared.summary);
+      if (input.revision !== revision(getConfig())) return json(res, 409, { error: 'Einstellungen haben sich geändert. Vorschau erneut laden.' });
+      if (backups.busy || pbs.busy || capacity.busy) return json(res, 409, { error: 'Vor der Wiederherstellung alle Aufträge beenden.' });
+      const backupFile = 'config-before-restore-' + Date.now() + '-' + require('node:crypto').randomUUID() + '.json';
+      saveJSON(path.join(DATA, backupFile), getConfig());
+      configs.apply(prepared.candidate, { replaceSecrets: true });
+      return json(res, 200, { success: true, backupFile });
     }
     if (req.method === 'POST' && url.pathname === '/api/preferences') {
       const input = await body(req); configs.apply({ ...configs.get(), timezone: input.timezone, staleAfterDays: input.staleAfterDays });
@@ -170,7 +185,7 @@ const server = http.createServer(async (req, res) => {
     const history = url.pathname.match(/^\/api\/history\/([a-z][a-z0-9_-]{0,39})(?:\/([a-f0-9-]{36}))?$/);
     if (req.method === 'GET' && history && configs.sourceFor(history[1])) {
       const entries = state.history[history[1]] || [];
-      if (!history[2]) return json(res, 200, { entries });
+      if (!history[2]) return json(res, 200, { entries, comparison: compareRuns(configs.sourceFor(history[1]), getConfig(), state) });
       if (!entries.some(entry => entry.runId === history[2])) return json(res, 404, { error: 'Protokoll nicht mehr im Verlauf.' });
       return json(res, 200, { log: fs.readFileSync(path.join(DATA, 'history', history[1], history[2] + '.log'), 'utf8') });
     }

@@ -2052,3 +2052,25 @@ a.nav { display: block; text-decoration: none; box-sizing: border-box; }
   font-size: 11px;
 }
 #overview #queueInfo { grid-column: 1; }
+
+.queue-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); padding: 8px 0; }
+.queue-row .actions { margin: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+#queueList { list-style: none; padding: 0; margin: 0; }
+.run-metrics { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; margin: 12px 0; }
+.run-metrics>div { border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+.run-metrics small { display: block; color: var(--muted); font-size: 11px; }
+.run-metrics strong { display: block; margin: 5px 0; font-size: 17px; }
+#policyForm { margin: 18px 0; }
+@media(max-width:760px) { .run-metrics { grid-template-columns: 1fr; } .queue-row { align-items: flex-start; flex-direction: column; } }
+
+#policyForm { margin: 12px 0 0; }
+.policy-fields { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
+#preferencesForm { padding: 18px 22px; }
+#preferencesForm .preferences-grid { margin-top: 12px; gap: 12px; }
+#preferencesForm label { margin-top: 0; }
+#preferencesForm select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 5px; background: #fbfdfb; color: inherit; font: inherit; }
+#preferencesForm .actions { margin-top: 14px; }
+#overview #historyDialog table { table-layout: auto; }
+#overview #historyDialog th { width: auto; }
+#historyDialog th, #historyDialog td { white-space: nowrap; }
+@media(max-width:760px) { .policy-fields { grid-template-columns: 1fr; } }

@@ -84,5 +84,11 @@
   "secondaryDatastore": "",
   "schemaVersion": 4,
   "secondaryPBS": null,
-  "capacityWarnPercent": 90
+  "capacityWarnPercent": 90,
+  "backupPolicy": {
+    "windowEnabled": false,
+    "start": "22:00",
+    "end": "06:00",
+    "rateMiB": 0
+  }
 }

@@ -1,3 +1,4 @@
+import { installControls } from '/js/controls.js';
 import { installOperations } from '/js/operations.js';
 import { installTimeline } from '/js/timeline.js';
 import { sourceProblem } from '/js/problems.js';
@@ -7,7 +8,7 @@ import { createAPI } from '/js/api.js';
 import { createViews, dayNames } from '/js/views.js';
 import { createFormState, clearFieldErrors, showFieldErrors, serverField, validateMainForm, validateNotifyForm, validateSourceForm } from '/js/forms.js';
 'use strict';
-let assistant, timeline, operations;
+let assistant, timeline, operations, controls;
 let lastTargets = [], lastConnections = {}, lastPreferencesSnapshot = null;
 const refreshWaiters = [];
 const $ = selector => document.querySelector(selector);
@@ -103,7 +104,7 @@ async function refresh() {
     $('#systemInfo').replaceChildren();
     for (const [label, value] of [['Host', data.system.hostname], ['System', data.system.platform], ['Backup Client', data.system.client], ['Zeitpläne', data.system.timezone]]) { const item = element('span'); item.append(element('strong', label), document.createTextNode(value)); $('#systemInfo').append(item); }
     if (data.folders.some(folder => folder.checking)) setTimeout(() => { if (authenticated) void refresh(); }, 1000);
-    fillForm(data.config); loaded = true; $('#backupAll').disabled = false; timeline?.update(data.timeline); operations?.update(data); if (sourceEditing) renderSourceProblem(sourceEditing);
+    fillForm(data.config); loaded = true; $('#backupAll').disabled = false; timeline?.update(data.timeline); operations?.update(data); controls?.update(data); if (sourceEditing) renderSourceProblem(sourceEditing);
     const connectionMessages = (data.targets || []).filter(target => data.connections?.[target.id]).map(target => `${target.name}: ${data.connections[target.id].message} (${date(data.connections[target.id].checkedAt)})`);
     $('#connectionResult').textContent = connectionMessages.join(' · ');
     await refreshActivity();
@@ -278,6 +279,7 @@ async function refreshActivity() {
       if (warnings) { $('#activityBadge').textContent = `${warnings} Hinweis${warnings > 1 ? 'e' : ''}`; $('#activityBadge').className = 'badge busy'; }
     }
     if (data.maintenance && !data.active) { $('#activityTitle').textContent = 'Wartung / Update'; $('#activityBadge').textContent = 'Pausiert'; $('#activityBadge').className = 'badge busy'; $('#activityDescription').textContent = 'Neue Backups sind während des Updates gesperrt.'; }
+    controls?.activity(data);
     if (data.notification && !$('#notifyDetails').open) $('#notificationResult').textContent = `${data.notification.message} (${date(data.notification.at)})`;
     if (logFolder) await refreshLog();
   } catch (e) { if (authenticated) { $('#activityBadge').textContent = 'Verbindung unterbrochen'; $('#activityBadge').className = 'badge bad'; notice(e.message, true); } }
@@ -347,9 +349,10 @@ async function openHistory(id) {
   try {
     const data = await api(`/api/history/${id}`), folder = folderData.find(item => item.id === id), health = lastHealth[id] || folder.health;
     $('#historySummary').textContent = `${folder.path} · Ziel: ${folder.targetRepository || 'Noch nicht konfiguriert'} · ${nextText(health)} (${activeTimezone})${health?.message ? ' · ' + health.message : ''}`;
-    if (!data.entries.length) { const row = element('tr'), cell = element('td', 'Noch keine abgeschlossenen App-Läufe.'); cell.colSpan = 5; row.append(cell); $('#historyRows').append(row); }
+    controls?.comparison(data.comparison);
+    if (!data.entries.length) { const row = element('tr'), cell = element('td', 'Noch keine abgeschlossenen App-Läufe.'); cell.colSpan = 7; row.append(cell); $('#historyRows').append(row); }
     for (const entry of data.entries) {
-      const row = element('tr'); row.append(element('td', entry.startedAt ? date(entry.startedAt) : 'Unbekannt'), element('td', statuses[entry.status]), element('td', entry.durationSeconds === null ? '—' : `${Math.floor(entry.durationSeconds / 60)} min ${entry.durationSeconds % 60} s`), element('td', entry.source === 'schedule' ? 'Zeitplan' : entry.source === 'manual' ? 'Manuell' : 'Altbestand'));
+      const row = element('tr'); row.append(element('td', entry.startedAt ? date(entry.startedAt) : 'Unbekannt'), element('td', statuses[entry.status]), element('td', entry.durationSeconds === null ? '—' : `${Math.floor(entry.durationSeconds / 60)} min ${entry.durationSeconds % 60} s`), element('td', formatBytes(entry.progress?.processedBytes)), element('td', formatBytes(entry.progress?.uploadedBytes)), element('td', entry.source === 'schedule' ? 'Zeitplan' : entry.source === 'manual' ? 'Manuell' : 'Altbestand'));
       const cell = element('td'), button = element('button','Öffnen','row-action'); button.addEventListener('click', () => openLog(id, entry.runId)); cell.append(button); row.append(cell); row.title = [entry.repository && 'Ziel: ' + entry.repository, entry.error].filter(Boolean).join(' · '); const target = element('small', entry.repository || 'Ziel unbekannt', 'history-target'); row.firstElementChild.append(target); $('#historyRows').append(row);
     }
   } catch (e) { $('#historySummary').textContent = e.message; }
@@ -505,3 +508,5 @@ function renderSourceProblem(id) {
 timeline = installTimeline({ element, openSource: id => editSource(id, true) });
 
 operations = installOperations({api,element,refresh,date});
+
+controls = installControls({ api, element, refresh, refreshActivity, notice, date, getNames: () => names, onRestored: () => { for (const id of ['configForm','preferencesForm','authForm','notifyForm']) formState.clean(id, formState.capture(id)); lastMainSnapshot = lastPreferencesSnapshot = lastNotifySnapshot = null; loaded = false; } });

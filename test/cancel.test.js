@@ -52,3 +52,20 @@ test('All backups skip missing target credentials and maintenance never partiall
   const f = fixture(t, { getConfig: () => config }); const result = f.backups.enqueueAll(); assert.deepEqual(result.added, []); assert.equal(result.skipped.length, 6); assert.equal(f.backups.busy, false);
   const maintenance = fixture(t, { isMaintenance: () => true }); assert.throws(() => maintenance.backups.enqueueAll(), { status: 409 }); assert.equal(maintenance.backups.busy, false);
 });
+test('Pause, move and remove preserve the running job; resume follows edited order',async t=>{
+ const batches=[];const f=fixture(t,{onBatchComplete:batch=>batches.push(batch)});f.backups.enqueueAll();await tick();
+ f.backups.control('pause');f.backups.control('move','serien','up');assert.equal(f.backups.active.folder,'software');assert.equal(f.backups.queue[0],'serien');
+ f.backups.cancel('filme');f.children[0].emit('close',0);await tick();assert.equal(f.backups.active,null);assert.equal(f.backups.waitingReason,'paused');assert.equal(f.backups.busy,true);
+ f.backups.control('resume');await tick();assert.equal(f.backups.active.folder,'serien');f.backups.control('pause');f.children[1].emit('close',0);await tick();
+ f.backups.cancelAll();assert.equal(f.backups.busy,false);assert.equal(batches.length,1);assert.throws(()=>f.backups.control('move','software','up'),{status:409});
+});
+test('Outside start window queues wait, clock change starts them and client receives byte rate',async t=>{
+ const config=validateConfig({repository:'user@pbs@pbs:store',password:'secret',fingerprint:'',namespace:'',schedules:{},authEnabled:false,backupPolicy:{windowEnabled:true,start:'22:00',end:'06:00',rateMiB:10}},{password:''});
+ let time=new Date('2026-10-21T12:00:00Z');const calls=[];const {EventEmitter}=require('node:events');
+ const f=fixture(t,{getConfig:()=>config,now:()=>time,spawnProcess:(_,args)=>{calls.push(args);const child=new EventEmitter();child.stdout=new EventEmitter();child.stderr=new EventEmitter();f.children.push(child);return child;}});
+ f.backups.enqueueAll();assert.equal(f.backups.active,null);assert.equal(f.backups.waitingReason,'window');time=new Date('2026-10-21T20:00:00Z');f.backups.tick();await tick();assert.equal(f.backups.active.folder,'software');assert.equal(calls[0][calls[0].indexOf('--rate')+1],'10485760');
+ time=new Date('2026-10-22T05:00:00Z');f.children[0].emit('close',0);await tick();assert.equal(f.backups.active,null);assert.equal(f.backups.queue.length,5);f.backups.cancelAll();
+});
+test('Pause during preflight requeues instead of starting the client',async t=>{
+ let complete;const f=fixture(t,{inspectPath:()=>new Promise(resolve=>complete=resolve)});f.backups.enqueue('software','manual');f.backups.control('pause');complete({ok:true,mount:{}});await tick();assert.equal(f.children.length,0);assert.equal(f.backups.active,null);assert.deepEqual(f.backups.queue,['software']);f.backups.cancelAll();
+});
