@@ -106,7 +106,7 @@ async function refresh() {
     $('#systemInfo').replaceChildren();
     for (const [label, value] of [['Host', data.system.hostname], ['System', data.system.platform], ['Backup Client', data.system.client], ['Zeitpläne', data.system.timezone]]) { const item = element('span'); item.append(element('strong', label), document.createTextNode(value)); $('#systemInfo').append(item); }
     if (data.folders.some(folder => folder.checking)) setTimeout(() => { if (authenticated) void refresh(); }, 1000);
-    fillForm(data.config); loaded = true; $('#backupAll').disabled = false; timeline?.update(data.timeline); operations?.update(data); controls?.update(data); if (sourceEditing) renderSourceProblem(sourceEditing);
+    fillForm(data.config); drive?.update(data.drive); loaded = true; $('#backupAll').disabled = false; timeline?.update(data.timeline); operations?.update(data); controls?.update(data); if (sourceEditing) renderSourceProblem(sourceEditing);
     const connectionMessages = (data.targets || []).filter(target => data.connections?.[target.id]).map(target => `${target.name}: ${data.connections[target.id].message} (${date(data.connections[target.id].checkedAt)})`);
     $('#connectionResult').textContent = connectionMessages.join(' · ');
     await refreshActivity();
@@ -530,7 +530,7 @@ function renderSourceProblem(id) {
 }
 timeline = installTimeline({ element, openSource: id => editSource(id, true) });
 
-drive = installDrive({ api, element, notice });
+drive = installDrive({ api, element, notice, scheduleText, date });
 operations = installOperations({api,element,refresh,date});
 
 controls = installControls({ api, element, refresh, refreshActivity, notice, date, getNames: () => names, onRestored: () => { for (const id of ['configForm','preferencesForm','authForm','notifyForm']) formState.clean(id, formState.capture(id)); lastMainSnapshot = lastPreferencesSnapshot = lastNotifySnapshot = null; loaded = false; } });

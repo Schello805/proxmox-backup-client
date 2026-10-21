@@ -1,6 +1,6 @@
-export function installDrive({ api, element, notice }) {
+export function installDrive({ api, element, notice, scheduleText, date }) {
   const $ = selector => document.querySelector(selector), form = $('#driveForm');
-  let initialized = false, dirty = false, loading = false;
+  let initialized = false, dirty = false, loading = false, currentJob = null, pendingAction = false;
   const dayNames = ['Mo','Di','Mi','Do','Fr','Sa','So'];
   for (let day = 1; day <= 31; day++) $('#driveMonth').append(new Option(String(day), String(day)));
   $('#driveMonth').append(new Option('Letzter Tag', 'last'));
@@ -9,12 +9,25 @@ export function installDrive({ api, element, notice }) {
   form.addEventListener('input', () => dirty = true); form.addEventListener('change', () => { dirty = true; modeChanged(); });
   function render(job) {
     if (!job) return;
+    currentJob = job;
     const labels = { idle: 'Noch keine Kopie', queued: 'Wartet', running: 'Läuft', cancelling: 'Abbruch läuft', cancelled: 'Abgebrochen', failed: 'Fehlgeschlagen', success: 'Erfolgreich', interrupted: 'Unterbrochen' };
     $('#driveStatus').textContent = labels[job.status] || job.status;
     $('#driveMessage').textContent = job.message || 'Quellen auswählen, speichern und Verbindung prüfen.';
-    $('#driveLast').textContent = job.lastSuccess ? 'Letzter Erfolg: ' + new Date(job.lastSuccess).toLocaleString('de-DE') : 'Noch kein erfolgreicher Lauf';
+    $('#driveLast').textContent = job.lastSuccess ? 'Letzter Erfolg: ' + date(job.lastSuccess) : 'Noch kein erfolgreicher Lauf';
     const busy = ['running','queued','cancelling'].includes(job.status);
-    $('#driveStart').disabled = busy; $('#driveCancel').hidden = !busy; $('#driveCancel').disabled = job.status === 'cancelling';
+    $('#driveStart').disabled = busy || pendingAction || !job.settings?.sources.length; $('#driveCancel').hidden = !busy; $('#driveCancel').disabled = job.status === 'cancelling';
+    const connectionFailed = job.connection?.ok === false && Date.parse(job.connection.checkedAt) > (Date.parse(job.lastSuccess) || 0);
+    const configured = Boolean(job.settings?.sources.length), status = !configured ? 'Keine Quellen' : connectionFailed && !busy ? 'Zugang prüfen' : job.status === 'idle' ? job.connection?.ok ? 'Bereit' : 'Ungeprüft' : labels[job.status] || job.status;
+    const badge = $('#overviewDriveStatus'); badge.textContent = status; badge.className = 'badge ' + (['failed','interrupted'].includes(job.status) || connectionFailed && !busy ? 'bad' : busy ? 'busy' : job.connection?.ok || job.status === 'success' ? 'ok' : '');
+    $('#driveOverview').classList.toggle('is-configured', configured);
+    const selected = (job.sources || []).map(source => source.name).join(', ');
+    $('#overviewDriveSummary').textContent = configured ? `${job.settings.remote}:${job.settings.folder} · ${selected}` : 'Quellen und Google-Zugang unter Backup-Ziele einrichten.';
+    $('#overviewDriveSummary').title = $('#overviewDriveSummary').textContent;
+    $('#overviewDrivePlan').textContent = configured ? `${scheduleText(job.settings.schedule)}${job.nextAt ? ' · Nächster Termin: ' + date(job.nextAt) : ''} · ${job.timezone} · ${job.lastSuccess ? 'Letzter Erfolg: ' + date(job.lastSuccess) : 'Noch kein erfolgreicher Lauf'}` : 'Normale Dateikopie · Zeitplan unabhängig von PBS';
+    $('#overviewDriveStart').disabled = !configured || busy || pendingAction; $('#overviewDriveStart').hidden = busy || !configured;
+    $('#overviewDriveCancel').hidden = !busy; $('#overviewDriveCancel').disabled = job.status === 'cancelling' || pendingAction;
+    $('#overviewDriveProgress').hidden = !busy && !['failed','interrupted'].includes(job.status);
+    $('#overviewDriveProgress').textContent = job.message || '';
     const progress = job.progress, total = progress?.totalBytes, bytes = progress?.bytes;
     $('#driveProgress').hidden = !progress;
     if (progress) {
@@ -22,7 +35,8 @@ export function installDrive({ api, element, notice }) {
       $('#driveProgressText').textContent = `${mb(bytes)} / ${mb(total)} MiB · ${mb(progress.speed)} MiB/s${Number.isFinite(progress.eta) ? ' · ca. ' + Math.ceil(progress.eta / 60) + ' min verbleibend' : ''}`;
       const meter = $('#driveMeter'); if (total > 0) { meter.value = Math.min(100, bytes / total * 100); $('#drivePercent').textContent = Math.floor(meter.value) + ' %'; } else { meter.removeAttribute('value'); $('#drivePercent').textContent = 'Dateien werden ermittelt …'; }
     }
-    $('#driveHistory').replaceChildren(...(job.history || []).map(run => element('li', `${new Date(run.endedAt).toLocaleString('de-DE')} · ${labels[run.status] || run.status} · ${(run.results || []).length} Quellen kopiert${run.message ? ' · ' + run.message : ''}`)));
+    if (busy && progress) $('#overviewDriveProgress').textContent = `${job.message || ''} · ${total > 0 ? Math.floor(Math.min(100, bytes / total * 100)) + ' % · ' : ''}${$('#driveProgressText').textContent} (aktuelle Quelle)`;
+    $('#driveHistory').replaceChildren(...(job.history || []).map(run => element('li', `${date(run.endedAt)} · ${labels[run.status] || run.status} · ${(run.results || []).length} Quellen kopiert${run.message ? ' · ' + run.message : ''}`)));
   }
   async function load() {
     if (loading) return; loading = true;
@@ -47,11 +61,29 @@ export function installDrive({ api, element, notice }) {
     if (mode === 'weekly' && !schedule.days.length) { $('#driveResult').textContent = 'Mindestens einen Wochentag auswählen.'; return; }
     try { await api('/api/gdrive', { remote: form.elements.remote.value, folder: form.elements.folder.value, sources: [...form.querySelectorAll('[name="source"]:checked')].map(input => input.value), schedule }); dirty = false; $('#driveResult').textContent = 'Google-Drive-Einstellungen gespeichert.'; await load(); } catch (error) { $('#driveResult').textContent = error.message; }
   });
-  for (const action of ['check','start','cancel']) $('#drive' + action[0].toUpperCase() + action.slice(1)).addEventListener('click', async event => {
-    if (dirty && action !== 'cancel') { $('#driveResult').textContent = 'Änderungen zuerst speichern.'; return; }
-    const button = event.currentTarget; button.disabled = true;
-    try { $('#driveResult').textContent = action === 'check' ? 'Google-Drive-Verbindung wird geprüft …' : ''; const result = await api('/api/gdrive/' + action, {}); if (action === 'check') $('#driveResult').textContent = result.ok ? 'Google Drive erreichbar (Lesetest). Schreibzugriff wird beim Kopieren geprüft.' : result.message; await load(); } catch (error) { $('#driveResult').textContent = error.message; } finally { button.disabled = false; }
-  });
+  async function perform(action, button, overview = false) {
+    const resultField = $(overview ? '#overviewDriveResult' : '#driveResult');
+    resultField.hidden = false;
+    if (dirty && action !== 'cancel') { resultField.textContent = 'Änderungen zuerst unter Backup-Ziele speichern.'; return; }
+    if (pendingAction) return;
+    pendingAction = true; button.disabled = true;
+    try {
+      resultField.textContent = action === 'check' ? 'Google-Drive-Verbindung wird geprüft …' : '';
+      const result = await api('/api/gdrive/' + action, {});
+      if (action === 'check') resultField.textContent = result.ok ? 'Google Drive erreichbar (Lesetest). Schreibzugriff wird beim Kopieren geprüft.' : result.message;
+      await load();
+    } catch (error) { resultField.textContent = error.message; }
+    finally { if (overview && !resultField.textContent) resultField.hidden = true; pendingAction = false; button.disabled = false; render(currentJob); }
+  }
+  for (const action of ['check','start','cancel']) $('#drive' + action[0].toUpperCase() + action.slice(1)).addEventListener('click', event => void perform(action, event.currentTarget));
+  $('#overviewDriveStart').addEventListener('click', event => void perform('start', event.currentTarget, true));
+  $('#overviewDriveCancel').addEventListener('click', event => void perform('cancel', event.currentTarget, true));
+  function afterNavigation(hash, action) {
+    if (location.hash === hash) action();
+    else window.addEventListener('hashchange', () => requestAnimationFrame(action), { once:true });
+  }
+  for (const link of document.querySelectorAll('[data-open-drive-guide]')) link.addEventListener('click', () => afterNavigation('#guide', () => { $('#driveSetupGuide').open = true; $('#driveSetupGuide').scrollIntoView({block:'start'}); }));
+  for (const link of document.querySelectorAll('[data-open-drive-settings]')) link.addEventListener('click', () => afterNavigation('#targets', () => { $('#drivePanel').scrollIntoView({block:'start'}); void load(); }));
   for (const button of document.querySelectorAll('[data-drive-copy]')) button.addEventListener('click', async () => { try { const text = document.getElementById(button.dataset.driveCopy).textContent; if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(text); else { const input = element('textarea'); input.value = text; document.body.append(input); input.select(); const copied = document.execCommand('copy'); input.remove(); if (!copied) throw new Error('clipboard'); } button.textContent = 'Kopiert'; } catch { notice('Befehl markieren und kopieren. Die Zwischenablage benötigt HTTPS.', true); } });
   $('#configureDrive').addEventListener('click', () => { $('#drivePanel').scrollIntoView({ behavior: 'smooth', block: 'start' }); void load(); });
   window.addEventListener('hashchange', () => { if (location.hash === '#targets') void load(); });

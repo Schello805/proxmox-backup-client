@@ -43,3 +43,8 @@ test('Monatsplan löst nur einmal aus, Neustart markiert laufende Kopien unterbr
   const f=fixture();f.config.gdrive.schedule={days:[],time:'03:00',monthDay:21};f.setBlocked(true);f.drive.tick();assert.equal(f.state.drive.status,'queued');f.drive.cancel();f.drive.tick();assert.equal(f.state.drive.status,'cancelled');assert.equal(f.state.drive.triggered,'2026-10-21');
   const restarted=fixture({state:{drive:{status:'running'}}});assert.equal(restarted.state.drive.status,'interrupted');assert.equal(restarted.drive.busy,false);
 });
+
+test('Drive-Übersicht liefert gespeicherte Quellen und nächsten Monatstermin in der App-Zeitzone',()=>{
+  const f=fixture();f.config.gdrive.schedule={days:[],time:'04:15',monthDay:'last'};
+  const snapshot=f.drive.snapshot();assert.deepEqual(snapshot.sources,[{id:'daten',name:'Daten'},{id:'musik',name:'Musik'}]);assert.equal(snapshot.nextAt,'2026-10-31T03:15:00.000Z');assert.equal(snapshot.timezone,'Europe/Berlin');assert.equal(snapshot.settings.remote,'gdrive');assert.equal(f.calls.length,0);
+});
