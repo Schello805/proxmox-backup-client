@@ -14,3 +14,32 @@ export function sourceProblem(folder, job = folder.job || {}, health = folder.he
   if (health.missed || health.stale) return { kind: 'schedule', message: health.missed ? 'Der geplante Termin hat noch keine erfolgreiche Sicherung.' : 'Der letzte erfolgreiche Lauf liegt zu lange zurück.', action: 'Jetzt sichern', view: 'backup', help: 'Eine Sicherung starten. Bei wiederkehrenden Hinweisen den Wochenplan und die Dienstlaufzeit prüfen.' };
   return null;
 }
+
+// One compact, actionable state; unknown/stale checks never count as a current success.
+export function sourceHealth(folder, job = {}, health = {}, target = {}, connection, capacity = {}, now = Date.now()) {
+  const busy = ['running','queued','cancelling'].includes(job.status);
+  const recent = value => Number.isFinite(Date.parse(value)) && now - Date.parse(value) >= -60000 && now - Date.parse(value) <= 20 * 60000;
+  const observed = latestConnection(job, connection, capacity, folder.pbsCheckAfter);
+  const issue = sourceProblem(folder, job, health, target, observed?.ok === false ? observed : undefined);
+  if (folder.checking && !folder.checkedAt && !issue) return { label: 'Wird geprüft', tone: 'busy', action: 'Mount prüfen', view: 'source', message: 'Die erste Lesbarkeitsprüfung läuft noch.' };
+  if (issue) {
+    const label = issue.kind === 'mount' ? ['cifs','smb3'].includes(folder.mount?.type) && folder.mount?.source && folder.expectedSource && folder.mount.source !== folder.expectedSource ? 'SMB-Zuordnung falsch' : 'SMB nicht verfügbar' : issue.kind === 'target' ? !folder.targetRepository || target.hasPassword === false ? 'PBS einrichten' : 'PBS-Zugang gestört' : issue.kind === 'schedule' ? 'Sicherung überfällig' : job.status === 'interrupted' ? 'Unterbrochen' : 'Sicherung fehlgeschlagen';
+    return { ...issue, label, tone: ['mount','target','job'].includes(issue.kind) ? 'bad' : 'busy', ...(observed?.checkedAt && issue.kind === 'target' ? { checkedAt: observed.checkedAt } : {}) };
+  }
+  if (!folder.expectedSource) return { label: 'SMB bestätigen', tone: 'busy', action: 'Zuordnung prüfen', view: 'source', message: 'Erwartete SMB-Freigabe noch nicht bestätigt.' };
+  if (busy) return { label: job.status === 'queued' ? 'Sicherung wartet' : job.status === 'cancelling' ? 'Wird abgebrochen' : 'Backup läuft', tone: 'busy', action: 'Protokoll öffnen', view: 'log', message: 'Auftrag dieser App.' };
+  if (job.status === 'cancelled') return { label: 'Abgebrochen', tone: 'busy', action: 'Erneut sichern', view: 'backup', message: 'Die letzte Sicherung wurde auf Wunsch abgebrochen.' };
+  if (!job.lastSuccess) return { label: 'Noch keine Sicherung', tone: 'busy', action: 'Jetzt sichern', view: 'backup', message: 'Noch kein erfolgreicher App-Lauf für diese Quelle am aktuellen Ziel.' };
+  if (!observed || !recent(observed.checkedAt)) return { label: 'PBS erneut prüfen', tone: 'busy', action: 'PBS prüfen', view: 'connection', message: 'Keine erfolgreiche PBS-Prüfung in den letzten 20 Minuten. Der letzte Backup-Erfolg bleibt unten separat dokumentiert.', checkedAt: observed?.checkedAt };
+  return { label: 'Alles aktuell', tone: 'ok', action: 'Wiederherstellung prüfen', view: 'restore', message: 'SMB lesbar, PBS zuletzt erreichbar und keine überfällige Sicherung. Eine Wiederherstellungsprüfung erfolgt separat.', checkedAt: observed.checkedAt };
+}
+
+export function latestConnection(job = {}, connection, capacity = {}, checkAfter) {
+  const observations = [];
+  if (connection && Number.isFinite(Date.parse(connection.checkedAt))) observations.push(connection);
+  if (capacity.error && capacity.attemptedAt) observations.push({ ok: false, checkedAt: capacity.attemptedAt, message: capacity.error });
+  if (capacity.checkedAt && !capacity.error) observations.push({ ok: true, checkedAt: capacity.checkedAt });
+  if (job.status === 'running' && job.progress?.uploadedBytes > 0) observations.push({ ok: true, checkedAt: job.progress.updatedAt });
+  if (job.status === 'success' && job.lastSuccess) observations.push({ ok: true, checkedAt: job.lastSuccess });
+  return connection && !connection.checkedAt ? connection : observations.filter(value => Number.isFinite(Date.parse(value.checkedAt)) && Date.parse(value.checkedAt) >= (Date.parse(checkAfter || '') || 0)).sort((a,b) => Date.parse(b.checkedAt)-Date.parse(a.checkedAt))[0];
+}

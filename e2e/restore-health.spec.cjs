@@ -1,0 +1,31 @@
+const {test,expect,login}=require('./fixtures.cjs');
+const headers={'X-Requested-With':'qnap-dashboard'};
+test('Restore tab opens matching datastore, retrieves only source snapshots and shows compact instructions',async({page},testInfo)=>{
+ await login(page);await page.locator('[data-folder="software"]').getByRole('button',{name:'Software',exact:true}).click();await page.getByRole('button',{name:'Wiederherstellen',exact:true}).click();
+ await expect(page).toHaveURL(/#overview\/software\/restore$/);await expect(page.locator('#restoreInfo')).toContainText('Bestand noch nicht abgerufen');await expect(page.locator('#copyRestoreSnapshot')).toBeDisabled();
+ await expect(page.getByRole('link',{name:'PBS-Inhalt öffnen ↗'})).toHaveAttribute('href','https://localhost:8007/#DataStore-test-store:content');
+ await page.getByRole('button',{name:'Bestand vom PBS abrufen',exact:true}).click();await expect(page.locator('#restoreSnapshot option')).toHaveCount(1);await expect(page.locator('#restoreSelection')).toContainText('host/software/');await expect(page.locator('#restoreSelection')).toContainText('qnap-software.pxar.didx');
+ await expect(page.locator('.restore-steps li')).toHaveCount(3);await page.screenshot({path:testInfo.outputPath('restore-source.png'),fullPage:true});
+ await page.getByRole('button',{name:'Verlauf',exact:true}).click();await expect(page.locator('#historyDialog')).toBeVisible();await page.getByRole('button',{name:'Wiederherstellen',exact:true}).click();await page.reload();await expect(page.locator('#restoreInfo')).toContainText('host/software');
+ await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+test('Restore uses second PBS and namespace; absent source snapshots stay absent',async({page})=>{
+ await login(page);const setup=await page.request.post('/api/targets/setup',{headers,data:{datastore:'archive-store',ownServer:true,server:'pbs2.local',authId:'archive@pbs',password:'second-secret',fingerprint:'',namespace:'nas/archive'}});expect(setup.ok()).toBe(true);
+ const config=(await(await page.request.get('/api/status')).json()).config;await page.request.post('/api/sources',{headers,data:{sources:config.sources.map(source=>({...source,target:source.id==='daten'?'secondary':source.target}))}});await page.reload();
+ await page.locator('[data-folder="daten"]').getByRole('button',{name:'Daten',exact:true}).click();await page.getByRole('button',{name:'Wiederherstellen',exact:true}).click();await page.getByRole('button',{name:'Bestand vom PBS abrufen',exact:true}).click();
+ await expect(page.locator('#openRestorePBS')).toHaveAttribute('href','https://pbs2.local:8007/#DataStore-archive-store:content');await expect(page.locator('#restoreInfo')).toContainText('nas/archive');await expect(page.locator('#restoreSelection')).toContainText('host/daten/');
+ await page.locator('#closeDetail').click();await page.locator('[data-folder="filme"]').getByRole('button',{name:'Filme',exact:true}).click();await page.getByRole('button',{name:'Wiederherstellen',exact:true}).click();await page.getByRole('button',{name:'Bestand vom PBS abrufen',exact:true}).click();await expect(page.locator('#restoreSnapshot')).toBeDisabled();await expect(page.locator('#restoreSelection')).toContainText('Noch kein Snapshot');
+ await page.route('**/api/restore/filme/refresh',route=>route.fulfill({status:400,contentType:'application/json',body:JSON.stringify({error:'PBS nicht erreichbar'})}));await page.getByRole('button',{name:'Bestand vom PBS abrufen',exact:true}).click();await expect(page.locator('#restoreFeedback')).toHaveText('PBS nicht erreichbar');await expect(page.locator('#restoreInfo')).toHaveText('Bestand konnte nicht geladen werden.');
+});
+test('Compact health badges link to useful actions, and current success opens restore',async({page,app},testInfo)=>{
+ await login(page);const row=page.locator('[data-folder="software"]');await expect(row.getByRole('button',{name:'Software: Noch keine Sicherung',exact:true})).toBeVisible();await row.getByRole('button',{name:'Software: Noch keine Sicherung',exact:true}).click();await expect(row.getByRole('button',{name:'Software: Backup läuft',exact:true})).toBeVisible();app.finish();
+ await expect(row.getByRole('button',{name:'Software: Alles aktuell',exact:true})).toBeVisible();await row.getByRole('button',{name:'Software: Alles aktuell',exact:true}).click();await expect(page).toHaveURL(/#overview\/software\/restore$/);await page.locator('#closeDetail').click();
+ await app.setMount('/mnt/Daten/Daten',{source:'//test-nas/software'});await page.getByRole('button',{name:'↻ Aktualisieren',exact:true}).click();await page.locator('[data-folder="daten"]').getByRole('button',{name:'Daten: SMB-Zuordnung falsch',exact:true}).click();await expect(page).toHaveURL(/#overview\/daten\/edit$/);await page.locator('#closeDetail').click();
+ await page.route('**/api/status',async route=>{const response=await route.fetch(),data=await response.json();data.connections.primary={ok:false,message:'PBS nicht erreichbar'};await route.fulfill({response,json:data});});await page.getByRole('button',{name:'↻ Aktualisieren',exact:true}).click();await row.getByRole('button',{name:'Software: PBS-Zugang gestört',exact:true}).click();await expect(page).toHaveURL(/#targets$/);await page.screenshot({path:testInfo.outputPath('health-target-action.png')});
+});
+
+test('Changed PBS access invalidates previous green status and can be checked from the source badge',async({page,app})=>{
+ await login(page);const row=page.locator('[data-folder="software"]');await row.getByRole('button',{name:'↗ Sichern',exact:true}).click();await expect(row.locator('.job-state')).toContainText('Läuft');app.finish();await expect(row.getByRole('button',{name:'Software: Alles aktuell',exact:true})).toBeVisible();
+ const change=await page.request.post('/api/targets',{headers,data:{password:'changed-test-secret'}});expect(change.ok()).toBe(true);await page.getByRole('button',{name:'↻ Aktualisieren',exact:true}).click();
+ await row.getByRole('button',{name:'Software: PBS erneut prüfen',exact:true}).click();await expect(row.getByRole('button',{name:'Software: Alles aktuell',exact:true})).toBeVisible();
+});

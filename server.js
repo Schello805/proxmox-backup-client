@@ -8,6 +8,7 @@ const { loadConfig, loadState, saveJSON, checkRuntime, acquireLock } = require('
 const { createConfigService } = require('./lib/config-service');
 const { createHistory } = require('./lib/history');
 const { exportConfig, previewRestore, revision } = require('./lib/config-backup');
+const { restoreInfo } = require('./lib/restore');
 const { compareRuns } = require('./lib/run-comparison');
 const { createBackups } = require('./lib/backups');
 const { createScheduler } = require('./lib/scheduler');
@@ -41,7 +42,7 @@ const STATE = path.join(DATA, 'state.json'), state = loadState(STATE);
 const persist = () => saveJSON(STATE, state);
 for (const source of initial.sources) state.watchSince[source.id] ||= new Date().toISOString();
 let backups, pbs, capacity;
-const configs = createConfigService({ initial, state, write: value => saveJSON(CONFIG, value), persist, password: PASS, isBusy: () => backups?.busy || pbs?.busy || capacity?.busy, onChange: (previous, next) => { if (['repository','secondaryDatastore','password','fingerprint','namespace','secondaryPBS'].some(key => JSON.stringify(previous[key]) !== JSON.stringify(next[key]))) pbs.invalidate(); } });
+const configs = createConfigService({ initial, state, write: value => saveJSON(CONFIG, value), persist, password: PASS, isBusy: () => backups?.busy || pbs?.busy || capacity?.busy, onChange: (previous, next) => { for (const target of ['primary','secondary']) if (JSON.stringify(targetConfig(previous,target)) !== JSON.stringify(targetConfig(next,target))) state.pbsCheckAfter[target] = new Date().toISOString(); if (['repository','secondaryDatastore','password','fingerprint','namespace','secondaryPBS'].some(key => JSON.stringify(previous[key]) !== JSON.stringify(next[key]))) pbs.invalidate(); } });
 const getConfig = configs.get;
 const isMaintenance = () => fs.existsSync(path.join(DATA, 'maintenance'));
 const history = createHistory({ state, data: DATA, persist, getConfig, password: PASS });
@@ -84,7 +85,7 @@ const server = http.createServer(async (req, res) => {
       if (req.headers['x-requested-with'] !== 'qnap-dashboard') return json(res, 403, { error: 'Anfrage-Header fehlt.' });
     }
     // Nur die App-Hülle ist öffentlich. Daten und Aktionen benötigen eine Sitzung.
-    const assets = { '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], ...Object.fromEntries(['api','views','forms','maintenance','assistant','timeline','problems','operations','controls'].map(name => ['/js/' + name + '.js', ['js/' + name + '.js', 'text/javascript']])) };
+    const assets = { '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], ...Object.fromEntries(['api','views','forms','maintenance','assistant','timeline','problems','operations','controls','restore'].map(name => ['/js/' + name + '.js', ['js/' + name + '.js', 'text/javascript']])) };
     if (req.method === 'GET' && assets[url.pathname]) {
       const [file, type] = assets[url.pathname]; res.writeHead(200, { 'Content-Type': `${type}; charset=utf-8`, 'Cache-Control': 'no-cache' });
       return res.end(fs.readFileSync(path.join(ROOT, 'public', file)));
@@ -116,7 +117,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/status') {
       const snapshot = configs.get();
       const mounts = await mountStatus.read(snapshot.sources);
-      const folders = snapshot.sources.map((source, index) => ({ ...source, targetRepository: repositoryFor(snapshot, source.target), ...mounts[index], comparison: compareRuns(source, snapshot, state), job: state.jobs[source.id] || { status: 'idle' }, schedule: snapshot.schedules[source.id], health: healthFor(snapshot.schedules[source.id], snapshot.timezone, new Date(), state.watchSince[source.id], state.jobs[source.id], snapshot.staleAfterDays, state.triggered[source.id]) }));
+      const folders = snapshot.sources.map((source, index) => ({ ...source, targetRepository: repositoryFor(snapshot, source.target), ...mounts[index], pbsCheckAfter: state.pbsCheckAfter[source.target || 'primary'] || null, comparison: compareRuns(source, snapshot, state), job: state.jobs[source.id] || { status: 'idle' }, schedule: snapshot.schedules[source.id], health: healthFor(snapshot.schedules[source.id], snapshot.timezone, new Date(), state.watchSince[source.id], state.jobs[source.id], snapshot.staleAfterDays, state.triggered[source.id]) }));
       sourceSizes.retain(snapshot.sources);
       for (const folder of folders) folder.size = sourceSizes.read(folder, folder.ok);
       return json(res, 200, { system: { ...await system.inspect(), timezone: snapshot.timezone }, folders, capacities: capacity.all(), timeline: createTimeline(snapshot, state), discovery: discovery.current(), targets: targetsFor(snapshot), connections: pbs.connections(), connection: pbs.lastConnection, config: configs.safe(snapshot), pbs: { checkedAt: pbs.current().checkedAt, count: pbs.current().count || 0, error: pbs.current().error || '' } });
@@ -181,6 +182,12 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/notifications/test') {
       await sendNotification(configs.get().notifications, 'Test von QNAP Backup Control: Benachrichtigungen funktionieren.');
       state.notification = { ok: true, at: new Date().toISOString(), message: 'Test zugestellt.' }; persist(); return json(res, 200, { success: true });
+    }
+    const restore = url.pathname.match(/^\/api\/restore\/([a-z][a-z0-9_-]{0,39})(\/refresh)?$/);
+    if (restore && configs.sourceFor(restore[1]) && (req.method === 'GET' && !restore[2] || req.method === 'POST' && restore[2])) {
+      const source = configs.sourceFor(restore[1]);
+      if (restore[2]) await pbs.refresh(source.target || 'primary');
+      return json(res, 200, restoreInfo(source, getConfig(), pbs.current(source.target || 'primary')));
     }
     const history = url.pathname.match(/^\/api\/history\/([a-z][a-z0-9_-]{0,39})(?:\/([a-f0-9-]{36}))?$/);
     if (req.method === 'GET' && history && configs.sourceFor(history[1])) {

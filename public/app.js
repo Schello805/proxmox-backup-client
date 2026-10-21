@@ -1,15 +1,16 @@
+import { installRestore } from '/js/restore.js';
 import { installControls } from '/js/controls.js';
 import { installOperations } from '/js/operations.js';
 import { installTimeline } from '/js/timeline.js';
-import { sourceProblem } from '/js/problems.js';
+import { sourceProblem, sourceHealth, latestConnection } from '/js/problems.js';
 import { installAssistant } from '/js/assistant.js';
 import { installMaintenance } from '/js/maintenance.js';
 import { createAPI } from '/js/api.js';
 import { createViews, dayNames } from '/js/views.js';
 import { createFormState, clearFieldErrors, showFieldErrors, serverField, validateMainForm, validateNotifyForm, validateSourceForm } from '/js/forms.js';
 'use strict';
-let assistant, timeline, operations, controls;
-let lastTargets = [], lastConnections = {}, lastPreferencesSnapshot = null;
+let assistant, timeline, operations, controls, restore;
+let lastTargets = [], lastConnections = {}, lastCapacities = {}, lastPreferencesSnapshot = null;
 const refreshWaiters = [];
 const $ = selector => document.querySelector(selector);
 const names = { software: 'Software', filme: 'Filme', serien: 'Serien', hoerspiele: 'Hörspiele', musik: 'Musik', daten: 'Daten' };
@@ -62,7 +63,7 @@ async function refresh() {
     mountDiscovery = data.discovery || { candidates: [] };
     $('#showDiscovered').hidden = !mountDiscovery.candidates.length;
     $('#showDiscovered').textContent = `Neue SMB-Freigaben (${mountDiscovery.candidates.length})`;
-    lastTargets = data.targets || []; lastConnections = data.connections || {};
+    lastTargets = data.targets || []; lastConnections = data.connections || {}; lastCapacities = data.capacities || {};
     savedConfig = data.config; activeTimezone = data.config.timezone; folderData = data.folders;
     for (const key of Object.keys(names)) delete names[key]; for (const source of data.config.sources) names[source.id] = source.name;
     $('#appVersion').textContent = `v${data.system.version}`;
@@ -91,7 +92,7 @@ async function refresh() {
       sizeInfo.title = size?.error || `Dateigröße der Quelle (unkomprimiert)${size?.checkedAt ? ' · Stand: ' + date(size.checkedAt) : ''} · Automatisch alle 6 Stunden oder über „Aktualisieren“. Große Freigaben können länger dauern.`;
       mount.append(sizeInfo); row.append(mount);
       const plan = element('td'); plan.append(element('span', scheduleText(folder.schedule)), element('small', nextText(folder.health), 'next-run')); plan.classList.add('plan-link'); plan.tabIndex = 0; plan.setAttribute('role', 'button'); plan.setAttribute('aria-label', `Zeitplan ${names[folder.id]} bearbeiten`); plan.addEventListener('click', () => editSource(folder.id, true)); plan.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); editSource(folder.id, true); } }); plan.title = `${scheduleText(folder.schedule)} · ${nextText(folder.health)} (${activeTimezone})`;
-      row.append(plan, element('td', date(folder.job.lastSuccess)));
+      const success = element('td'); success.className = 'source-health'; renderSourceHealth(success, folder, folder.job, folder.health); row.append(plan, success);
       const state = element('td'); state.className = 'job-state'; renderFolderState(state, folder, folder.job, folder.health); row.append(state); const status = folder.job.status;
       const actions = element('td'), start = element('button', '↗ Sichern', 'row-action'), logs = element('button', 'Protokoll', 'row-action');
       const targetReady = data.targets?.find(target => target.id === (folder.target || 'primary'))?.hasPassword ?? data.config.hasPassword;
@@ -115,22 +116,22 @@ async function openLog(id, runId = null) { logFolder = id; logRun = runId; $('#l
 $('#liveDetails').addEventListener('click', () => { if (previousActive) openLog(previousActive); });
 $('#closeLog').addEventListener('click', closeContext);
 let detailId = null;
-const homes = new Map(['sourceForm','historyDialog','logDialog'].map(id => [id, { parent: $('#' + id).parentNode, next: $('#' + id).nextSibling }]));
+const homes = new Map(['sourceForm','historyDialog','logDialog','restorePanel'].map(id => [id, { parent: $('#' + id).parentNode, next: $('#' + id).nextSibling }]));
 function restoreContext() {
   for (const [id, home] of homes) home.parent.insertBefore($('#' + id), home.next?.parentNode === home.parent ? home.next : null);
-  $('#sourceDetail').hidden = true; $('#historyDialog').hidden = true; $('#logDialog').hidden = true;
+  $('#sourceDetail').hidden = true; $('#historyDialog').hidden = true; $('#logDialog').hidden = true; $('#restorePanel').hidden = true;
   logFolder = null; logRun = null; detailId = null;
 }
 function closeContext() { location.hash = '#overview'; }
 function showContext(view, id) {
-  const route = `overview/${id}/${view === 'logDialog' ? 'log' : view === 'historyDialog' ? 'history' : 'edit'}`;
+  const route = `overview/${id}/${view === 'logDialog' ? 'log' : view === 'historyDialog' ? 'history' : view === 'restorePanel' ? 'restore' : 'edit'}`;
   if (location.hash.slice(1) !== route) history.pushState(null, '', '#' + route);
   document.querySelectorAll('.page').forEach(el => el.hidden = el.id !== 'overview');
   $('#sourceDetail').hidden = false; detailId = id; $('#detailTitle').textContent = names[id] || id;
-  const slots = { sourceForm: 'detailEditor', historyDialog: 'detailHistorySlot', logDialog: 'detailLogSlot' };
+  const slots = { sourceForm: 'detailEditor', historyDialog: 'detailHistorySlot', logDialog: 'detailLogSlot', restorePanel: 'detailRestoreSlot' };
   for (const [key, slot] of Object.entries(slots)) { $('#' + slot).hidden = key !== view; if (key === view) { $('#' + slot).append($('#' + key)); $('#' + key).hidden = false; } }
   if (view !== 'logDialog') { logFolder = null; logRun = null; }
-  document.querySelectorAll('.detail-tabs button').forEach(button => button.classList.toggle('active', button.id === ({ sourceForm: 'detailEdit', historyDialog: 'detailHistory', logDialog: 'detailLog' })[view]));
+  document.querySelectorAll('.detail-tabs button').forEach(button => button.classList.toggle('active', button.id === ({ sourceForm: 'detailEdit', historyDialog: 'detailHistory', logDialog: 'detailLog', restorePanel: 'detailRestore' })[view]));
   $('#sourceDetail').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 function navigate() {
@@ -146,13 +147,14 @@ function navigate() {
   if (page === 'sourcesDialog') renderSources();
   if (page === 'pbsDialog') openPBS();
   if (page === 'systemDialog') document.dispatchEvent(new Event('open-system'));
-  if (page === 'overview' && names[id]) { if (tab === 'log') void openLog(id); else if (tab === 'history') void openHistory(id); else editSource(id, true); }
+  if (page === 'overview' && names[id]) { if (tab === 'restore') void restore?.open(id); else if (tab === 'log') void openLog(id); else if (tab === 'history') void openHistory(id); else editSource(id, true); }
 }
 window.addEventListener('hashchange', navigate); window.addEventListener('popstate', navigate);
 $('#closeDetail').addEventListener('click', closeContext);
 $('#detailEdit').addEventListener('click', () => editSource(detailId, true));
 $('#detailHistory').addEventListener('click', () => openHistory(detailId));
 $('#detailLog').addEventListener('click', () => openLog(detailId));
+$('#detailRestore').addEventListener('click', () => restore.open(detailId));
 $('#appVersion').addEventListener('click', () => { location.hash = 'systemDialog'; });
 navigate();
 $('#backupAll').addEventListener('click', async () => {
@@ -270,7 +272,7 @@ async function refreshActivity() {
       const folder = folderData.find(item => item.id === row.dataset.folder); renderFolderState(state, folder, job, lastHealth[row.dataset.folder]);
       const cancel = row.querySelector('[data-cancel]'); if (cancel) { cancel.hidden = !['running','queued','cancelling'].includes(job.status); cancel.disabled = job.status === 'cancelling'; }
       const next = row.querySelector('.next-run'); if (next) next.textContent = nextText(lastHealth[row.dataset.folder]);
-      row.children[3].textContent = date(job.lastSuccess);
+      renderSourceHealth(row.children[3], folder, job, lastHealth[row.dataset.folder]);
       const start = row.querySelector('[data-start]'); start.hidden = ['running','queued','cancelling'].includes(job.status); start.disabled = start.dataset.available !== 'true' || ['running', 'queued', 'cancelling'].includes(job.status);
     }
     $('#successCount').textContent = `${Object.values(data.jobs).filter(job => job.status === 'success').length} / ${Object.keys(names).length}`;
@@ -485,13 +487,23 @@ assistant = installAssistant({ api, getConfig: () => savedConfig, refresh, openS
 
 $('#configForm').elements.secondaryOwnServer.addEventListener('change', event => { $('#secondaryFields').hidden = !event.target.checked; });
 
-function issueFor(folder, job = folder?.job, health = folder?.health) { return folder ? sourceProblem(folder, job, health, lastTargets.find(target => target.id === (folder.target || 'primary')), lastConnections[folder.target || 'primary']) : null; }
+function issueFor(folder, job = folder?.job, health = folder?.health) { return folder ? sourceProblem(folder, job, health, lastTargets.find(target => target.id === (folder.target || 'primary')), latestConnection(job, lastConnections[folder.target || 'primary'], lastCapacities[folder.target || 'primary'], folder.pbsCheckAfter)) : null; }
 async function runSource(id) { try { await api(`/api/backup/${id}`, {}); notice(`${names[id]} zur Sicherung vorgemerkt.`); await refresh(); } catch (e) { notice(e.message, true); } }
 function openProblem(folder, issue) {
-  if (issue.view === 'source') editSource(folder.id, true);
+  if (issue.view === 'restore') void restore.open(folder.id);
+  else if (issue.view === 'connection') { void (async () => { try { notice('PBS-Verbindung wird geprüft …'); const result = await api('/api/connection', { target: folder.target || 'primary' }); await refresh(); notice(result.message, !result.ok); } catch (e) { notice(e.message, true); } })(); }
+  else if (issue.view === 'source') editSource(folder.id, true);
   else if (issue.view === 'log') void openLog(folder.id);
   else if (issue.view === 'backup') void runSource(folder.id);
   else { location.hash = 'targets'; setTimeout(() => $('#configForm').elements[folder.target === 'secondary' && savedConfig.secondaryPBS ? 'secondaryServer' : 'server'].focus(), 0); }
+}
+function renderSourceHealth(cell, folder, job, health) {
+  if (!folder) return;
+  const target = folder.target || 'primary', status = sourceHealth(folder, job, health, lastTargets.find(item => item.id === target), lastConnections[target], lastCapacities[target]);
+  const badge = element('button', status.label, `badge health-badge ${status.tone}`); badge.type = 'button'; badge.setAttribute('aria-label', `${folder.name}: ${status.label}`);
+  badge.title = `${status.message}${folder.checkedAt ? ' · SMB-Stand: ' + date(folder.checkedAt) : ''}${status.checkedAt ? ' · PBS-Stand: ' + date(status.checkedAt) : ''} · ${status.action}`;
+  badge.addEventListener('click', () => openProblem(folder, status));
+  cell.replaceChildren(element('span', date(job.lastSuccess)), badge);
 }
 function renderFolderState(cell, folder, job, health) {
   renderJob(cell, job, health); const issue = issueFor(folder, job, health); if (!issue) return;
@@ -510,3 +522,5 @@ timeline = installTimeline({ element, openSource: id => editSource(id, true) });
 operations = installOperations({api,element,refresh,date});
 
 controls = installControls({ api, element, refresh, refreshActivity, notice, date, getNames: () => names, onRestored: () => { for (const id of ['configForm','preferencesForm','authForm','notifyForm']) formState.clean(id, formState.capture(id)); lastMainSnapshot = lastPreferencesSnapshot = lastNotifySnapshot = null; loaded = false; } });
+
+restore = installRestore({ api, element, date, showContext });

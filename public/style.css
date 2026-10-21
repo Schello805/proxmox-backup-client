@@ -2074,3 +2074,15 @@ a.nav { display: block; text-decoration: none; box-sizing: border-box; }
 #overview #historyDialog th { width: auto; }
 #historyDialog th, #historyDialog td { white-space: nowrap; }
 @media(max-width:760px) { .policy-fields { grid-template-columns: 1fr; } }
+
+#overview .health-badge { display: block; margin-top: 3px; border: 0; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; font: inherit; font-size: 9px; cursor: pointer; }
+#overview .health-badge:hover { outline: 1px solid currentColor; }
+.restore-fields { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 12px; align-items: end; }
+.restore-fields select { width: 100%; min-width: 0; padding: 9px; border: 1px solid var(--line); border-radius: 5px; background: #fbfdfb; color: inherit; font: inherit; }
+.restore-fields label { margin-top: 10px; }
+.restore-fields .actions { margin: 0; }
+#openRestorePBS { text-decoration: none; }
+#restoreSelection { overflow-wrap: anywhere; }
+.restore-steps { padding-left: 20px; font-size: 12px; line-height: 1.8; }
+#restorePanel { padding: 14px 0 0; box-shadow: none; border: 0; }
+@media(max-width:760px) { .restore-fields { grid-template-columns: 1fr; } .detail-tabs { flex-wrap: wrap; } }
