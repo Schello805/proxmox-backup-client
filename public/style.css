@@ -2093,7 +2093,19 @@ aside .workspace { margin-top:32px; }
 main>header { height:50px; gap:14px; letter-spacing:0; }
 main>header #logout { padding:6px 10px; }
 @media(max-width:760px) {
-  aside nav[aria-label="Hauptnavigation"] { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; }
+  aside nav[aria-label="Hauptnavigation"] { display:flex; }
   aside .nav { padding:10px 5px; font-size:11px; }
   main>header #updated { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+}
+
+/* Frequent tasks above; settings, help and the system icon stay near the footer. */
+aside .main-navigation { display:flex; flex-direction:column; flex:1 0 auto; }
+aside .nav-secondary { margin-top:auto; padding-top:24px; }
+aside .sidebar-bottom { margin-top:12px; }
+aside a.system-link { display:flex; align-items:center; justify-content:center; width:44px; height:44px; padding:10px; margin-left:0; }
+@media(max-width:760px) {
+  aside .main-navigation { gap:6px; }
+  aside .nav-primary, aside .nav-secondary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; }
+  aside .nav-secondary { margin-top:0; padding-top:6px; border-top:1px solid #ffffff14; }
+  aside a.system-link { width:100%; height:36px; margin:0; padding:7px; }
 }
