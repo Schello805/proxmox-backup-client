@@ -42,7 +42,7 @@ export function validateMainForm(values) {
   if (values.namespace && !values.namespace.split('/').every(part => /^[\w-]+$/.test(part))) errors.namespace = 'Nur Buchstaben, Ziffern, _ und -; Ebenen mit / trennen.';
   try { if (!values.timezone) throw new Error(); new Intl.DateTimeFormat('de', { timeZone: values.timezone }); } catch { errors.timezone = 'Gültige Zeitzone wählen, z. B. Europe/Berlin.'; }
   if (!Number.isInteger(values.staleAfterDays) || values.staleAfterDays < 1 || values.staleAfterDays > 365) errors.staleAfterDays = '1 bis 365 Tage angeben.';
-  for (const [id, schedule] of Object.entries(values.schedules)) if (schedule.days.length && !/^([01]\d|2[0-3]):[0-5]\d$/.test(schedule.time)) errors[`schedule-${id}`] = 'Uhrzeit für die gewählten Tage fehlt.';
+  for (const [id, schedule] of Object.entries(values.schedules)) if ((schedule.days.length || schedule.monthDay !== undefined) && !/^([01]\d|2[0-3]):[0-5]\d$/.test(schedule.time)) errors[`schedule-${id}`] = 'Uhrzeit für die gewählten Tage fehlt.';
   return errors;
 }
 export function validateNotifyForm(values) {

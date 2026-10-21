@@ -2086,3 +2086,5 @@ a.nav { display: block; text-decoration: none; box-sizing: border-box; }
 .restore-steps { padding-left: 20px; font-size: 12px; line-height: 1.8; }
 #restorePanel { padding: 14px 0 0; box-shadow: none; border: 0; }
 @media(max-width:760px) { .restore-fields { grid-template-columns: 1fr; } .detail-tabs { flex-wrap: wrap; } }
+
+#sourceMonthHint { display: block; margin-bottom: 4px; }

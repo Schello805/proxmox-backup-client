@@ -50,7 +50,7 @@ Die Vorprüfung ist automatisiert getestet. Das produktive systemd-Update muss a
 
 Die App zeigt ihre Version im Kopfbereich. Unter „Aufbau & Systemdetails“ stehen Node-Version, Backup Client und Betriebsprüfungen. Fehlender Client oder fehlende PBS-Einstellungen werden als Hinweis angezeigt; ungültige Konfiguration, nicht beschreibbare Speicherpfade oder ungültiger Port verhindern den Start.
 
-Konfigurationen ohne `schemaVersion` werden als Version 1 verstanden. Das aktuelle Schema 4 übernimmt Zugangsdaten, Auth-Auswahl, Quellen und Zeitpläne aus Schema 1, 2 oder 3 und erstellt vor dem Schreiben eine geschützte Datei `config.json.pre-v4-<Zeitstempel>.json` neben dem Original. Bestehende Quellen erhalten das Ziel `primary` (bisheriger Datastore). Weitere Starts legen keine zusätzlichen Migrationskopien an. Kaputtes JSON und unbekannte neuere Schemaversionen werden nicht überschrieben. `npm run check` prüft schreibfrei.
+Konfigurationen ohne `schemaVersion` werden als Version 1 verstanden. Das aktuelle Schema 5 übernimmt Zugangsdaten, Auth-Auswahl, Quellen und Zeitpläne aus Schema 1, 2, 3 oder 4 und erstellt vor dem Schreiben eine geschützte Datei `config.json.pre-v5-<Zeitstempel>.json` neben dem Original. Bestehende Quellen erhalten das Ziel `primary` (bisheriger Datastore). Weitere Starts legen keine zusätzlichen Migrationskopien an. Kaputtes JSON und unbekannte neuere Schemaversionen werden nicht überschrieben. `npm run check` prüft schreibfrei.
 
 ## Rückweg nach fehlgeschlagenem Update
 
@@ -245,3 +245,10 @@ Quelle anklicken → **Wiederherstellen**. Der Bereich zeigt das aktuelle Ziel, 
 **PBS-Inhalt öffnen** führt per HTTPS zum Inhalt des richtigen Datastores (Standardport 8007 bzw. konfigurierter PBS-Port), ohne Zugangsdaten im Link. Im PBS separat anmelden, Namespace/Gruppe/Snapshot wählen und beim pxar-Archiv „Dateien durchsuchen“ / „File Restore“ öffnen. Eine kleine Datei herunterladen und separat auf Inhalt prüfen. Der Link wählt nicht automatisch den Snapshot oder eine Datei. Für abweichende Reverse-Proxy-Adressen die PBS-Weboberfläche direkt öffnen.
 
 Referenzen: [PBS-Oberfläche: Datastore-Content](https://github.com/proxmox/proxmox-backup/blob/master/www/datastore/Panel.js), [Dateibrowser im PBS](https://github.com/proxmox/proxmox-backup/blob/master/www/datastore/Content.js), [Proxmox: Wiederherstellung](https://pbs.proxmox.com/docs/backup-client.html#restoring-data).
+
+
+### Monatliche Sicherungen
+
+Quelle → Bearbeiten → Frequenz **Monatlich** → Monatstag und Uhrzeit wählen. Möglich sind der 1. bis 31. oder **Letzter Tag**. Gibt es den gewählten Tag im Monat nicht, wird am letzten vorhandenen Tag gesichert (z. B. 31. → 28./29. Februar oder 30. April). Es gilt die eingestellte Zeitzone samt Startfenster und Warteschlange.
+
+Nächster Termin, Überfälligkeit und Gantt berücksichtigen den Monatsplan. Eine erfolgreiche monatliche Sicherung wird nicht schon nach der üblichen 14-Tage-Schwelle als veraltet gemeldet, solange ihr nächster geplanter Termin noch nicht fällig ist. Nicht vorhandene Uhrzeiten bei der Zeitumstellung werden wie bei Wochenplänen übersprungen; doppelte Stunden starten nur einmal. Automatische Vorschläge verschieben monatliche Pläne nicht; tatsächliche Überschneidungen bleiben im Gantt sichtbar.

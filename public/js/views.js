@@ -10,6 +10,7 @@ function renderJob(cell, job, health) {
   if (error) { const text = element('small', error, 'row-error'); text.title = error; cell.append(text); }
 }
 function scheduleText(schedule) {
+  if (schedule.monthDay !== undefined) return `Monatlich · ${schedule.monthDay === 'last' ? 'letzter Tag' : 'am ' + schedule.monthDay + '.'} · ${schedule.time}`;
   if (!schedule.days.length) return 'Nur manuell';
   const days = schedule.days.join(',');
   const label = days === '1,2,3,4,5,6,7' ? 'Täglich' : days === '1,2,3,4,5' ? 'Mo–Fr' : days === '6,7' ? 'Sa–So' : schedule.days.map(day => dayNames[day - 1]).join(', ');

@@ -32,9 +32,9 @@ test('Schema-2-Migration sichert Konfiguration und erhält bisherige Datastore-Z
   const old = config(); old.schemaVersion = 2; delete old.secondaryDatastore; for (const source of old.sources) delete source.target;
   const file = path.join(directory, 'config.json'), raw = JSON.stringify(old); fs.writeFileSync(file, raw);
   const migrated = loadConfig(file, path.join(__dirname, '..', 'config.example.json'), '');
-  assert.equal(migrated.schemaVersion, 4); assert.equal(migrated.repository, old.repository); assert.equal(migrated.password, 'secret');
+  assert.equal(migrated.schemaVersion, 5); assert.equal(migrated.repository, old.repository); assert.equal(migrated.password, 'secret');
   assert.equal(migrated.secondaryDatastore, ''); assert.ok(migrated.sources.every(source => source.target === 'primary'));
-  const backup = fs.readdirSync(directory).find(name => name.includes('pre-v4-')); assert.ok(backup); assert.equal(fs.readFileSync(path.join(directory, backup), 'utf8'), raw);
+  const backup = fs.readdirSync(directory).find(name => name.includes('pre-v5-')); assert.ok(backup); assert.equal(fs.readFileSync(path.join(directory, backup), 'utf8'), raw);
   assert.equal(migrateConfig(migrated).repository, old.repository);
 });
 
@@ -104,7 +104,7 @@ test('Eigener PBS hält Zugang, Namespace, Fingerprint und Passwort vom ersten S
 test('Schema 3 wird mit bestehenden Quellen und beiden gemeinsamen Datastores erhalten', () => {
   const previous = { ...config(), schemaVersion: 3 };
   const migrated = migrateConfig(previous);
-  assert.equal(migrated.schemaVersion,4); assert.equal(migrated.secondaryPBS,null);
+  assert.equal(migrated.schemaVersion,5); assert.equal(migrated.secondaryPBS,null);
   assert.equal(repositoryFor(migrated,'secondary'),'backup@pbs!token@pbs-host:pbs2');
   assert.deepEqual(migrated.sources,previous.sources); assert.deepEqual(migrated.schedules,previous.schedules);
 });

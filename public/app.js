@@ -259,7 +259,7 @@ async function refreshActivity() {
       const latest = Object.entries(data.jobs).filter(([, job]) => job.endedAt).sort((a, b) => b[1].endedAt.localeCompare(a[1].endedAt))[0];
       if (latest?.[1].status === 'success') estimateJob = latest[1];
       if (latest && ['failed', 'interrupted'].includes(latest[1].status)) { $('#activityBadge').textContent = 'Letzter Lauf mit Fehler'; $('#activityBadge').className = 'badge bad'; }
-      $('#activityDescription').textContent = latest ? `Letzter Lauf: ${names[latest[0]]} · ${statuses[latest[1].status]} · ${date(latest[1].endedAt)}${latest[1].error ? ' · ' + latest[1].error : ''}` : 'Starte unten eine Sicherung oder hinterlege einen Wochenplan an der Quelle.';
+      $('#activityDescription').textContent = latest ? `Letzter Lauf: ${names[latest[0]]} · ${statuses[latest[1].status]} · ${date(latest[1].endedAt)}${latest[1].error ? ' · ' + latest[1].error : ''}` : 'Starte unten eine Sicherung oder hinterlege einen Sicherungsplan an der Quelle.';
       $('#liveDetails').hidden = true;
     }
     $('#activityTitle').title = $('#activityTitle').textContent;
@@ -338,12 +338,13 @@ $('#sourceForm').addEventListener('submit', async event => {
     const source = {}; for (const key of ['id','name','path','expectedSource','target']) source[key] = form.elements[key].value.trim();
     const errors = validateSourceForm(source, savedConfig.sources, sourceEditing);
     const chosenDays = [...$('#sourceDays').querySelectorAll('button[aria-pressed="true"]')].map(button => Number(button.dataset.day));
-    if (form.elements.planMode.value !== 'manual' && !chosenDays.length) errors.planMode = 'Mindestens einen Wochentag wählen.';
+    if (!['manual','monthly'].includes(form.elements.planMode.value) && !chosenDays.length) errors.planMode = 'Mindestens einen Wochentag wählen.';
     if (form.elements.planMode.value !== 'manual' && !/^([01]\d|2[0-3]):[0-5]\d$/.test(form.elements.planTime.value)) errors.planTime = 'Eine gültige Uhrzeit wählen.'; showFieldErrors(form, errors);
     if (Object.keys(errors).length) throw new Error('Bitte die markierten Quellenfelder korrigieren.');
     const sources = sourceEditing ? savedConfig.sources.map(item => item.id === sourceEditing ? source : item) : [...savedConfig.sources, source];
-    const schedule = { days: form.elements.planMode.value === 'manual' ? [] : chosenDays, time: form.elements.planMode.value === 'manual' ? '' : form.elements.planTime.value };
-    await api('/api/sources', { sources, schedule: { id: source.id, value: schedule } }); loaded = false; await refresh(); renderSources(); if (detailId) editSource(source.id, true); else resetSource(); $('#sourceResult').textContent = 'Quelle und Wochenplan gespeichert.';
+    const monthly = form.elements.planMode.value === 'monthly';
+    const schedule = { days: ['manual','monthly'].includes(form.elements.planMode.value) ? [] : chosenDays, time: form.elements.planMode.value === 'manual' ? '' : form.elements.planTime.value, ...(monthly ? { monthDay: form.elements.monthDay.value === 'last' ? 'last' : Number(form.elements.monthDay.value) } : {}) };
+    await api('/api/sources', { sources, schedule: { id: source.id, value: schedule } }); loaded = false; await refresh(); renderSources(); if (detailId) editSource(source.id, true); else resetSource(); $('#sourceResult').textContent = 'Quelle und Sicherungsplan gespeichert.';
   } catch (e) { const field = serverField(e); if (field) showFieldErrors(form, { [field]: e.message }); $('#sourceResult').textContent = e.message; } finally { button.disabled = false; }
 });
 async function openHistory(id) {
@@ -456,13 +457,16 @@ function renderDiscovered() {
 }
 
 function paintSourcePlan() {
-  const form = $('#sourceForm'), manual = form.elements.planMode.value === 'manual';
+  const form = $('#sourceForm'), manual = form.elements.planMode.value === 'manual', monthly = form.elements.planMode.value === 'monthly';
+  $('#sourceDays').hidden = monthly; $('#sourceMonthLabel').hidden = !monthly; $('#sourceMonthHint').hidden = !monthly; form.elements.monthDay.disabled = !monthly;
   form.elements.planTime.disabled = manual;
   for (const button of $('#sourceDays').children) button.disabled = manual;
 }
 function fillSourcePlan(schedule) {
   const form = $('#sourceForm'), matched = Object.entries(presets).find(([, days]) => days.join(',') === schedule.days.join(','));
-  form.elements.planMode.value = matched ? matched[0] : schedule.days.length === 1 ? 'weekly' : 'custom'; form.elements.planTime.value = schedule.time || '02:00';
+  form.elements.planMode.value = schedule.monthDay !== undefined ? 'monthly' : matched ? matched[0] : schedule.days.length === 1 ? 'weekly' : 'custom'; form.elements.planTime.value = schedule.time || '02:00';
+  form.elements.monthDay.replaceChildren(...Array.from({ length: 31 }, (_, index) => { const option = element('option', (index + 1) + '.'); option.value = String(index + 1); return option; }), Object.assign(element('option', 'Letzter Tag'), { value: 'last' }));
+  form.elements.monthDay.value = String(schedule.monthDay ?? 1);
   $('#sourceDays').replaceChildren();
   for (let day = 1; day <= 7; day++) { const button = element('button', dayNames[day - 1]); button.type = 'button'; button.dataset.day = day; button.setAttribute('aria-label', 'Sicherung ' + dayNames[day - 1]); button.setAttribute('aria-pressed', String(schedule.days.includes(day))); button.addEventListener('click', () => { button.setAttribute('aria-pressed', String(button.getAttribute('aria-pressed') !== 'true')); const count = [...$('#sourceDays').children].filter(item => item.getAttribute('aria-pressed') === 'true').length; form.elements.planMode.value = count === 1 ? 'weekly' : 'custom'; }); $('#sourceDays').append(button); }
   $('#sourceTimezone').textContent = `Zeitzone: ${activeTimezone} · gilt für alle gewählten Tage.`; paintSourcePlan();

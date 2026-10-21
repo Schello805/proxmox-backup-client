@@ -82,7 +82,7 @@
     }
   },
   "secondaryDatastore": "",
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "secondaryPBS": null,
   "capacityWarnPercent": 90,
   "backupPolicy": {
