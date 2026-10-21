@@ -128,12 +128,20 @@ function showContext(view, id) {
   const route = `overview/${id}/${view === 'logDialog' ? 'log' : view === 'historyDialog' ? 'history' : view === 'restorePanel' ? 'restore' : 'edit'}`;
   if (location.hash.slice(1) !== route) history.pushState(null, '', '#' + route);
   document.querySelectorAll('.page').forEach(el => el.hidden = el.id !== 'overview');
+  document.body.dataset.page = 'overview'; markNavigation('overview');
   $('#sourceDetail').hidden = false; detailId = id; $('#detailTitle').textContent = names[id] || id;
   const slots = { sourceForm: 'detailEditor', historyDialog: 'detailHistorySlot', logDialog: 'detailLogSlot', restorePanel: 'detailRestoreSlot' };
   for (const [key, slot] of Object.entries(slots)) { $('#' + slot).hidden = key !== view; if (key === view) { $('#' + slot).append($('#' + key)); $('#' + key).hidden = false; } }
   if (view !== 'logDialog') { logFolder = null; logRun = null; }
   document.querySelectorAll('.detail-tabs button').forEach(button => button.classList.toggle('active', button.id === ({ sourceForm: 'detailEdit', historyDialog: 'detailHistory', logDialog: 'detailLog', restorePanel: 'detailRestore' })[view]));
   $('#sourceDetail').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+function markNavigation(page, id) {
+  const selected = page === 'pbsDialog' ? 'targets' : page === 'assistant' ? id === 'pbs' ? 'targets' : 'sourcesDialog' : page;
+  document.querySelectorAll('aside .nav[data-page]').forEach(link => {
+    const active = link.dataset.page === selected; link.classList.toggle('active', active);
+    if (active) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
+  });
 }
 function navigate() {
   restoreContext();
@@ -142,7 +150,7 @@ function navigate() {
   document.body.dataset.page = page;
   if (!id || page === 'assistant') window.scrollTo({ top: 0, behavior: 'instant' });
   document.querySelectorAll('.page').forEach(el => el.hidden = el.id !== page);
-  document.querySelectorAll('[data-page]').forEach(el => { const active = el.dataset.page === page; el.classList.toggle('active', active); if (active) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current'); });
+  markNavigation(page, id);
   if (!savedConfig) return;
   if (page === 'assistant') assistant?.open(id);
   if (page === 'sourcesDialog') renderSources();
@@ -156,7 +164,6 @@ $('#detailEdit').addEventListener('click', () => editSource(detailId, true));
 $('#detailHistory').addEventListener('click', () => openHistory(detailId));
 $('#detailLog').addEventListener('click', () => openLog(detailId));
 $('#detailRestore').addEventListener('click', () => restore.open(detailId));
-$('#appVersion').addEventListener('click', () => { location.hash = 'systemDialog'; });
 navigate();
 $('#backupAll').addEventListener('click', async () => {
   const button = $('#backupAll'); button.disabled = true;

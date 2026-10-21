@@ -124,10 +124,6 @@ header #updated {
   font-size: 11px;
 }
 
-.slash {
-  margin: 0 12px;
-  color: #b2beb7;
-}
 
 .page-heading {
   display: flex;
@@ -785,15 +781,7 @@ body.locked>aside,body.locked>main {
   margin-top: 12px;
 }
 
-.header-actions {
-  display: flex;
-  gap: 20px;
-  align-items: center;
-}
 
-.header-actions button {
-  padding: 6px 10px;
-}
 
 .activity {
   background: linear-gradient(110deg, #eef9f3, #ffffff 75%);
@@ -944,13 +932,7 @@ summary:focus-visible {
     font-size: 20px;
   }
 
-  .header-actions {
-    gap: 8px;
-  }
 
-  .header-actions #updated {
-    max-width: 140px;
-  }
 
   .quick-guide {
     padding: 20px;
@@ -1853,15 +1835,6 @@ form[data-dirty=true]::after {
   margin-top: 10px;
 }
 
-.app-version {
-  border: 1px solid var(--line);
-  background: #ffffffb3;
-  border-radius: 6px;
-  padding: 4px 7px;
-  font-size: 10px;
-  color: var(--muted);
-  letter-spacing: 0;
-}
 
 .system-checks {
   padding: 0;
@@ -1935,9 +1908,6 @@ button:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid
 
 /* Navigation and contextual source details stay in the document flow. */
 a.nav { display: block; text-decoration: none; box-sizing: border-box; }
-.workspace-nav { display: flex; justify-content: flex-end; gap: 4px; margin: -5px 0 14px; border-bottom: 1px solid var(--line); }
-.workspace-link { padding: 10px 14px; text-decoration: none; font-size: 12px; color: var(--muted); border-bottom: 2px solid transparent; }
-.workspace-link:hover, .workspace-link.active { color: var(--green); border-bottom-color: var(--green); background: #eaf3ee; }
 .workspace-page { width: auto !important; max-width: none; padding: 22px; margin-top: 18px; }
 .datastore-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
 .source-detail { padding: 20px; margin-top: 16px; border-top: 3px solid var(--green); scroll-margin-top: 20px; }
@@ -1952,11 +1922,7 @@ a.nav { display: block; text-decoration: none; box-sizing: border-box; }
 #sourceSchedule legend { font-size: 12px; font-weight: 600; }
 .source-plan { display: flex; align-items: end; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
 .source-plan select, .source-plan input { padding: 8px; border: 1px solid var(--line); border-radius: 5px; font: inherit; }
-@media(max-width:760px) { .workspace-nav { justify-content: flex-start; } .workspace-link { flex: 1; text-align: center; padding: 10px 6px; } .workspace-page, .source-detail { padding: 14px; } }
- .workspace-nav { margin: 0; border: 0; flex-shrink: 0; }
-.workspace-link { padding: 7px 9px; }
-@media(min-width:761px) and (max-width:1300px) { header>span { font-size: 8px; letter-spacing: 1px; } #updated { display: none; } }
-@media(max-width:760px) { .header-actions { flex-wrap: wrap; } .workspace-nav { order: 3; width: 100%; } }
+@media(max-width:760px) { .workspace-page, .source-detail { padding: 14px; } }
 
 .assistant-choices { display: flex; gap: 8px; margin-bottom: 14px; }
 .assistant-choices a { padding: 9px 14px; color: var(--muted); text-decoration: none; border-radius: 6px; background: #fff; border: 1px solid var(--line); font-size: 12px; }
@@ -2120,3 +2086,14 @@ a.nav { display: block; text-decoration: none; box-sizing: border-box; }
 #targetStorage>.capacity-panel, #overviewStorage>.capacity-panel { padding:22px; }
 #pbsSettings .form-panel { margin:0; }
 @media(max-width:760px) { .target-accordion>summary { padding:16px 14px; } #targetStorage>.capacity-panel, #overviewStorage>.capacity-panel { padding:14px; } }
+
+/* One primary navigation; the header contains only live status and session controls. */
+aside { overflow-y:auto; }
+aside .workspace { margin-top:32px; }
+main>header { height:50px; gap:14px; letter-spacing:0; }
+main>header #logout { padding:6px 10px; }
+@media(max-width:760px) {
+  aside nav[aria-label="Hauptnavigation"] { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; }
+  aside .nav { padding:10px 5px; font-size:11px; }
+  main>header #updated { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+}

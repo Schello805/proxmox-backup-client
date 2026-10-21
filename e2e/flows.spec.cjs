@@ -92,8 +92,8 @@ test('Fehlgeschlagenes Backup wird als Fehler angezeigt', async ({ page, app }) 
   await expect(row.locator('.job-state')).toContainText('Fehler'); await expect(page.locator('#activityDescription')).toContainText('Exit-Code 1');
 });
 
-test('Diagnose und Update-Prüfung über Versionsbutton öffnen', async ({ page }) => {
-  await login(page); await page.locator('#appVersion').click(); await expect(page.locator('#installedVersion')).toContainText('Installiert: v');
+test('Diagnose und Update-Prüfung über die Hauptnavigation öffnen', async ({ page }) => {
+  await login(page); await page.locator('#openSystem').click(); await expect(page.locator('#installedVersion')).toContainText('Installiert: v');
   await page.getByRole('button', { name: 'Diagnose starten' }).click(); await expect(page.locator('#diagnosticSummary')).toContainText('geprüft');
   await expect(page.locator('#diagnosticChecks')).toContainText('PBS-Verbindung');
   await expect(page.locator('#diagnosticChecks')).toContainText('Nur manuelle Sicherung');
@@ -112,7 +112,7 @@ test.describe('Ohne Quellgröße', () => {
 
 
 test('PBS-Bestand abrufen und nach Gruppe filtern', async ({ page }) => {
-  await login(page); await page.getByRole('link', { name: 'PBS-Bestand', exact: true }).click();
+  await login(page); await page.getByRole('link', { name: /Backup-Ziele$/ }).click(); await page.locator('#pbsSettings>summary').click(); await page.getByRole('link', { name: 'PBS-Bestand', exact: true }).click();
   await page.getByRole('button', { name: 'Vom PBS abrufen', exact: true }).click();
   await expect(page.locator('#pbsRows')).toContainText('host/software');
   await page.getByRole('combobox', { name: 'PBS-Bestand filtern' }).selectOption('filme');
@@ -150,7 +150,7 @@ test('Zweiten Datastore einrichten, Quelle zuweisen und getrennten PBS-Bestand p
   app.finish(); await expect(row.locator('.job-state')).toContainText('Erfolgreich');
   await row.getByRole('button', { name: 'Software', exact: true }).click(); await expect(page.locator('#historyRows')).toContainText('test@pbs@localhost:archive-store');
   await page.locator('#closeDetail').click();
-  await page.getByRole('link', { name: 'PBS-Bestand', exact: true }).click();
+  await page.getByRole('link', { name: /Backup-Ziele$/ }).click(); if ((await page.locator('#pbsSettings').getAttribute('open')) === null) await page.locator('#pbsSettings>summary').click(); await page.getByRole('link', { name: 'PBS-Bestand', exact: true }).click();
   await page.getByRole('combobox', { name: 'Datastore auswählen' }).selectOption('secondary');
   await page.getByRole('button', { name: 'Vom PBS abrufen', exact: true }).click(); await expect(page.locator('#pbsRows')).toContainText('host/daten');
   await page.getByRole('combobox', { name: 'Datastore auswählen' }).selectOption('primary');

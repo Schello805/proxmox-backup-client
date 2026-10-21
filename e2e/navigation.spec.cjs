@@ -1,0 +1,13 @@
+'use strict';
+const {test,expect,login}=require('./fixtures.cjs');
+test('Eine Hauptnavigation bündelt Quellen und System; PBS-Bestand liegt beim Ziel',async({page},testInfo)=>{
+  await login(page);const nav=page.getByRole('navigation',{name:'Hauptnavigation',exact:true});await expect(nav).toHaveCount(1);await expect(nav.getByRole('link')).toHaveCount(6);await expect(page.locator('main>header nav')).toHaveCount(0);await expect(page.locator('main>header')).toContainText('Aktualisiert');await expect(nav.locator('[aria-current="page"]')).toHaveCount(1);await page.screenshot({path:testInfo.outputPath('navigation-desktop.png')});
+  await nav.getByRole('link',{name:'Quellen',exact:true}).click();await expect(page.locator('#sourcesDialog')).toBeVisible();await expect(page.locator('#manageSources')).toHaveAttribute('aria-current','page');
+  await nav.getByRole('link',{name:/Backup-Ziele$/}).click();await page.locator('#pbsSettings>summary').click();await page.getByRole('link',{name:'PBS-Bestand',exact:true}).click();await expect(page.locator('#pbsDialog')).toBeVisible();await expect(nav.locator('[aria-current="page"]')).toHaveAttribute('data-page','targets');await page.goBack();await expect(page.locator('#targets')).toBeVisible();
+  await page.locator('#openSystem').click();await expect(page.locator('#systemDialog')).toBeVisible();await expect(page.locator('#openSystem')).toHaveAttribute('aria-current','page');await expect(page.locator('#installedVersion')).toContainText('Installiert: v');await page.reload();await expect(page.locator('#openSystem')).toHaveAttribute('aria-current','page');
+  await nav.getByRole('link',{name:/Übersicht/}).click();await page.locator('tr[data-folder="software"]').getByRole('button',{name:'Zeitplan Software bearbeiten',exact:true}).click();await expect(nav.locator('[aria-current="page"]')).toHaveAttribute('data-page','overview');
+});
+test('Mobil bleibt dieselbe Navigation vollständig sichtbar und ohne horizontales Scrollen',async({page},testInfo)=>{
+  await page.setViewportSize({width:390,height:844});await login(page);const nav=page.getByRole('navigation',{name:'Hauptnavigation',exact:true});for(const link of await nav.getByRole('link').all())await expect(link).toBeInViewport();await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:testInfo.outputPath('navigation-mobile.png')});
+  await page.locator('#openSystem').click();await expect(page.locator('#systemDialog')).toBeVisible();await page.locator('#manageSources').click();await expect(page.locator('#sourcesDialog')).toBeVisible();await expect(nav.locator('[aria-current="page"]')).toHaveCount(1);
+});
