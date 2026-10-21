@@ -1867,7 +1867,6 @@ button:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid
 .dot { box-shadow: 0 0 0 3px #58c18e15; }
 @media (prefers-reduced-motion: reduce) { button { transition: none; } }
 
-#systemDialog { width: min(720px, calc(100vw - 32px)); }
 .maintenance-section { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 16px; }
 .maintenance-section h3 { margin: 0; font-size: 14px; }
 .maintenance-section a { color: var(--green); font-size: 12px; }
@@ -2148,3 +2147,4 @@ aside a.system-link { display:flex; align-items:center; justify-content:center; 
 #dashboardMetrics{display:flex;gap:18px;margin:12px 0 0}#dashboardMetrics .inventory-metric{padding:0;border:0;background:none;flex:1;gap:2px}#dashboardMetrics .inventory-metric strong{font-size:1.1rem}#dashboardMetrics .inventory-metric span{font-size:.75rem}#dashboardMetrics .inventory-metric small{font-size:.68rem}
 .protection-summary{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;padding:14px 18px;margin:0 0 14px;border:1px solid #b9dace;border-left:4px solid #21876c;border-radius:10px;background:#eff9f4}.protection-summary strong{font-size:1rem}.protection-summary span{font-size:.75rem;flex:1;min-width:200px;color:#58756b}.protection-summary a{font-size:.75rem}.protection-summary.needs-attention{border-left-color:#bd8624;background:#fffaf0}
 #dashboardTargets #driveOverview{margin:0;padding:10px 0 0;border:0;border-top:1px solid #d8e5df;border-radius:0;box-shadow:none;background:none;display:block}#dashboardTargets .drive-overview-main{max-width:none}#dashboardTargets .drive-overview .actions{margin-top:8px;gap:8px}#dashboardTargets #overviewDrivePlan{white-space:normal}#dashboardTargets .drive-overview .actions a{font-size:.7rem}#dashboardTargets .drive-overview .actions button{padding:5px 8px;font-size:.7rem}#dashboardTargets #overviewDriveSummary{white-space:normal;overflow-wrap:anywhere}.target-alerts{margin-bottom:14px}.target-alerts[hidden]{display:none}
+.system-maintenance-content{padding-top:18px}.system-maintenance-content .system{padding:0;border:0;box-shadow:none;background:transparent}.system-maintenance-content .maintenance-section{min-width:0}.system-maintenance-content .update-command{overflow-wrap:anywhere}

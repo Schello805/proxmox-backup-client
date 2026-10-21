@@ -93,7 +93,7 @@ test('Fehlgeschlagenes Backup wird als Fehler angezeigt', async ({ page, app }) 
 });
 
 test('Diagnose und Update-Prüfung über die Hauptnavigation öffnen', async ({ page }) => {
-  await login(page); await page.locator('#openSystem').click(); await expect(page.locator('#installedVersion')).toContainText('Installiert: v');
+  await login(page); await page.getByRole('link',{name:/Einstellungen/}).click(); await page.locator('#systemMaintenance>summary').click(); await expect(page.locator('#installedVersion')).toContainText('Installiert: v');
   await page.getByRole('button', { name: 'Diagnose starten' }).click(); await expect(page.locator('#diagnosticSummary')).toContainText('geprüft');
   await expect(page.locator('#diagnosticChecks')).toContainText('PBS-Verbindung');
   await expect(page.locator('#diagnosticChecks')).toContainText('Nur manuelle Sicherung');

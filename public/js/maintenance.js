@@ -10,10 +10,10 @@ function showDiagnostics(report) {
   const errors = report.checks.filter(check => check.status === 'error').length, warnings = report.checks.filter(check => check.status === 'warning').length;
   $('#diagnosticSummary').textContent = report.running ? `Prüfung läuft … ${report.checks.length} Ergebnisse vorhanden.` : report.checkedAt ? `${errors} Fehler · ${warnings} Hinweise · geprüft ${date(report.checkedAt)}` : 'Mounts, Verzeichniszugriff, PBS und Zeitpläne mit einem Klick prüfen.';
   $('#runDiagnostics').disabled = report.running;
-  if (report.running && !$('#systemDialog').hidden) { clearTimeout(diagnosticTimer); diagnosticTimer = setTimeout(pollDiagnostics, 1500); }
+  if (report.running && !$('#settings').hidden) { clearTimeout(diagnosticTimer); diagnosticTimer = setTimeout(pollDiagnostics, 1500); }
 }
 async function pollDiagnostics() {
-  if (!isAuthenticated() || $('#systemDialog').hidden || diagnosticPolling) return;
+  if (!isAuthenticated() || $('#settings').hidden || diagnosticPolling) return;
   diagnosticPolling = true; const epoch = getEpoch();
   try { const report = await api('/api/diagnostics'); if (epoch === getEpoch()) showDiagnostics(report); }
   catch (e) { $('#diagnosticSummary').textContent = e.message; $('#runDiagnostics').disabled = false; }

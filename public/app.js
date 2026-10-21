@@ -145,8 +145,9 @@ function markNavigation(page, id) {
 }
 function navigate() {
   restoreContext();
+  if (location.hash === '#systemDialog') { history.replaceState(null, '', '#settings'); $('#systemMaintenance').open = true; }
   const [requested, id, tab] = location.hash.slice(1).split('/');
-  const page = ['overview','settings','targets','guide','sourcesDialog','pbsDialog','systemDialog','assistant'].includes(requested) ? requested : 'overview';
+  const page = ['overview','settings','targets','guide','sourcesDialog','pbsDialog','assistant'].includes(requested) ? requested : 'overview';
   document.body.dataset.page = page;
   if (!id || page === 'assistant') window.scrollTo({ top: 0, behavior: 'instant' });
   document.querySelectorAll('.page').forEach(el => el.hidden = el.id !== page);
@@ -155,7 +156,7 @@ function navigate() {
   if (page === 'assistant') assistant?.open(id);
   if (page === 'sourcesDialog') renderSources();
   if (page === 'pbsDialog') openPBS();
-  if (page === 'systemDialog') document.dispatchEvent(new Event('open-system'));
+  if (page === 'settings') document.dispatchEvent(new Event('open-system'));
   if (page === 'overview' && names[id]) { if (tab === 'restore') void restore?.open(id); else if (tab === 'log') void openLog(id); else if (tab === 'history') void openHistory(id); else editSource(id, true); }
 }
 window.addEventListener('hashchange', navigate); window.addEventListener('popstate', navigate);
