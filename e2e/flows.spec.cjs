@@ -141,7 +141,7 @@ test('Zweiten Datastore einrichten, Quelle zuweisen und getrennten PBS-Bestand p
   const dialog = page.getByRole('region', { name: 'Backup-Quellen' });
   await dialog.locator('.source-editor-row').filter({ has: page.getByText('Software', { exact: true }) }).getByRole('button', { name: 'Bearbeiten' }).click();
   await dialog.getByRole('combobox', { name: 'Backup-Ziel', exact: true }).selectOption('secondary');
-  await dialog.getByRole('button', { name: 'Quelle speichern' }).click(); await expect(dialog.locator('#sourceResult')).toContainText('Quelle und Wochenplan gespeichert');
+  await dialog.getByRole('button', { name: 'Quelle speichern' }).click(); await expect(dialog.locator('#sourceResult')).toContainText('Quelle und Sicherungsplan gespeichert');
   await dialog.getByRole('button', { name: 'Schließen', exact: true }).click();
   const row = page.locator('tr[data-folder="software"]'); await expect(row.locator('.source-target')).toHaveText('archive-store');
   await row.getByRole('button', { name: '↗ Sichern', exact: true }).click(); await page.getByRole('button', { name: 'Live-Protokoll ↗' }).click();
@@ -180,7 +180,7 @@ test('Aktualisieren erkennt geänderte und neue SMB-Mounts ohne automatische Fre
   await expect(dialog.getByLabel('Pfad im LXC')).toHaveValue('/mnt/Daten/FotosNeu');
   await expect(dialog.getByLabel('Erwartete SMB-Freigabe')).toHaveValue('//test-nas/fotos-neu');
   await dialog.getByRole('button', { name: 'Quelle speichern', exact: true }).click();
-  await expect(dialog.locator('#sourceResult')).toContainText('Quelle und Wochenplan gespeichert');
+  await expect(dialog.locator('#sourceResult')).toContainText('Quelle und Sicherungsplan gespeichert');
   await expect(dialog.locator('#discoveredSources')).not.toBeVisible();
   await dialog.locator('.source-editor-row').filter({ has: page.getByText('Daten', { exact: true }) }).getByRole('button', { name: 'SMB bestätigen' }).click();
   await expect(dialog.locator('#sourceResult')).toContainText('//test-nas/CorrectData');
@@ -223,7 +223,7 @@ test('Navigation als Seiten und Drilldown: Quelle und Wochenplan direkt in der �
   await detail.getByLabel('Uhrzeit', { exact: true }).fill('04:25');
   for (const day of ['Mo','Mi','Fr']) { const button = detail.getByRole('button', { name: 'Sicherung ' + day, exact: true }); if (await button.getAttribute('aria-pressed') !== 'true') await button.click(); }
   await detail.getByRole('button', { name: 'Quelle speichern', exact: true }).click();
-  await expect(detail.locator('#sourceResult')).toContainText('Wochenplan gespeichert');
+  await expect(detail.locator('#sourceResult')).toContainText('Sicherungsplan gespeichert');
   await expect(page.locator('tr[data-folder="software"]')).toContainText('Software neu');
   await expect(page.locator('tr[data-folder="software"]')).toContainText('04:25');
   await page.screenshot({ path: testInfo.outputPath('source-drilldown.png'), fullPage: true });
