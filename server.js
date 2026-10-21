@@ -163,6 +163,7 @@ const server = http.createServer(async (req, res) => {
       configs.apply({ ...configs.get(), ...changes });
       return json(res, 200, { success: true });
     }
+    if (req.method === 'POST' && url.pathname === '/api/targets/remove') { const input = await body(req); configs.removeTarget(input.target); return json(res, 200, { success: true }); }
     if (req.method === 'POST' && url.pathname === '/api/targets/setup') {
       const input = await body(req), current = configs.get();
       if (typeof input.datastore !== 'string' || !/^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,63}$/.test(input.datastore)) throw new Error('Ungültiger Datastore-Name.');
@@ -182,7 +183,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/sources') {
       const input = await body(req); const current = configs.get();
       if (input.schedule && !input.sources?.some(source => source.id === input.schedule.id)) throw new Error('Zeitplan gehört zu keiner Quelle.');
-      configs.apply({ ...current, sources: input.sources, schedules: input.schedule ? { ...current.schedules, [input.schedule.id]: input.schedule.value } : current.schedules }); return json(res, 200, { success: true });
+      configs.apply({ ...current, sources: input.sources, gdrive: { ...current.gdrive, sources: current.gdrive.sources.filter(id => input.sources?.some(source => source.id === id)) }, schedules: input.schedule ? { ...current.schedules, [input.schedule.id]: input.schedule.value } : current.schedules }); return json(res, 200, { success: true });
     }
     if (req.method === 'GET' && url.pathname === '/api/pbs') return json(res, 200, pbs.current(url.searchParams.get('target') || 'primary'));
     if (req.method === 'POST' && url.pathname === '/api/pbs/refresh') return json(res, 200, await pbs.refresh(url.searchParams.get('target') || 'primary'));

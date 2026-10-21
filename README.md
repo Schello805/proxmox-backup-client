@@ -10,6 +10,8 @@ Das Dashboard hebt den PBS-Sicherungsstand mit überfälligen und noch ungesiche
 
 Die Navigation steht links: Übersicht, Quellen und Backup-Ziele oben; Einstellungen und Anleitung unten über dem Controller-Hinweis. Allgemeine Optionen, Systeminformationen, Diagnose und Updates stehen gemeinsam unter Einstellungen; der PBS-Bestand bleibt direkt bei der PBS-Konfiguration erreichbar.
 
+Verwaltung erfolgt über Quellen, Backup-Ziele und Einstellungen. Unter Quellen → Mounts verwalten stehen geprüfte Kopierbefehle für Änderungen an der LXC-Durchreichung; SMB-Storage selbst wird in der Proxmox-Weboberfläche verwaltet. Die App-Anleitung enthält die Übersicht „Verwaltung · Was geht wo?“. Entfernen in der App löscht keine Quelldaten oder Sicherungen.
+
 ## Voraussetzungen
 
 - Debian-12-LXC mit Node.js ab 18 und installiertem `proxmox-backup-client`.

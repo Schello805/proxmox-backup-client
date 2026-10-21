@@ -5,7 +5,7 @@ import { installControls } from '/js/controls.js';
 import { installOperations } from '/js/operations.js';
 import { installTimeline } from '/js/timeline.js';
 import { sourceProblem, sourceHealth, latestConnection } from '/js/problems.js';
-import { installAssistant } from '/js/assistant.js';
+import { installAssistant, installMountTools } from '/js/assistant.js';
 import { installMaintenance } from '/js/maintenance.js';
 import { createAPI } from '/js/api.js';
 import { createViews, dayNames } from '/js/views.js';
@@ -137,7 +137,7 @@ function showContext(view, id) {
   $('#sourceDetail').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 function markNavigation(page, id) {
-  const selected = page === 'pbsDialog' ? 'targets' : page === 'assistant' ? id === 'pbs' ? 'targets' : 'sourcesDialog' : page;
+  const selected = page === 'mountTools' ? 'sourcesDialog' : page === 'pbsDialog' ? 'targets' : page === 'assistant' ? id === 'pbs' ? 'targets' : 'sourcesDialog' : page;
   document.querySelectorAll('aside .nav[data-page]').forEach(link => {
     const active = link.dataset.page === selected; link.classList.toggle('active', active);
     if (active) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
@@ -147,13 +147,14 @@ function navigate() {
   restoreContext();
   if (location.hash === '#systemDialog') { history.replaceState(null, '', '#settings'); $('#systemMaintenance').open = true; }
   const [requested, id, tab] = location.hash.slice(1).split('/');
-  const page = ['overview','settings','targets','guide','sourcesDialog','pbsDialog','assistant'].includes(requested) ? requested : 'overview';
+  const page = ['overview','settings','targets','guide','sourcesDialog','pbsDialog','mountTools','assistant'].includes(requested) ? requested : 'overview';
   document.body.dataset.page = page;
   if (!id || page === 'assistant') window.scrollTo({ top: 0, behavior: 'instant' });
   document.querySelectorAll('.page').forEach(el => el.hidden = el.id !== page);
   markNavigation(page, id);
   if (!savedConfig) return;
   if (page === 'assistant') assistant?.open(id);
+  if (page === 'mountTools') document.dispatchEvent(new Event('open-mount-tools'));
   if (page === 'sourcesDialog') renderSources();
   if (page === 'pbsDialog') openPBS();
   if (page === 'settings') document.dispatchEvent(new Event('open-system'));
@@ -562,3 +563,12 @@ operations = installOperations({api,element,refresh,date});
 controls = installControls({ api, element, refresh, refreshActivity, notice, date, getNames: () => names, onRestored: () => { for (const id of ['configForm','preferencesForm','authForm','notifyForm']) formState.clean(id, formState.capture(id)); lastMainSnapshot = lastPreferencesSnapshot = lastNotifySnapshot = null; loaded = false; } });
 
 restore = installRestore({ api, element, date, showContext });
+
+installMountTools({ getConfig: () => savedConfig, element });
+$('#removeTarget').addEventListener('click', async () => {
+  const result=$('#removeTargetResult');
+  if (!$('#confirmTargetRemoval').checked) { result.textContent='Bitte das Entfernen der App-Zuordnung bestätigen.'; return; }
+  const button=$('#removeTarget');button.disabled=true;
+  try { await api('/api/targets/remove',{target:$('#removeTargetId').value});$('#confirmTargetRemoval').checked=false;lastMainSnapshot=null;loaded=false;await refresh();result.textContent='Ziel aus der App entfernt. Sicherungen und Quelldaten bleiben erhalten.'; }
+  catch(error){result.textContent=error.message;}finally{button.disabled=false;}
+});

@@ -87,6 +87,11 @@ export function installDrive({ api, element, notice, scheduleText, date }) {
   for (const link of document.querySelectorAll('[data-open-drive-guide]')) link.addEventListener('click', () => afterNavigation('#guide', () => { $('#driveSetupGuide').open = true; $('#driveSetupGuide').scrollIntoView({block:'start'}); }));
   for (const link of document.querySelectorAll('[data-open-drive-settings]')) link.addEventListener('click', () => afterNavigation('#targets', () => { $('#driveSettings').open = true; $('#drivePanel').scrollIntoView({block:'start'}); void load(); }));
   for (const button of document.querySelectorAll('[data-drive-copy]')) button.addEventListener('click', async () => { try { const text = document.getElementById(button.dataset.driveCopy).textContent; if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(text); else { const input = element('textarea'); input.value = text; document.body.append(input); input.select(); const copied = document.execCommand('copy'); input.remove(); if (!copied) throw new Error('clipboard'); } button.textContent = 'Kopiert'; } catch { notice('Befehl markieren und kopieren. Die Zwischenablage benötigt HTTPS.', true); } });
+  $('#driveDisable').addEventListener('click', async event => {
+    const button=event.currentTarget;button.disabled=true;
+    try { const settings=currentJob?.settings; if(!settings)throw new Error('Einstellungen zuerst laden.');await api('/api/gdrive',{...settings,sources:[],schedule:''});dirty=false;await load();$('#driveResult').textContent='Drive-Kopien deaktiviert. Dateien in Google Drive und die Rclone-Anmeldung bleiben erhalten.'; }
+    catch(error){$('#driveResult').textContent=error.message;}finally{button.disabled=false;}
+  });
   $('#configureDrive').addEventListener('click', () => { $('#addTargetMenu').open=false; $('#driveSettings').open = true; $('#drivePanel').scrollIntoView({ behavior: 'smooth', block: 'start' }); void load(); });
   $('#driveSettings').addEventListener('toggle', () => { if ($('#driveSettings').open) void load(); });
   window.addEventListener('hashchange', () => { if (location.hash === '#targets') void load(); });

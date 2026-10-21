@@ -101,7 +101,7 @@ export function installAssistant({ api, getConfig, refresh, openSource }) {
       if (!config.repository || pbs.ownServer) grid.append(field('PBS-Adresse', 'server', pbs.server), field('PBS-Benutzer', 'authId', pbs.authId), field('PBS-Passwort / Token', 'password', pbs.password, 'password'), field(pbs.ownServer ? 'PBS-2-Fingerprint' : 'PBS-1-Fingerprint', 'fingerprint', pbs.fingerprint), field('Namespace (optional)', 'namespace', pbs.namespace));
       $('#assistantBody').append(grid);
       if (!config.repository || pbs.ownServer) text('Fingerprint dieses PBS verwenden: auf genau diesem Server „proxmox-backup-manager cert info“ ausführen. Bei vertrauenswürdigem CA-Zertifikat kann das Feld leer bleiben.');
-      if (config.secondaryDatastore) text('Beide Ziele sind belegt. Unter Einstellungen kannst du sie bearbeiten.');
+      if (config.secondaryDatastore) text('Beide Ziele sind belegt. Unter Backup-Ziele kannst du sie bearbeiten oder entfernen.');
     } else if (step === 1) {
       if (pbs.create) {
         $('#assistantBody').append(field('PBS-Datenträger · Mountpfad', 'path', pbs.path));
@@ -140,4 +140,38 @@ export function installAssistant({ api, getConfig, refresh, openSource }) {
     finally { busy = false; $('#assistantNext').disabled = false; }
   });
   return { open(nextKind) { const next = nextKind === 'pbs' ? 'pbs' : 'source'; if (next !== kind) { kind = next; step = 0; $('#assistantResult').textContent = ''; } render(); } };
+}
+
+export function installMountTools({ getConfig, element }) {
+  const root=document.querySelector('#mountTools');
+  root.innerHTML='<div class="page-heading"><div><div class="eyebrow">PROXMOX-HOST → LXC</div><h1>Mounts verwalten</h1><p>Prüfen, Zuordnung ändern oder Durchreichung entfernen.</p></div><a href="#sourcesDialog" class="secondary">Zu den Quellen</a></div><section class="panel form-panel"><p class="hint">SMB-Verbindungen am Host in der Proxmox-Weboberfläche unter Rechenzentrum → Storage anlegen, bearbeiten oder entfernen. Hier erzeugst du Befehle für die LXC-Durchreichung. Der vorausgefüllte Hostpfad ist ein Vorschlag: im Proxmox-Webinterface prüfen. Zum Hinzufügen den Quellen-Assistenten verwenden.</p><a href="#assistant/source">Neue Freigabe hinzufügen →</a><div class="settings-grid"><label>Registrierte Quelle<select id="mountSource"></select></label><label>LXC-ID<input id="mountCT" value="119" inputmode="numeric"></label><label>Pfad im LXC<input id="mountPath"></label><label>Erwartete SMB-Freigabe<input id="mountExpected" placeholder="//192.168.1.21/Daten"></label><label>Host-Mountpfad<input id="mountHost" placeholder="/mnt/pve/QNAP4bay-Daten"></label><label>Aktion<select id="mountAction"><option value="inspect">Prüfen</option><option value="replace">Durchreichung ändern</option><option value="remove">Durchreichung entfernen</option></select></label></div><p class="hint">1. Alle Sicherungen beenden. Bei Änderungen LXC im Proxmox-Webinterface herunterfahren. 2. Befehl als root am Proxmox-Host ausführen. 3. LXC starten, in der App aktualisieren und SMB-Zuordnung prüfen. Quelldaten bleiben erhalten.</p><p id="mountCommandHint" role="status"></p><div class="command-card"><div class="panel-title"><strong>Proxmox-Host · Bash</strong><button id="copyMountCommand" type="button" class="secondary">Befehl kopieren</button></div><pre id="mountCommand" tabindex="0"></pre></div><p class="hint">Entfernen löst nur den Bind-Mount im LXC. Anschließend die Quelle in der App abmelden oder neu zuordnen. Den Host-Storage nur entfernen, wenn keine anderen Container ihn verwenden.</p><p id="mountCopyResult" role="status"></p></section>';
+  const $=selector=>root.querySelector(selector),quote=value=>"'"+value.replaceAll("'","'\\''")+"'";
+  let command='', inventory='';
+  function generate(){
+    command='';$('#mountCopyResult').textContent='';
+    const ct=$('#mountCT').value,path=$('#mountPath').value,host=$('#mountHost').value,expected=$('#mountExpected').value,action=$('#mountAction').value;
+    try{
+      if(!/^\d+$/.test(ct)||Number(ct)<100)throw new Error('LXC-ID ab 100 angeben.');
+      if(!/^\/mnt\/Daten\/[a-zA-Z0-9_./ -]+$/.test(path)||path.split('/').some(part=>['.','..'].includes(part))||path.includes('//')||path.endsWith('/'))throw new Error('Gültigen Pfad unter /mnt/Daten/ angeben.');
+      let script=`bash <<'QNAP_MOUNT'\nset -eu\nct=${quote(ct)}\nlxc_path=${quote(path)}\npct config "$ct"\n`;
+      if(action!=='inspect'){
+        script+=`[ "$(pct status "$ct")" = 'status: stopped' ] || { echo 'LXC zuerst herunterfahren; vorher alle Backups beenden.'; exit 1; }\nslot=''\nwhile IFS= read -r line; do\n  case "$line" in mp[0-9]*:*)\n    if printf '%s\\n' "$line" | tr ',' '\\n' | grep -Fxq -- "mp=$lxc_path"; then\n      [ -z "$slot" ] || { echo 'Mehrere Zuordnungen gefunden. Abbruch.'; exit 1; }\n      slot=\${line%%:*}\n    fi ;;\n  esac\ndone <<QNAP_CONFIG\n$(pct config "$ct")\nQNAP_CONFIG\n[ -n "$slot" ] || { echo 'Keine bestehende Durchreichung für diesen LXC-Pfad gefunden.'; exit 1; }\n`;
+        if(action==='replace'){
+          if(!/^\/[a-zA-Z0-9_./ -]+$/.test(host)||host.split('/').includes('..')||host.includes('//')||host==='/')throw new Error('Gültigen Host-Mountpfad angeben.');
+          if(!/^\/\/[^/\s]+\/[^\r\n\0]+$/.test(expected))throw new Error('Erwartete SMB-Freigabe als //server/freigabe angeben.');
+          script+=`host_path=${quote(host)}\nexpected=${quote(expected)}\n[ "$(findmnt -n -o SOURCE -T "$host_path")" = "$expected" ] || { echo 'Falsche SMB-Freigabe am Host.'; exit 1; }\ncase "$(findmnt -n -o FSTYPE -T "$host_path")" in cifs|smb3) ;; *) echo 'Kein SMB-Mount.'; exit 1 ;; esac\npct set "$ct" "-$slot" "$host_path,mp=$lxc_path,ro=1"\n`;
+        }else script+='pct set "$ct" --delete "$slot"\n';
+      }else script+=`pct exec "$ct" -- findmnt -T "$lxc_path" -o TARGET,SOURCE,FSTYPE\npct exec "$ct" -- runuser -u qnap-backup -- ls -- "$lxc_path"\n`;
+      command=script+'QNAP_MOUNT';$('#mountCommand').textContent=command;$('#mountCommandHint').textContent=action==='inspect'?'Nur lesende Prüfung. Der LXC muss laufen.':'Ändert ausschließlich die Durchreichung im gestoppten LXC. Vor Ausführung ID und Pfade prüfen.';
+    }catch(error){$('#mountCommand').textContent='';$('#mountCommandHint').textContent=error.message;}
+    $('#copyMountCommand').disabled=!command;
+  }
+  function select(){const source=getConfig()?.sources.find(source=>source.id===$('#mountSource').value);if(source){$('#mountPath').value=source.path;$('#mountExpected').value=source.expectedSource;$('#mountHost').value='/mnt/pve/QNAP4bay-'+source.name.replace(/[^a-zA-Z0-9_-]/g,'-');}generate();}
+  root.addEventListener('input',generate);$('#mountAction').addEventListener('change',generate);$('#mountSource').addEventListener('change',select);
+  $('#copyMountCommand').addEventListener('click',async()=>{
+    if(!command)return;
+    try{if(navigator.clipboard&&window.isSecureContext)await navigator.clipboard.writeText(command);else{const area=element('textarea');area.value=command;document.body.append(area);area.select();const ok=document.execCommand('copy');area.remove();if(!ok)throw new Error();}$('#mountCopyResult').textContent='Befehl kopiert.';}
+    catch{$('#mountCopyResult').textContent='Befehl markieren und mit Strg+C kopieren.';}
+  });
+  document.addEventListener('open-mount-tools',()=>{if(location.hash==='#mountTools'){const sources=getConfig()?.sources||[];const next=JSON.stringify(sources);if(next===inventory)return;inventory=next;const selected=$('#mountSource').value;$('#mountSource').replaceChildren(...sources.map(source=>{const option=element('option',source.name);option.value=source.id;return option;}));if(sources.some(source=>source.id===selected))$('#mountSource').value=selected;select();}});
 }

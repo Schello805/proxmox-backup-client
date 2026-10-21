@@ -108,3 +108,16 @@ test('Schema 3 wird mit bestehenden Quellen und beiden gemeinsamen Datastores er
   assert.equal(repositoryFor(migrated,'secondary'),'backup@pbs!token@pbs-host:pbs2');
   assert.deepEqual(migrated.sources,previous.sources); assert.deepEqual(migrated.schedules,previous.schedules);
 });
+
+test('Ziele entfernen schützt Zuordnungen, Geheimnisse und laufende Aufträge',()=>{
+ const base=config();base.notifications={enabled:false,success:false,url:'',token:'keep-token'};
+ let busy=false;
+ const service=createConfigService({initial:base,state:{jobs:{},watchSince:{}},write(){},persist(){},onChange(){},password:'',isBusy:()=>busy});
+ assert.throws(()=>service.removeTarget('primary'),/Datastore 2/);
+ const sources=base.sources.map((source,index)=>({...source,target:index===0?'secondary':'primary'}));
+ service.apply({...service.get(),sources});assert.throws(()=>service.removeTarget('secondary'),/wird verwendet/);
+ service.apply({...service.get(),sources:base.sources});busy=true;assert.throws(()=>service.removeTarget('secondary'),/Auftrag/);busy=false;
+ service.removeTarget('secondary');assert.equal(service.get().secondaryDatastore,'');assert.equal(service.get().password,'secret');
+ service.removeTarget('primary');assert.equal(service.get().repository,'');assert.equal(service.get().password,'');assert.equal(service.get().notifications.token,'keep-token');assert.equal(service.get().sources.length,base.sources.length);
+ service.apply({...service.get(),sources:[],schedules:{}});assert.deepEqual(service.get().sources,[]);
+});
