@@ -54,4 +54,11 @@ require('../lib/updates').createUpdates = () => ({
   current: () => null,
   check: async () => ({ status: 'available', message: 'Ein neuer Stand ist verfügbar.', checkedAt: new Date().toISOString(), latest: { version: '9.0.0', commit: 'b'.repeat(40), url: 'https://github.com/Schello805/proxmox-backup-client/commit/' + 'b'.repeat(40) } })
 });
+const realDrive = require('../lib/gdrive').createDrive;
+require('../lib/gdrive').createDrive = options => realDrive({ ...options, spawnProcess: (_, args) => {
+  const child = new EventEmitter(); child.stdout = new EventEmitter(); child.stderr = new EventEmitter();
+  child.kill = signal => setImmediate(() => child.emit('close', null, signal));
+  setImmediate(() => { if (args[0] === 'copy') child.stderr.emit('data', Buffer.from(JSON.stringify({stats:{bytes:1048576,totalBytes:2097152,speed:524288,eta:2}})+'\n')); else { if(args[0] === 'listremotes') child.stdout.emit('data', Buffer.from('gdrive: drive\n')); child.emit('close', 0); } });
+  return child;
+} });
 require('../server');

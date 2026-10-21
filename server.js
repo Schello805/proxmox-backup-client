@@ -41,8 +41,8 @@ const initial = loadConfig(CONFIG, path.join(ROOT, 'config.example.json'), PASS)
 const STATE = path.join(DATA, 'state.json'), state = loadState(STATE);
 const persist = () => saveJSON(STATE, state);
 for (const source of initial.sources) state.watchSince[source.id] ||= new Date().toISOString();
-let backups, pbs, capacity;
-const configs = createConfigService({ initial, state, write: value => saveJSON(CONFIG, value), persist, password: PASS, isBusy: () => backups?.busy || pbs?.busy || capacity?.busy, onChange: (previous, next) => { for (const target of ['primary','secondary']) if (JSON.stringify(targetConfig(previous,target)) !== JSON.stringify(targetConfig(next,target))) state.pbsCheckAfter[target] = new Date().toISOString(); if (['repository','secondaryDatastore','password','fingerprint','namespace','secondaryPBS'].some(key => JSON.stringify(previous[key]) !== JSON.stringify(next[key]))) pbs.invalidate(); } });
+let backups, pbs, capacity, drive;
+const configs = createConfigService({ initial, state, write: value => saveJSON(CONFIG, value), persist, password: PASS, isBusy: () => backups?.busy || drive?.busy || pbs?.busy || capacity?.busy, onChange: (previous, next) => { drive?.changed(previous, next); for (const target of ['primary','secondary']) if (JSON.stringify(targetConfig(previous,target)) !== JSON.stringify(targetConfig(next,target))) state.pbsCheckAfter[target] = new Date().toISOString(); if (['repository','secondaryDatastore','password','fingerprint','namespace','secondaryPBS'].some(key => JSON.stringify(previous[key]) !== JSON.stringify(next[key]))) pbs.invalidate(); } });
 const getConfig = configs.get;
 const isMaintenance = () => fs.existsSync(path.join(DATA, 'maintenance'));
 const history = createHistory({ state, data: DATA, persist, getConfig, password: PASS });
@@ -50,17 +50,19 @@ const notifier = createNotifier({ getConfig, state, persist });
 const inspectPath = createInspector(run);
 const mountStatus = require('./lib/mount-status').createMountStatus({ inspectPath });
 const discovery = createDiscovery({ getConfig });
-const sourceSizes = createSourceSizes({ run, inspectPath, isBusy: () => backups?.busy || isMaintenance() });
+const sourceSizes = createSourceSizes({ run, inspectPath, isBusy: () => backups?.busy || drive?.busy || isMaintenance() });
 function environment(target = 'primary') {
   const env = { ...process.env }, config = targetConfig(getConfig(), target);
   for (const key of Object.keys(env)) if (key.startsWith('PBS_')) delete env[key];
   return { ...env, PBS_REPOSITORY: config.repository, PBS_PASSWORD: config.password, PBS_FINGERPRINT: config.fingerprint, PBS_NAMESPACE: config.namespace };
 }
-backups = createBackups({ state, data: DATA, persist, getConfig, inspectPath, environment, log: history.log, archive: history.archive, notify: notifier.notify, isMaintenance, getSourceSize: source => sourceSizes.peek(source), onBatchComplete: batch => notifier.notify('summary/'+batch.id, backupSummary(batch), {success:true,warning:batch.results.some(result=>result.status!=='success')}) });
+backups = createBackups({ state, data: DATA, persist, getConfig, inspectPath, environment, log: history.log, archive: history.archive, notify: notifier.notify, isMaintenance, isBlocked: () => drive?.active, getSourceSize: source => sourceSizes.peek(source), onBatchComplete: batch => notifier.notify('summary/'+batch.id, backupSummary(batch), {success:true,warning:batch.results.some(result=>result.status!=='success')}) });
+drive = require('./lib/gdrive').createDrive({ getConfig, state, persist, data: DATA, inspectPath, blocked: () => backups.busy || pbs?.busy || capacity?.busy || isMaintenance() || backups.paused });
+const driveTimer = setInterval(() => drive.tick(), 10000);
 const scheduler = createScheduler({ getConfig, state, persist, backups, log: history.log, notify: notifier.notify, isMaintenance });
 pbs = createPBS({ getConfig, environment, run, cacheFile: path.join(DATA, 'pbs.json'), save: saveJSON });
 capacity = createCapacity({getConfig,environment,run,save:saveJSON,cacheFile:path.join(DATA,'capacity.json')});
-async function pollCapacity(){ if(backups.busy||pbs.busy||capacity.busy||isMaintenance())return; for(const target of targetsFor(getConfig())){if(backups.busy||isMaintenance())break;if(capacity.due(target.id))await capacity.refresh(target.id);} }
+async function pollCapacity(){ if(backups.busy||drive.busy||pbs.busy||capacity.busy||isMaintenance())return; for(const target of targetsFor(getConfig())){if(backups.busy||isMaintenance())break;if(capacity.due(target.id))await capacity.refresh(target.id);} }
 const capacityTimer=setInterval(()=>void pollCapacity().catch(()=>console.warn('Speicherstand konnte nicht gespeichert werden.')),60000);
 void pollCapacity().catch(()=>console.warn('Speicherstand konnte nicht gespeichert werden.'));
 const system = createSystem({ run, getConfig, storageChecks });
@@ -85,7 +87,7 @@ const server = http.createServer(async (req, res) => {
       if (req.headers['x-requested-with'] !== 'qnap-dashboard') return json(res, 403, { error: 'Anfrage-Header fehlt.' });
     }
     // Nur die App-Hülle ist öffentlich. Daten und Aktionen benötigen eine Sitzung.
-    const assets = { '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], ...Object.fromEntries(['api','views','forms','maintenance','assistant','timeline','problems','operations','controls','restore'].map(name => ['/js/' + name + '.js', ['js/' + name + '.js', 'text/javascript']])) };
+    const assets = { '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], ...Object.fromEntries(['gdrive','api','views','forms','maintenance','assistant','timeline','problems','operations','controls','restore'].map(name => ['/js/' + name + '.js', ['js/' + name + '.js', 'text/javascript']])) };
     if (req.method === 'GET' && assets[url.pathname]) {
       const [file, type] = assets[url.pathname]; res.writeHead(200, { 'Content-Type': `${type}; charset=utf-8`, 'Cache-Control': 'no-cache' });
       return res.end(fs.readFileSync(path.join(ROOT, 'public', file)));
@@ -106,9 +108,14 @@ const server = http.createServer(async (req, res) => {
       configs.setNotifications(await body(req)); return json(res, 200, { success: true });
     }
     if (req.method === 'POST' && url.pathname === '/api/logout') { auth.logout(req, res); return json(res, 200, { success: true }); }
+    if (req.method === 'GET' && url.pathname === '/api/gdrive') return json(res, 200, { config: getConfig().gdrive, sources: getConfig().sources, timezone: getConfig().timezone, job: drive.snapshot() });
+    if (req.method === 'POST' && url.pathname === '/api/gdrive') { configs.apply({ ...getConfig(), gdrive: await body(req) }); return json(res, 200, { success: true }); }
+    if (req.method === 'POST' && url.pathname === '/api/gdrive/check') return json(res, 200, await drive.check());
+    if (req.method === 'POST' && url.pathname === '/api/gdrive/start') { if (isMaintenance()) throw new Error('Update läuft.'); drive.start(); return json(res, 202, { success: true }); }
+    if (req.method === 'POST' && url.pathname === '/api/gdrive/cancel') { drive.cancel(); return json(res, 202, { success: true }); }
     if (req.method === 'GET' && url.pathname === '/api/activity') {
       const file = backups.active ? path.join(DATA, backups.active.folder + '.log') : null;
-      return json(res, 200, { maintenance: isMaintenance(), health: Object.fromEntries(configs.get().sources.map(source => [source.id, scheduler.health(source.id)])), notification: state.notification || null, jobs: Object.fromEntries(configs.get().sources.map(source => [source.id, { ...(state.jobs[source.id] || { status: 'idle' }), estimate: estimateProgress(state.jobs[source.id]) }])), active: backups.active?.folder || null, phase: backups.active ? (backups.active.child ? 'backup' : 'checking') : 'idle', queue: backups.queue, paused: backups.paused, waitingReason: backups.waitingReason, backupPolicy: getConfig().backupPolicy, timezone: getConfig().timezone, log: file && fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '' });
+      return json(res, 200, { drive: drive.snapshot(), maintenance: isMaintenance(), health: Object.fromEntries(configs.get().sources.map(source => [source.id, scheduler.health(source.id)])), notification: state.notification || null, jobs: Object.fromEntries(configs.get().sources.map(source => [source.id, { ...(state.jobs[source.id] || { status: 'idle' }), estimate: estimateProgress(state.jobs[source.id]) }])), active: backups.active?.folder || null, phase: backups.active ? (backups.active.child ? 'backup' : 'checking') : 'idle', queue: backups.queue, paused: backups.paused, waitingReason: backups.waitingReason, backupPolicy: getConfig().backupPolicy, timezone: getConfig().timezone, log: file && fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '' });
     }
     if (req.method === 'POST' && url.pathname === '/api/refresh') {
       sourceSizes.invalidate();
@@ -198,7 +205,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/connection') return json(res, 200, await pbs.connection((await body(req)).target || 'primary'));
     if (req.method === 'POST' && url.pathname === '/api/backups/start') return json(res, 202, backups.enqueueAll());
-    if (req.method === 'POST' && url.pathname === '/api/backups/cancel') { backups.cancelAll(); return json(res, 202, { success: true }); }
+    if (req.method === 'POST' && url.pathname === '/api/backups/cancel') { backups.cancelAll(); drive.cancel(); return json(res, 202, { success: true }); }
     const cancel = url.pathname.match(/^\/api\/backup\/([a-z][a-z0-9_-]{0,39})\/cancel$/);
     if (req.method === 'POST' && cancel) { backups.cancel(cancel[1]); return json(res, 202, { success: true }); }
     const backup = url.pathname.match(/^\/api\/backup\/([a-z][a-z0-9_-]{0,39})$/);
@@ -216,8 +223,8 @@ scheduler.start();
 server.on('error', error => { console.error(error.code === 'EADDRINUSE' ? `Port ${PORT} ist bereits belegt.` : `Webserver konnte nicht starten: ${error.code || 'unbekannter Fehler'}`); scheduler.stop(); process.exitCode = 1; });
 server.listen(PORT, HOST, () => console.log(`QNAP Backup: http://${HOST}:${server.address().port}`));
 function shutdown() {
-  clearInterval(capacityTimer); scheduler.stop(); sourceSizes.invalidate(); backups.stop();
-  server.close(() => { if (!backups.active?.child) process.exit(0); });
-  setTimeout(() => { backups.stop('SIGKILL'); process.exit(0); }, 8000).unref();
+  clearInterval(driveTimer); drive.stop(); clearInterval(capacityTimer); scheduler.stop(); sourceSizes.invalidate(); backups.stop();
+  server.close(() => { if (!backups.active?.child && !drive.active) process.exit(0); });
+  setTimeout(() => { backups.stop('SIGKILL'); drive.stop('SIGKILL'); process.exit(0); }, 8000).unref();
 }
 process.on('SIGTERM', shutdown); process.on('SIGINT', shutdown);

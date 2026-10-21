@@ -2088,3 +2088,16 @@ a.nav { display: block; text-decoration: none; box-sizing: border-box; }
 @media(max-width:760px) { .restore-fields { grid-template-columns: 1fr; } .detail-tabs { flex-wrap: wrap; } }
 
 #sourceMonthHint { display: block; margin-bottom: 4px; }
+
+.drive-sources { display:flex; flex-wrap:wrap; gap:12px 24px; margin:10px 0; }
+#drivePanel progress { width:min(480px,80%); }
+#drivePanel { margin-top:20px; }
+#drivePanel { padding:22px; }
+#driveForm { margin-top:18px; }
+#driveForm fieldset { border:0; border-top:1px solid var(--line); padding:12px 0 0; margin:16px 0; min-width:0; }
+#driveForm legend { font-size:12px; color:var(--muted); padding:0 8px 0 0; }
+#drivePanel .checkbox-label { display:inline-flex; flex-direction:row; align-items:center; gap:7px; margin:0; }
+#drivePanel .checkbox-label input { width:auto; margin:0; }
+#drivePanel .actions { flex-wrap:wrap; }
+#drivePanel>a { color:var(--green); }
+@media(max-width:760px) { #drivePanel { padding:14px; } }

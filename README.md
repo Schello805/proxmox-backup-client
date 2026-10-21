@@ -45,6 +45,12 @@ Konfiguration und Verlauf: `/var/lib/qnap-backup/`. Backups laufen nacheinander 
 
 [Installation, Update, Rückweg und Fehlerbehebung](docs/OPERATIONS.md)
 
+## Google Drive (optional)
+
+Unter **Backup-Ziele → Google Drive** stehen die Einrichtung mit Kopierbefehlen, Quellenwahl und eigener Tages-, Wochen- oder Monatsplan. Rclone einmalig als Dienstbenutzer mit `--config /var/lib/qnap-backup/rclone.conf` anmelden. Diese Datei enthält den Google-Zugang und wird separat von einem Einstellungs-Export benötigt (das Update sichert das gesamte Datenverzeichnis).
+
+Die App nutzt `rclone copy`: normale Dateien je Quelle in einem eigenen Zielunterordner; Änderungen ersetzen vorhandene Dateien, entfernte Quelldateien bleiben im Ziel. Keine eigene Versionsaufbewahrung. Kopien laufen nacheinander und warten auf PBS-Aufträge, Startfenster und Warteschlangenpause. Abbruch ist in der App möglich. Wiederherstellung durch Herunterladen aus Google Drive.
+
 ## Entwicklung
 
 ```sh

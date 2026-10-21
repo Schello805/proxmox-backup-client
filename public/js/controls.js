@@ -20,7 +20,7 @@ export function installControls({ api, element, refresh, refreshActivity, notice
   function activity(data) {
     paused = data.paused; active = data.active;
     $('#pauseQueue').textContent = paused ? 'Fortsetzen' : active ? 'Nach diesem Backup pausieren' : 'Warteschlange pausieren';
-    $('#queueSummary').textContent = `Warteschlange · ${data.queue.length} wartend${paused ? ' · pausiert' : data.queue.length && data.waitingReason === 'window' ? ' · wartet auf Startfenster' : ''}`;
+    $('#queueSummary').textContent = `Warteschlange · ${data.queue.length} wartend${data.waitingReason === 'cloud' ? ' · wartet auf Google Drive' : paused ? ' · pausiert' : data.queue.length && data.waitingReason === 'window' ? ' · wartet auf Startfenster' : ''}`;
     $('#queueHelp').textContent = paused ? 'Neue Aufträge warten auf „Fortsetzen“. Ein laufendes Backup wird fertiggestellt. Die Pause bleibt beim Neustart erhalten.' : 'Wartende Aufträge verschieben oder entfernen. Der laufende Auftrag bleibt unverändert.';
     if (!active && (paused || data.queue.length && data.waitingReason === 'window')) {
       $('#activityTitle').textContent = paused ? 'Warteschlange pausiert' : 'Wartet auf Startfenster';

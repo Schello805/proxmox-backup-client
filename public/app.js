@@ -1,3 +1,4 @@
+import { installDrive } from '/js/gdrive.js';
 import { installRestore } from '/js/restore.js';
 import { installControls } from '/js/controls.js';
 import { installOperations } from '/js/operations.js';
@@ -9,7 +10,7 @@ import { createAPI } from '/js/api.js';
 import { createViews, dayNames } from '/js/views.js';
 import { createFormState, clearFieldErrors, showFieldErrors, serverField, validateMainForm, validateNotifyForm, validateSourceForm } from '/js/forms.js';
 'use strict';
-let assistant, timeline, operations, controls, restore;
+let assistant, timeline, operations, controls, restore, drive;
 let lastTargets = [], lastConnections = {}, lastCapacities = {}, lastPreferencesSnapshot = null;
 const refreshWaiters = [];
 const $ = selector => document.querySelector(selector);
@@ -239,6 +240,7 @@ async function refreshActivity() {
   try {
     const data = await api('/api/activity');
     if (epoch !== authEpoch) return;
+    drive?.update(data.drive);
     $('#activityMeta').replaceChildren();
     $('#activityBadge').textContent = data.active ? data.jobs[data.active].status === 'cancelling' ? 'Abbruch läuft' : '● Läuft' : '● Bereit';
     $('#cancelAll').hidden = !data.active && !data.queue.length;
@@ -282,6 +284,11 @@ async function refreshActivity() {
     }
     if (data.maintenance && !data.active) { $('#activityTitle').textContent = 'Wartung / Update'; $('#activityBadge').textContent = 'Pausiert'; $('#activityBadge').className = 'badge busy'; $('#activityDescription').textContent = 'Neue Backups sind während des Updates gesperrt.'; }
     controls?.activity(data);
+    if (['queued','running','cancelling'].includes(data.drive?.status)) {
+      $('#runningCount').textContent = (data.active ? 1 : 0) + data.queue.length + 1;
+      $('#cancelAll').hidden = false; $('#cancelAll').disabled = false;
+      if (!data.active) { $('#activityTitle').textContent = 'Google Drive · ' + (data.drive.source || 'Ausgewählte Quellen'); $('#activityDescription').textContent = data.drive.message; $('#activityBadge').textContent = data.drive.status === 'queued' ? 'Drive wartet' : data.drive.status === 'cancelling' ? 'Abbruch läuft' : 'Drive läuft'; $('#activityBadge').className = 'badge busy'; }
+    }
     if (data.notification && !$('#notifyDetails').open) $('#notificationResult').textContent = `${data.notification.message} (${date(data.notification.at)})`;
     if (logFolder) await refreshLog();
   } catch (e) { if (authenticated) { $('#activityBadge').textContent = 'Verbindung unterbrochen'; $('#activityBadge').className = 'badge bad'; notice(e.message, true); } }
@@ -523,6 +530,7 @@ function renderSourceProblem(id) {
 }
 timeline = installTimeline({ element, openSource: id => editSource(id, true) });
 
+drive = installDrive({ api, element, notice });
 operations = installOperations({api,element,refresh,date});
 
 controls = installControls({ api, element, refresh, refreshActivity, notice, date, getNames: () => names, onRestored: () => { for (const id of ['configForm','preferencesForm','authForm','notifyForm']) formState.clean(id, formState.capture(id)); lastMainSnapshot = lastPreferencesSnapshot = lastNotifySnapshot = null; loaded = false; } });
