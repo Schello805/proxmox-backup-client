@@ -10,7 +10,7 @@ export function installDashboard({ element, date, openSource, resolveProblem }) 
   }
   function render() {
     if (!snapshot) return;
-    const folders = snapshot.folders, mounts = $('#dashboardMounts'), targets = $('#dashboardTargets'), issues = $('#dashboardIssues');
+    const folders = snapshot.folders, mounts = $('#dashboardMounts'), targets = $('#dashboardPBSTargets'), issues = $('#dashboardIssues');
     mounts.replaceChildren(); targets.replaceChildren(); issues.replaceChildren();
     const configuredPBS = snapshot.targets.filter(target => target.repository && target.hasPassword);
     const driveIds = new Set(snapshot.drive?.settings?.sources || []);
@@ -27,10 +27,10 @@ export function installDashboard({ element, date, openSource, resolveProblem }) 
         item.append(element('strong',String(value)),element('span',label),element('small',detail,'hint')); root.append(item);
       }
     }
-    metrics('targetMetrics', [[targetCount,'Eingerichtete Ziele',configuredPBS.length+' PBS-Datastores · '+Number(driveSources.length>0)+' Google Drive'],[folders.filter(source=>configuredPBS.some(target=>target.id===(source.target||'primary'))).length,'Quellen mit PBS-Ziel','Zugeordnet · kein Nachweis einer Sicherung'],[driveSources.length,'Zusätzliche Drive-Kopien','Ausgewählte Quellen']]);
+    metrics('targetMetrics', [[targetCount,'Konfigurierte Ziele',configuredPBS.length+' PBS-Datastores · '+Number(driveSources.length>0)+' Google Drive'],[folders.filter(source=>configuredPBS.some(target=>target.id===(source.target||'primary'))).length,'Quellen mit PBS-Ziel','Zugeordnet · kein Nachweis einer Sicherung'],[driveSources.length,'Quellen für Drive ausgewählt','Ausgewählte Quellen']]);
     const sourceMetrics = [[folders.length,'Quellen insgesamt','Registrierte Ordner'],[folders.filter(source=>source.ok).length,'Mounts verfügbar','Aktuell bestätigte Einbindungen'],[planned,'Automatisch geplant','PBS · täglich, wöchentlich oder monatlich'],[volume,'Ermittelte Quellgröße',measured.length+' von '+folders.length+' Quellen gemessen']];
     metrics('sourceMetrics',sourceMetrics);
-    metrics('dashboardMetrics',[sourceMetrics[2],sourceMetrics[3]]);
+    metrics('dashboardMetrics',[sourceMetrics[3]]);
     $('#pbsSettings > summary').textContent = 'Proxmox Backup Server · '+configuredPBS.length+(configuredPBS.length===1?' Datastore eingerichtet':' Datastores eingerichtet');
     $('#driveSettings > summary').textContent = 'Google Drive · '+driveSources.length+(driveSources.length===1?' Quelle':' Quellen');
     const available = folders.filter(source => source.ok).length, checking = folders.filter(source => source.checking).length;
@@ -62,7 +62,34 @@ export function installDashboard({ element, date, openSource, resolveProblem }) 
       card('PBS · '+target.name,`${related.length} Quellen · ${target.repository || 'Zugang fehlt'}`,latestConnection(latest,snapshot.connections?.[target.id],snapshot.capacities?.[target.id],changed),Boolean(target.repository&&target.hasPassword),()=>openTarget('pbsSettings'),active?{label:active.job.status==='queued'?'Sicherung wartet':active.job.status==='cancelling'?'Abbruch läuft':'Sicherung läuft',tone:'busy'}:null);
     }
     const drive=snapshot.drive||{}, busy=['queued','running','cancelling'].includes(drive.status);
-    card('Google Drive',drive.settings?.sources.length?`${drive.settings.sources.length} Quellen · ${drive.settings.folder}`:'Keine Quellen ausgewählt',latestConnection({lastSuccess:drive.lastSuccess},drive.connection,snapshot.capacities?.gdrive),Boolean(drive.settings?.sources.length),()=>openTarget('driveSettings'),busy?{label:drive.status==='queued'?'Wartet':drive.status==='cancelling'?'Abbruch läuft':'Kopie läuft',tone:'busy'}:drive.status==='failed'?{label:'Kopie fehlgeschlagen',tone:'bad'}:null);
+    if(drive.settings?.sources.length) {
+      configuredTargets++;
+      const observation=latestConnection({lastSuccess:drive.lastSuccess},drive.connection,snapshot.capacities?.gdrive);
+      const age=Date.now()-Date.parse(observation?.checkedAt);
+      if(observation?.ok && age>=-60000 && age<=20*60000) reachable++;
+    }
+    const succeeded=folders.filter(source=>Number.isFinite(Date.parse(source.job?.lastSuccess)) && !source.health?.missed && !source.health?.stale && !['failed','interrupted','cancelled'].includes(source.job?.status));
+    const overdue=folders.filter(source=>source.health?.missed || source.health?.stale);
+    const never=folders.filter(source=>!source.job?.lastSuccess);
+    $('#plannedCount').textContent=`${planned} / ${folders.length}`;
+    $('#plannedDescription').textContent=`${folders.length-planned} Quellen nur manuell`;
+    $('#protectionTitle').textContent=`${succeeded.length} von ${folders.length} Quellen mit aktuellem PBS-Erfolg`;
+    $('#protectionDescription').textContent=[overdue.length?`${overdue.length} überfällig`:null,never.length?`${never.length} noch ohne erfolgreichen PBS-Lauf`:null,'Erfolg laut App-Verlauf · Wiederherstellung separat prüfen'].filter(Boolean).join(' · ');
+    $('#protectionSummary').classList.toggle('needs-attention',succeeded.length<folders.length);
+    const alerts=$('#targetAlerts');alerts.replaceChildren();
+    for(const target of snapshot.targets) {
+      const related=folders.filter(source=>(source.target||'primary')===target.id);
+      const changed=related.map(source=>source.pbsCheckAfter).filter(Boolean).sort().at(-1);
+      const latest=related.map(source=>source.job||{}).sort((a,b)=>Date.parse(b.lastSuccess||0)-Date.parse(a.lastSuccess||0))[0];
+      if(latestConnection(latest,snapshot.connections?.[target.id],snapshot.capacities?.[target.id],changed)?.ok===false) {
+        const button=element('button',`PBS · ${target.name}: Verbindung fehlgeschlagen – Zugang und Fingerprint prüfen →`,'dashboard-issue');button.type='button';button.addEventListener('click',()=>openTarget('pbsSettings'));alerts.append(button);
+      }
+    }
+    if(['failed','interrupted'].includes(drive.status) || drive.connection?.ok===false) {
+      const button=element('button','Google Drive: Kopie oder Verbindungsprüfung fehlgeschlagen – Details prüfen →','dashboard-issue');button.type='button';button.addEventListener('click',()=>openTarget('driveSettings'));alerts.append(button);
+    }
+    alerts.hidden=!alerts.childElementCount;
+
     const problems = folders.map(source=>({source,issue:sourceProblem(source,source.job,source.health,snapshot.targets.find(target=>target.id===(source.target||'primary')),latestConnection(source.job,snapshot.connections?.[source.target||'primary'],snapshot.capacities?.[source.target||'primary'],source.pbsCheckAfter))})).filter(item=>item.issue);
     $('#targetStatus').textContent=`${reachable} / ${configuredTargets} erreichbar`;
     $('#targetName').textContent=configuredTargets?'Zuletzt bestätigte Zielverbindungen':'Noch kein Ziel eingerichtet';

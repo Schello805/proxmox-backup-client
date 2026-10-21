@@ -75,7 +75,6 @@ async function refresh() {
     $('#updated').textContent = `Aktualisiert ${new Date().toLocaleTimeString('de-DE', { timeZone: activeTimezone })} · live`;
     $('#mountCount').textContent = `${data.folders.filter(f => f.ok).length} / ${data.folders.length}`;
     $('#runningCount').textContent = data.folders.filter(f => ['running', 'queued', 'cancelling'].includes(f.job.status)).length;
-    $('#successCount').textContent = `${data.folders.filter(f => f.job.status === 'success').length} / ${data.folders.length}`;
     $('#targetStatus').textContent = data.connection ? (data.connection.ok ? 'Verbunden' : 'Prüfung fehlgeschlagen') : 'Ungeprüft';
     $('#targetName').textContent = data.targets?.map(target => target.name).join(' · ') || data.config.repository || 'Noch kein Repository';
     $('#targetName').title = (data.targets || []).map(target => target.repository).join(' · ');
@@ -214,7 +213,7 @@ $('#preferencesForm').addEventListener('submit', async event => {
 });
 $('#testConnection').addEventListener('click', async event => {
   const button = event.currentTarget; button.disabled = true; $('#connectionResult').textContent = 'Verbindung wird geprüft …';
-  try { const results = []; for (const target of backupTargets()) { const data = await api('/api/connection', { target: target.id }); results.push(`${target.name}: ${data.message}`); } await refresh(); $('#connectionResult').textContent = results.join(' · '); } catch (e) { notice(e.message, true); } finally { button.disabled = false; }
+  try { const results = []; for (const target of backupTargets()) { const data = await api('/api/connection', { target: target.id }); results.push(`${target.name}: ${data.message}`); } await refresh(); $('#connectionResult').textContent = results.join(' · '); } catch (e) { $('#connectionResult').textContent = 'Verbindungsprüfung fehlgeschlagen: ' + e.message + ' Zugang, Datastore und Fingerprint prüfen.'; notice(e.message, true); } finally { button.disabled = false; }
 });
 function showLogin() {
   authEpoch++; authenticated = false; loaded = false;
@@ -285,7 +284,7 @@ async function refreshActivity() {
       renderSourceHealth(row.children[3], folder, job, lastHealth[row.dataset.folder]);
       const start = row.querySelector('[data-start]'); start.hidden = ['running','queued','cancelling'].includes(job.status); start.disabled = start.dataset.available !== 'true' || ['running', 'queued', 'cancelling'].includes(job.status);
     }
-    $('#successCount').textContent = `${Object.values(data.jobs).filter(job => job.status === 'success').length} / ${Object.keys(names).length}`;
+
     if (!data.active) {
       const warnings = Object.values(lastHealth).filter(item => item.missed || item.stale).length;
       if (warnings) { $('#activityBadge').textContent = `${warnings} Hinweis${warnings > 1 ? 'e' : ''}`; $('#activityBadge').className = 'badge busy'; }

@@ -6,7 +6,7 @@ Mount-Status und Ordnergrößen, manuelle Backups mit Abbruchfunktion, Wochen- u
 
 Backup-Ziele werden über eine gemeinsame Auswahl hinzugefügt. Kennzahlen zeigen eingerichtete Ziele, Quellenzuordnung, automatische PBS-Pläne und die ermittelte Quellgröße mit Messabdeckung.
 
-Das Dashboard zeigt Mounts, Zielzustand, laufende Aufträge und Hinweise; ausführliche Auftragsdetails und Gantt sind aufklappbar. Unter Quellen stehen alle Datenquellen in einer durchsuchbaren Tabelle mit Statusfilter und feststehendem Tabellenkopf.
+Das Dashboard hebt den PBS-Sicherungsstand mit überfälligen und noch ungesicherten Quellen hervor. Google Drive bündelt Status, Fortschritt und Aktionen direkt im Zielpanel. Zielprobleme bleiben auch bei geschlossenen Einstellungen sichtbar. Das Dashboard zeigt außerdem Mounts, Zielzustand, laufende Aufträge und Hinweise; ausführliche Auftragsdetails und Gantt sind aufklappbar. Unter Quellen stehen alle Datenquellen in einer durchsuchbaren Tabelle mit Statusfilter und feststehendem Tabellenkopf.
 
 Die Navigation steht links: Übersicht, Quellen und Backup-Ziele oben; Einstellungen, Anleitung und das System-Zahnrad unten über dem Controller-Hinweis. Der PBS-Bestand ist direkt bei der PBS-Konfiguration erreichbar; Diagnose und Updates stehen unter System.
 

@@ -70,6 +70,8 @@ export function installDrive({ api, element, notice, scheduleText, date }) {
     try {
       resultField.textContent = action === 'check' ? 'Google-Drive-Verbindung wird geprüft …' : '';
       const result = await api('/api/gdrive/' + action, {});
+      if (action === 'start') resultField.textContent = 'Drive-Kopie angefordert. Den aktuellen Status siehst du direkt am Ziel.';
+      if (action === 'cancel') resultField.textContent = 'Abbruch angefordert. Der Status zeigt, wann der Auftrag beendet ist.';
       if (action === 'check') resultField.textContent = result.ok ? 'Google Drive erreichbar (Lesetest). Schreibzugriff wird beim Kopieren geprüft.' : result.message;
       await load();
     } catch (error) { resultField.textContent = error.message; }
