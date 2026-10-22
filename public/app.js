@@ -70,6 +70,7 @@ async function refresh() {
     savedConfig = data.config; activeTimezone = data.config.timezone; folderData = data.folders;
     for (const key of Object.keys(names)) delete names[key]; for (const source of data.config.sources) names[source.id] = source.name;
     $('#appVersion').textContent = `v${data.system.version}`;
+    document.dispatchEvent(new Event('check-version-status'));
     $('#systemChecks').replaceChildren(...data.system.checks.map(check => element('li', `${check.ok ? '✓' : '⚠'} ${check.name}: ${check.message}`, check.ok ? 'check-ok' : 'check-warning')));
     $('#sidebarTimezone').textContent = activeTimezone; $('#sourceCount').textContent = data.folders.length;
     authenticated = true; document.body.classList.remove('locked'); if ($('#loginDialog').open) $('#loginDialog').close();
