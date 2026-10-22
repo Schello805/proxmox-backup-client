@@ -2,7 +2,7 @@ const {test,expect,login}=require('./fixtures.cjs');
 const fs=require('node:fs');
 const headers={'X-Requested-With':'qnap-dashboard'};
 test('Queue can be paused after current backup, reordered, trimmed and resumed',async({page,app})=>{
- await login(page);await page.getByRole('button',{name:'Alle sichern',exact:true}).click();if(!(await page.locator('#queueDetails').evaluate(node=>node.open)))await page.locator('#queueSummary').click();
+ await login(page);await page.getByRole('button',{name:'Alle PBS-Aufträge starten',exact:true}).click();if(!(await page.locator('#queueDetails').evaluate(node=>node.open)))await page.locator('#queueSummary').click();
  await page.getByRole('button',{name:'Nach diesem Backup pausieren',exact:true}).click();
  await page.getByRole('button',{name:'Serien: Nach oben',exact:true}).click();await page.getByRole('button',{name:'Hörspiele: Entfernen',exact:true}).click();
  let data=await(await page.request.get('/api/activity')).json();expect(data.active).toBe('software');expect(data.queue).toEqual(['serien','filme','musik','daten']);expect(data.paused).toBe(true);
@@ -32,6 +32,6 @@ test('Settings export defaults to no secrets; restore previews changes, detects 
  await page.getByLabel('Zugangsdaten im Klartext mit exportieren').check();const secretDownload=page.waitForEvent('download');await page.getByRole('button',{name:'Einstellungen exportieren',exact:true}).click();const secret=JSON.parse(fs.readFileSync(await(await secretDownload).path(),'utf8'));expect(secret.config.password).toBe('e2e-pbs-secret');
 });
 test('Source details compare successful runs, expose upload metrics and retain history',async({page,app},testInfo)=>{
- await login(page);const row=page.locator('[data-folder="software"]');for(const seconds of [60,120]){await row.getByRole('button',{name:'↗ Sichern',exact:true}).click();await expect(page.locator('#activityMeta')).toContainText('5 GiB');app.finish(0,seconds);await expect(row.locator('.job-state')).toContainText('Erfolgreich');}
+ await login(page);const row=page.locator('[data-folder="software"]');for(const seconds of [60,120]){await row.getByRole('button',{name:'Starten',exact:true}).click();await expect(page.locator('#activityMeta')).toContainText('5 GiB');app.finish(0,seconds);await expect(row.locator('.job-state')).toContainText('Erfolgreich');}
  await row.getByRole('button',{name:'Software',exact:true}).click();await expect(page.locator('#historyMetrics')).toContainText('+100 %');await expect(page.locator('#historyMetrics')).toContainText('Upload (Client)');await expect(page.locator('#historyRows tr')).toHaveCount(2);await expect(page.locator('#historyRows')).toContainText('1 GiB');await page.screenshot({path:testInfo.outputPath('run-comparison.png'),fullPage:true});
 });

@@ -2,7 +2,7 @@
 const { test, expect, login } = require('./fixtures.cjs');
 
 test('Backup-Ziele, Allgemeines und Quellenpläne bleiben bei Änderungen voneinander getrennt', async ({ page }) => {
-  await login(page); await page.getByRole('link', { name: /Backup-Ziele$/ }).click(); if ((await page.locator('#pbsSettings').getAttribute('open')) === null) await page.locator('#pbsSettings>summary').click();
+  await login(page); await page.getByRole('link', { name: /Ziele$/ }).click(); if ((await page.locator('#pbsSettings').getAttribute('open')) === null) await page.locator('#pbsSettings>summary').click();
   await expect(page.locator('#configForm')).toBeVisible(); await expect(page.locator('#targets').getByRole('combobox', { name: 'Zeitzone', exact: true })).toHaveCount(0);
   await page.getByRole('textbox', { name: 'PBS-Adresse', exact: true }).fill('pbs-neu.local');
   await page.getByRole('link', { name: /^⚙.*Einstellungen$/ }).click();
@@ -11,7 +11,7 @@ test('Backup-Ziele, Allgemeines und Quellenpläne bleiben bei Änderungen vonein
   await page.getByRole('combobox', { name: 'Zeitzone', exact: true }).selectOption('UTC'); await page.getByRole('button', { name: 'Einstellungen speichern', exact: true }).click(); await expect(page.locator('#preferencesResult')).toContainText('gespeichert');
   await page.getByRole('link', { name: /Aufträge$/ }).click(); await page.locator('tr[data-folder="software"]').getByRole('button', { name: 'Zeitplan Software bearbeiten' }).click();
   const detail=page.locator('#sourceDetail'); await detail.getByRole('combobox',{name:'Frequenz',exact:true}).selectOption('weekdays'); await detail.getByLabel('Uhrzeit',{exact:true}).fill('03:45'); await detail.getByRole('button',{name:'Quelle speichern',exact:true}).click(); await expect(detail.locator('#sourceResult')).toContainText('gespeichert');
-  await page.getByRole('link',{name:/Backup-Ziele$/}).click(); if ((await page.locator('#pbsSettings').getAttribute('open')) === null) await page.locator('#pbsSettings>summary').click(); await expect(page.getByRole('textbox',{name:'PBS-Adresse',exact:true})).toHaveValue('pbs-neu.local');
+  await page.getByRole('link',{name:/Ziele$/}).click(); if ((await page.locator('#pbsSettings').getAttribute('open')) === null) await page.locator('#pbsSettings>summary').click(); await expect(page.getByRole('textbox',{name:'PBS-Adresse',exact:true})).toHaveValue('pbs-neu.local');
   await page.getByRole('button',{name:'Backup-Ziele speichern',exact:true}).click(); await expect(page.locator('#settingsResult')).toContainText('Gespeichert');
   const config=(await (await page.request.get('/api/status')).json()).config; expect(config.timezone).toBe('UTC'); expect(config.schedules.software).toEqual({days:[1,2,3,4,5],time:'03:45'}); expect(config.repository).toBe('test@pbs@pbs-neu.local:test-store');
 });
@@ -29,12 +29,12 @@ test('Falsche SMB-Zuordnung nennt die Freigabe und bietet eine konkrete Prüfung
 });
 
 test('Fehlgeschlagene Sicherung führt direkt zum Protokoll und unterbrochene Läufe bleiben unterscheidbar',async({page,app})=>{
-  await login(page);const row=page.locator('tr[data-folder="software"]');await row.getByRole('button',{name:'↗ Sichern',exact:true}).click();await expect(row.locator('.job-state')).toContainText('Läuft');app.finish(1);await expect(row.locator('.problem-message')).toHaveText('Die letzte Sicherung ist fehlgeschlagen.');await row.getByRole('button',{name:'Protokoll prüfen',exact:true}).click();await expect(page.locator('#logText')).toContainText('Exit-Code 1');
+  await login(page);const row=page.locator('tr[data-folder="software"]');await row.getByRole('button',{name:'Starten',exact:true}).click();await expect(row.locator('.job-state')).toContainText('Läuft');app.finish(1);await expect(row.locator('.problem-message')).toHaveText('Die letzte Sicherung ist fehlgeschlagen.');await row.getByRole('button',{name:'Protokoll prüfen',exact:true}).click();await expect(page.locator('#logText')).toContainText('Exit-Code 1');
 });
 
 test('Gantt zeigt gemessene Dauer, unbekannte Dauer, Tageszoom und direkte Zeitplanbearbeitung',async({page,app},testInfo)=>{
   await login(page);
-  for(const [id,seconds] of [['software',7200],['filme',10800]]) {const row=page.locator(`tr[data-folder="${id}"]`);await row.getByRole('button',{name:'↗ Sichern',exact:true}).click();await expect(row.locator('.job-state')).toContainText('Läuft');app.finish(0,seconds);await expect(row.locator('.job-state')).toContainText('Erfolgreich');}
+  for(const [id,seconds] of [['software',7200],['filme',10800]]) {const row=page.locator(`tr[data-folder="${id}"]`);await row.getByRole('button',{name:'Starten',exact:true}).click();await expect(row.locator('.job-state')).toContainText('Läuft');app.finish(0,seconds);await expect(row.locator('.job-state')).toContainText('Erfolgreich');}
   const current=(await (await page.request.get('/api/status')).json()).config;
   const response=await page.request.post('/api/config',{headers:{'X-Requested-With':'qnap-dashboard'},data:{...current,schedules:{...current.schedules,software:{days:[1,2,3,4,5,6,7],time:'02:00'},filme:{days:[1,2,3,4,5,6,7],time:'02:30'},serien:{days:[1,2,3,4,5,6,7],time:'04:00'}}}});expect(response.ok()).toBe(true);await page.reload();
   const chart=page.locator('#backupTimeline');await expect(chart.locator('[data-timeline-source="software"]')).toContainText('Zuletzt: 2 h 0 min');await expect(chart.locator('[data-timeline-source="filme"]')).toContainText('Zuletzt: 3 h 0 min');await expect(chart.locator('[data-timeline-source="serien"]')).toContainText('Noch keine gemessene Dauer');

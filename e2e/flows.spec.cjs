@@ -73,7 +73,7 @@ test('Backup starten: Prozent, Restzeit, Live-Protokoll und Verlauf', async ({ p
   await login(page);
   const row = page.locator('tr[data-folder="software"]');
   await page.getByRole('button', { name: '↻ Aktualisieren' }).click(); await expect(row.locator('.source-size')).toHaveText('10 GiB');
-  await row.getByRole('button', { name: '↗ Sichern', exact: true }).click();
+  await row.getByRole('button', { name: 'Starten', exact: true }).click();
   await expect(page.locator('#progressEstimate')).toContainText('ca. 50 %'); await expect(page.locator('#progressEstimate')).toContainText('Restzeit ca. 2 min');
   await expect(page.getByRole('progressbar', { name: 'Geschätzter Backup-Fortschritt' })).toHaveJSProperty('value', 50);
   await expect(row.getByRole('button', { name: 'Abbrechen', exact: true })).toBeEnabled();
@@ -87,7 +87,7 @@ test('Backup starten: Prozent, Restzeit, Live-Protokoll und Verlauf', async ({ p
 });
 
 test('Fehlgeschlagenes Backup wird als Fehler angezeigt', async ({ page, app }) => {
-  await login(page); const row = page.locator('tr[data-folder="software"]'); await row.getByRole('button', { name: '↗ Sichern', exact: true }).click();
+  await login(page); const row = page.locator('tr[data-folder="software"]'); await row.getByRole('button', { name: 'Starten', exact: true }).click();
   await expect(row.locator('.job-state')).toContainText('Läuft'); app.finish(1);
   await expect(row.locator('.job-state')).toContainText('Fehler'); await expect(page.locator('#activityDescription')).toContainText('Exit-Code 1');
 });
@@ -103,7 +103,7 @@ test('Diagnose und Update-Prüfung über die Hauptnavigation öffnen', async ({ 
 test.describe('Ohne Quellgröße', () => {
   test.use({ sourceSize: false });
   test('zeigt keine erfundene Prozentzahl oder Restzeit', async ({ page }) => {
-    await login(page); await page.locator('tr[data-folder="software"]').getByRole('button', { name: '↗ Sichern', exact: true }).click();
+    await login(page); await page.locator('tr[data-folder="software"]').getByRole('button', { name: 'Starten', exact: true }).click();
     await expect(page.locator('#progressEstimate')).toContainText('Quellgröße noch nicht verfügbar');
     await expect(page.getByRole('progressbar', { name: 'Geschätzter Backup-Fortschritt' })).toHaveCount(0);
   });
@@ -111,7 +111,7 @@ test.describe('Ohne Quellgröße', () => {
 
 
 test('PBS-Bestand abrufen und nach Gruppe filtern', async ({ page }) => {
-  await login(page); await page.getByRole('link', { name: /Backup-Ziele$/ }).click(); await page.locator('#pbsSettings>summary').click(); await page.getByRole('link', { name: 'PBS-Bestand', exact: true }).click();
+  await login(page); await page.getByRole('link', { name: /Ziele$/ }).click(); await page.locator('#pbsSettings>summary').click(); await page.getByRole('link', { name: 'PBS-Bestand', exact: true }).click();
   await page.getByRole('button', { name: 'Vom PBS abrufen', exact: true }).click();
   await expect(page.locator('#pbsRows')).toContainText('host/software');
   await page.getByRole('combobox', { name: 'PBS-Bestand filtern' }).selectOption('filme');
@@ -130,7 +130,7 @@ test('Mobile Navigation und Einstellungen ohne horizontales Seiten-Scrollen', as
 
 
 test('Zweiten Datastore einrichten, Quelle zuweisen und getrennten PBS-Bestand prüfen', async ({ page, app }, testInfo) => {
-  await login(page); await page.getByRole('link', { name: /Backup-Ziele$/ }).click(); if ((await page.locator('#pbsSettings').getAttribute('open')) === null) await page.locator('#pbsSettings>summary').click();
+  await login(page); await page.getByRole('link', { name: /Ziele$/ }).click(); if ((await page.locator('#pbsSettings').getAttribute('open')) === null) await page.locator('#pbsSettings>summary').click();
   await page.getByRole('textbox', { name: /^Datastore 2/ }).fill('archive-store');
   await page.getByRole('button', { name: 'Backup-Ziele speichern' }).click(); await expect(page.locator('#settingsResult')).toContainText(/gespeichert/i);
   await page.getByRole('button', { name: 'Verbindung prüfen', exact: true }).click();
@@ -143,13 +143,13 @@ test('Zweiten Datastore einrichten, Quelle zuweisen und getrennten PBS-Bestand p
   await dialog.getByRole('button', { name: 'Quelle speichern' }).click(); await expect(dialog.locator('#sourceResult')).toContainText('Quelle und Sicherungsplan gespeichert');
   await dialog.getByRole('button', { name: 'Schließen', exact: true }).click();
   const row = page.locator('tr[data-folder="software"]'); await expect(row.locator('.source-target')).toHaveText('archive-store');
-  await row.getByRole('button', { name: '↗ Sichern', exact: true }).click(); await page.getByRole('link', { name: /Protokoll$/ }).click();
+  await row.getByRole('button', { name: 'Starten', exact: true }).click(); await page.getByRole('link', { name: /Protokoll$/ }).click();
   await expect(page.locator('#logText')).toContainText('E2E repository: test@pbs@localhost:archive-store');
   await page.getByRole('link',{name:/Aufträge$/}).click();
   app.finish(); await expect(row.locator('.job-state')).toContainText('Erfolgreich');
   await row.getByRole('button', { name: 'Software', exact: true }).click(); await expect(page.locator('#historyRows')).toContainText('test@pbs@localhost:archive-store');
   await page.getByRole('link',{name:/Aufträge$/}).click();
-  await page.getByRole('link', { name: /Backup-Ziele$/ }).click(); if ((await page.locator('#pbsSettings').getAttribute('open')) === null) await page.locator('#pbsSettings>summary').click(); await page.getByRole('link', { name: 'PBS-Bestand', exact: true }).click();
+  await page.getByRole('link', { name: /Ziele$/ }).click(); if ((await page.locator('#pbsSettings').getAttribute('open')) === null) await page.locator('#pbsSettings>summary').click(); await page.getByRole('link', { name: 'PBS-Bestand', exact: true }).click();
   await page.getByRole('combobox', { name: 'Datastore auswählen' }).selectOption('secondary');
   await page.getByRole('button', { name: 'Vom PBS abrufen', exact: true }).click(); await expect(page.locator('#pbsRows')).toContainText('host/daten');
   await page.getByRole('combobox', { name: 'Datastore auswählen' }).selectOption('primary');
@@ -157,7 +157,7 @@ test('Zweiten Datastore einrichten, Quelle zuweisen und getrennten PBS-Bestand p
   await page.getByRole('region', { name: 'Sicherungen auf dem PBS' }).getByRole('button', { name: 'Schließen' }).click();
   await page.screenshot({ path: testInfo.outputPath('two-datastores.png') });
   await page.reload(); await expect(page.locator('tr[data-folder="software"] .source-target')).toHaveText('archive-store');
-  await page.getByRole('link', { name: /Backup-Ziele$/ }).click(); if ((await page.locator('#pbsSettings').getAttribute('open')) === null) await page.locator('#pbsSettings>summary').click();
+  await page.getByRole('link', { name: /Ziele$/ }).click(); if ((await page.locator('#pbsSettings').getAttribute('open')) === null) await page.locator('#pbsSettings>summary').click();
   await page.getByRole('textbox', { name: /^Datastore 2/ }).fill(''); await page.getByRole('button', { name: 'Backup-Ziele speichern' }).click();
   await expect(page.locator('#settingsResult')).toContainText('noch von Quellen verwendet');
 });
@@ -170,7 +170,7 @@ test('Aktualisieren erkennt geänderte und neue SMB-Mounts ohne automatische Fre
   await page.getByRole('button', { name: '↻ Aktualisieren', exact: true }).click();
   await expect(data.getByText('● SMB geändert', { exact: true })).toBeVisible();
   await expect(data.locator('.source-size')).not.toHaveText('10 GiB');
-  await expect(data.getByRole('button', { name: '↗ Sichern', exact: true })).toBeDisabled();
+  await expect(data.getByRole('button', { name: 'Starten', exact: true })).toBeDisabled();
   await page.getByRole('link',{name:/Übersicht/}).click();await expect(page.getByRole('button', { name: 'Neue SMB-Freigaben (1)', exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('mount-refresh.png') });
   await page.getByRole('button', { name: 'Neue SMB-Freigaben (1)', exact: true }).click();
@@ -195,7 +195,7 @@ test('Aktualisieren erzwingt neue Größen und verschiebt Messungen während lau
   await app.setMount('/mnt/Daten/Software', { bytes: 30 * 1024 ** 3 });
   await page.getByRole('button', { name: '↻ Aktualisieren', exact: true }).click();
   await expect(row.locator('.source-size')).toHaveText('30 GiB');
-  await row.getByRole('button', { name: '↗ Sichern', exact: true }).click();
+  await row.getByRole('button', { name: 'Starten', exact: true }).click();
   await app.setMount('/mnt/Daten/Software', { bytes: 50 * 1024 ** 3 });
   await page.getByRole('button', { name: '↻ Aktualisieren', exact: true }).click();
   await expect(page.locator('#notice')).toContainText('warten auf das Ende');
@@ -231,7 +231,7 @@ test('Navigation als Seiten und Drilldown: Quelle und Wochenplan direkt in der �
   await page.goBack(); await expect(detail.getByLabel('Uhrzeit', { exact: true })).toHaveValue('04:25');
   await page.reload(); await expect(detail).toBeVisible(); await expect(detail.getByLabel('Name', { exact: true })).toHaveValue('Software neu');
   await detail.getByRole('button', { name: 'Schließen', exact: true }).click(); await expect(detail).not.toBeVisible();
-  await page.getByRole('link', { name: /Backup-Ziele$/ }).click(); if ((await page.locator('#pbsSettings').getAttribute('open')) === null) await page.locator('#pbsSettings>summary').click();
+  await page.getByRole('link', { name: /Ziele$/ }).click(); if ((await page.locator('#pbsSettings').getAttribute('open')) === null) await page.locator('#pbsSettings>summary').click();
   const first = await page.getByRole('textbox', { name: 'Datastore 1', exact: true }).boundingBox();
   const second = await page.getByRole('textbox', { name: /^Datastore 2/ }).boundingBox();
   expect(Math.abs(first.y - second.y)).toBeLessThan(2);

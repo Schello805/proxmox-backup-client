@@ -17,7 +17,7 @@ export function installDrive({ api, element, notice, scheduleText, date }) {
     const syncing = job.settings?.mode === 'sync', versioned = job.settings?.mode === 'backup';
     const modeLabel = versioned ? 'Sicherung mit Versionen' : syncing ? 'Abgleich mit Löschen' : 'Abgleich ohne Löschen';
     $('#driveStart').textContent = versioned ? 'Jetzt mit Versionen sichern' : syncing ? 'Jetzt synchronisieren' : 'Jetzt nach Drive kopieren';
-    $('#overviewDriveStart').textContent = versioned ? 'Jetzt mit Versionen sichern' : syncing ? 'Jetzt synchronisieren' : 'Nach Drive kopieren';
+    $('#overviewDriveStart').textContent = 'Starten';
     const busy = ['running','queued','cancelling'].includes(job.status);
     $('#driveStart').disabled = busy || pendingAction || !job.settings?.sources.length; $('#driveCancel').hidden = !busy; $('#driveCancel').disabled = job.status === 'cancelling';
     const connectionFailed = job.connection?.ok === false && Date.parse(job.connection.checkedAt) > (Date.parse(job.lastSuccess) || 0);
@@ -25,15 +25,16 @@ export function installDrive({ api, element, notice, scheduleText, date }) {
     const badge = $('#overviewDriveStatus'); badge.textContent = status; badge.className = 'badge ' + (['failed','interrupted'].includes(job.status) || connectionFailed && !busy ? 'bad' : busy ? 'busy' : job.connection?.ok || job.status === 'success' ? 'ok' : '');
     $('#dashboardDriveStatus').textContent=badge.textContent;$('#dashboardDriveStatus').className=badge.className;
     $('#dashboardDriveSummary').textContent=job.settings?.sources.length?`${job.settings.sources.length} Quellen · ${modeLabel}`:'Keine Quellen ausgewählt';
+    $('#driveOverview').hidden=!configured;const count=document.querySelectorAll('#folders tr[data-folder]').length+Number(configured);$('#jobCount').textContent=String(count);$('#jobEmpty').hidden=count>0;$('#jobsTimezone').textContent=job.timezone||'';
     $('#driveOverview').classList.toggle('is-configured', configured);
     const selected = (job.sources || []).map(source => source.name).join(', ');
-    $('#overviewDriveSummary').textContent = configured ? `${job.settings.remote}:${job.settings.folder} · ${selected}` : 'Quellen und Google-Zugang unter Backup-Ziele einrichten.';
+    $('#overviewDriveSources').textContent=selected;$('#overviewDriveMode').textContent=modeLabel;$('#overviewDriveSummary').textContent=configured?`${job.settings.remote}:${job.settings.folder}`:'Ziel fehlt';$('#overviewDriveLast').textContent=job.lastSuccess?date(job.lastSuccess):'Noch kein Erfolg';$('#overviewDriveNext').textContent=job.nextAt?date(job.nextAt):'Nur manuell';
     $('#overviewDriveSummary').title = $('#overviewDriveSummary').textContent;
-    $('#overviewDrivePlan').textContent = configured ? `${modeLabel} · ${scheduleText(job.settings.schedule)}${job.nextAt ? ' · Nächster Termin: ' + date(job.nextAt) : ''} · ${job.timezone} · ${job.lastSuccess ? 'Letzter Erfolg: ' + date(job.lastSuccess) : 'Noch kein erfolgreicher Lauf'}` : 'Normale Dateikopie · Zeitplan unabhängig von PBS';
+    $('#overviewDrivePlan').textContent=configured?`${scheduleText(job.settings.schedule)} · ${job.timezone}`:'Nur manuell';
     $('#overviewDriveStart').disabled = !configured || busy || pendingAction; $('#overviewDriveStart').hidden = busy || !configured;
     $('#overviewDriveCancel').hidden = !busy; $('#overviewDriveCancel').disabled = job.status === 'cancelling' || pendingAction;
     $('#overviewDriveProgress').hidden = !busy && !['failed','interrupted'].includes(job.status);
-    $('#overviewDriveProgress').textContent = job.message || '';
+    $('#overviewDriveProgress').textContent = job.message || '';$('#overviewDriveProgress').title=job.message||'';
     const progress = job.progress, total = progress?.totalBytes, bytes = progress?.bytes;
     $('#driveProgress').hidden = !progress;
     if (progress) {
@@ -41,7 +42,7 @@ export function installDrive({ api, element, notice, scheduleText, date }) {
       $('#driveProgressText').textContent = `${mb(bytes)} / ${mb(total)} MiB · ${mb(progress.speed)} MiB/s${Number.isFinite(progress.eta) ? ' · ca. ' + Math.ceil(progress.eta / 60) + ' min verbleibend' : ''}`;
       const meter = $('#driveMeter'); if (total > 0) { meter.value = Math.min(job.status === 'success' ? 100 : 99, bytes / total * 100); $('#drivePercent').textContent = Math.floor(meter.value) + ' %'; } else { meter.removeAttribute('value'); $('#drivePercent').textContent = 'Dateien werden ermittelt …'; }
     }
-    if (busy && progress) $('#overviewDriveProgress').textContent = `${job.message || ''} · ${total > 0 ? Math.floor(Math.min(job.status === 'success' ? 100 : 99, bytes / total * 100)) + ' % · ' : ''}${$('#driveProgressText').textContent} (aktuelle Quelle)`;
+    if (busy && progress) { $('#overviewDriveProgress').title = `${job.message || ''} · ${total > 0 ? Math.floor(Math.min(job.status === 'success' ? 100 : 99, bytes / total * 100)) + ' % · ' : ''}${$('#driveProgressText').textContent} (aktuelle Quelle)`; $('#overviewDriveProgress').textContent = `${total > 0 ? Math.floor(Math.min(job.status === 'success' ? 100 : 99, bytes / total * 100)) + ' % · ' : ''}${job.source || 'Aktuelle Quelle'}`; }
   }
   async function load() {
     if (loading) return; loading = true;
@@ -109,7 +110,7 @@ export function installDrive({ api, element, notice, scheduleText, date }) {
     const meter=element('progress');meter.max=100;meter.setAttribute('aria-label','Google-Drive-Fortschritt der aktuellen Quelle');
     if(measuring)meter.value=Math.floor(Math.min(99,Math.max(0,bytes/total*100)));
     if(job.status!=='queued')container.append(meter);
-    const text=element('span', job.status==='queued' ? 'Google Drive wartet · '+(job.message||'Startbedingungen werden geprüft.') : measuring ? $('#overviewDriveProgress').textContent+(bytes>=total?' · Datenmenge übertragen, Abschluss läuft …':'') : 'Google Drive · '+(job.message||'Warte auf Fortschrittsdaten …'));
+    const text=element('span', job.status==='queued' ? 'Google Drive wartet · '+(job.message||'Startbedingungen werden geprüft.') : measuring ? ($('#overviewDriveProgress').title || $('#overviewDriveProgress').textContent)+(bytes>=total?' · Datenmenge übertragen, Abschluss läuft …':'') : 'Google Drive · '+(job.message||'Warte auf Fortschrittsdaten …'));
     text.id='progressEstimate';text.title='Google-Drive-Messwerte für die aktuelle Quelle. Der Auftrag ist erst nach erfolgreichem Prozessende abgeschlossen; Rclone kann die Gesamtmenge während des Laufs ändern.';container.append(text);
   }
   return { renderActivity, update(job) { render(job); if (!initialized && location.hash === '#targets') void load(); }, load };

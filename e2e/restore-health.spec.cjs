@@ -25,7 +25,7 @@ test('Compact health badges link to useful actions, and current success opens re
 });
 
 test('Changed PBS access invalidates previous green status and can be checked from the source badge',async({page,app})=>{
- await login(page);const row=page.locator('[data-folder="software"]');await row.getByRole('button',{name:'↗ Sichern',exact:true}).click();await expect(row.locator('.job-state')).toContainText('Läuft');app.finish();await expect(row.getByRole('button',{name:'Software: Alles aktuell',exact:true})).toBeVisible();
+ await login(page);const row=page.locator('[data-folder="software"]');await row.getByRole('button',{name:'Starten',exact:true}).click();await expect(row.locator('.job-state')).toContainText('Läuft');app.finish();await expect(row.getByRole('button',{name:'Software: Alles aktuell',exact:true})).toBeVisible();
  const change=await page.request.post('/api/targets',{headers,data:{password:'changed-test-secret'}});expect(change.ok()).toBe(true);await page.getByRole('button',{name:'↻ Aktualisieren',exact:true}).click();
  await row.getByRole('button',{name:'Software: PBS erneut prüfen',exact:true}).click();await expect(row.getByRole('button',{name:'Software: Alles aktuell',exact:true})).toBeVisible();
 });

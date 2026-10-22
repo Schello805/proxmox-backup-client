@@ -10,7 +10,7 @@ test('Dashboard unterscheidet eine falsche Freigabe und ungeprüfte Ziele; Quell
 });
 test('Ziele gemeinsam hinzufügen und Kennzahlen zwischen Quellen und Zielen prüfen',async({page},testInfo)=>{
  await login(page,{sourceDetails:false});
- await page.getByRole('link',{name:/Backup-Ziele$/}).click();
+ await page.getByRole('link',{name:/Ziele$/}).click();
  await expect(page.locator('#targetMetrics')).toContainText('1 PBS-Datastores · 0 Google Drive');
  await expect(page.locator('#configureDrive')).not.toBeVisible();
  await page.locator('#addTargetMenu > summary').click();
@@ -49,7 +49,7 @@ test('Sicherungsstand zählt Erfolge statt Verbindungen und Zielprobleme bleiben
  await expect(page.locator('#dashboardPBSTargets')).not.toContainText('Google Drive');
  failed=true;await page.getByRole('button',{name:'↻ Aktualisieren',exact:true}).click();
  await expect(page.locator('#protectionTitle')).toHaveText('0 von 6 Quellen mit aktuellem PBS-Erfolg');
- await page.getByRole('link',{name:/Backup-Ziele$/}).click();
+ await page.getByRole('link',{name:/Ziele$/}).click();
  await expect(page.locator('#pbsSettings')).not.toHaveAttribute('open','');
  await expect(page.locator('#targetAlerts')).toContainText('Verbindung fehlgeschlagen');
  await page.locator('#targetAlerts button').click();await expect(page.locator('#pbsSettings')).toHaveAttribute('open','');
