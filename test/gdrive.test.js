@@ -73,3 +73,10 @@ test('Synchronisierung benötigt ausdrückliche Löschbestätigung und verwendet
 test('Synchronisierung verweigert unbestätigte oder falsche SMB-Quellen',async()=>{
  for(const badMount of [false,true]){const f=fixture({badMount});f.config.gdrive=validateDrive({...f.config.gdrive,mode:'sync',syncConfirmed:true},f.config.sources);if(!badMount)f.config.sources[0].expectedSource='';f.drive.start();await tick();await tick();await tick();assert.equal(f.state.drive.status,'failed');assert.equal(f.calls.some(call=>call.args[0]==='sync'),false);}
 });
+
+test('Versionierte Sicherung trennt aktuellen Stand und alte Dateien, nutzt eindeutige Laufordner und bleibt einseitig',async()=>{
+ const f=fixture();f.config.gdrive=validateDrive({...f.config.gdrive,mode:'backup'},f.config.sources);f.drive.start();await tick();await tick();await tick();
+ const args=f.calls.find(call=>call.args[0]==='sync').args,archive=args[args.indexOf('--backup-dir')+1];assert.equal(args[1],'/mnt/Daten/Daten');assert.equal(args[2],'gdrive:QNAP Backup/daten');assert.ok(archive.startsWith('gdrive:QNAP Backup.versions/daten/2026-10-21T01-00-00-000Z-'));assert.ok(!archive.startsWith(args[2]+'/'));assert.ok(args.includes('--delete-after'));assert.ok(!args.includes('--ignore-errors'));
+ f.children[0].emit('close',0);await tick();const second=f.calls.filter(call=>call.args[0]==='sync')[1].args;assert.ok(second[second.indexOf('--backup-dir')+1].includes('.versions/musik/'));f.children[1].emit('close',0);await tick();assert.equal(f.state.drive.results[0].backupDirectory,archive);assert.equal(f.state.drive.history[0].mode,'backup');
+ f.drive.start();await tick();await tick();await tick();const next=f.calls.filter(call=>call.args[0]==='sync')[2].args;assert.notEqual(next[next.indexOf('--backup-dir')+1],archive);f.drive.cancel();await tick();
+});

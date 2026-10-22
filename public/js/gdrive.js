@@ -5,8 +5,8 @@ export function installDrive({ api, element, notice, scheduleText, date }) {
   for (let day = 1; day <= 31; day++) $('#driveMonth').append(new Option(String(day), String(day)));
   $('#driveMonth').append(new Option('Letzter Tag', 'last'));
   for (let day = 1; day <= 7; day++) { const label = element('label', dayNames[day - 1]); const input = element('input'); input.type = 'checkbox'; input.value = day; input.name = 'driveDay'; label.prepend(input); $('#driveDays').append(label); }
-  function modeChanged() { $('#driveDays').hidden = form.elements.mode.value !== 'weekly'; $('#driveMonthLabel').hidden = form.elements.mode.value !== 'monthly'; form.elements.time.disabled = form.elements.mode.value === 'manual'; $('#driveSyncWarning').hidden = form.elements.transferMode.value !== 'sync'; }
-  form.addEventListener('input', () => dirty = true); form.addEventListener('change', () => { dirty = true; modeChanged(); });
+  function modeChanged() { $('#driveDays').hidden = form.elements.mode.value !== 'weekly'; $('#driveMonthLabel').hidden = form.elements.mode.value !== 'monthly'; form.elements.time.disabled = form.elements.mode.value === 'manual'; $('#driveSyncWarning').hidden = form.elements.transferMode.value !== 'sync'; $('#driveBackupInfo').hidden = form.elements.transferMode.value !== 'backup'; $('#driveModeHint').textContent = ({backup:'Sicherung mit Versionen: aktueller Stand plus Archiv ersetzter und entfernter Dateien.',copy:'Abgleich ohne Löschen: neue/geänderte Dateien übernehmen; zusätzliche Zieldateien behalten. Ältere überschriebene Versionen werden nicht archiviert.',sync:'Abgleich mit Löschen: Ziel entspricht der Quelle; zusätzliche Zieldateien werden entfernt.'})[form.elements.transferMode.value]; $('#driveVersionPath').textContent=(form.elements.remote.value||'gdrive')+':'+(form.elements.folder.value||'QNAP-Backup')+'.versions/<Backup-ID>/<Lauf>/'; }
+  form.addEventListener('input', () => { dirty = true; modeChanged(); }); form.addEventListener('change', () => { dirty = true; modeChanged(); });
   function render(job) {
     if (!job) return;
     currentJob = job;
@@ -14,9 +14,10 @@ export function installDrive({ api, element, notice, scheduleText, date }) {
     $('#driveStatus').textContent = labels[job.status] || job.status;
     $('#driveMessage').textContent = job.message || 'Quellen auswählen, speichern und Verbindung prüfen.';
     $('#driveLast').textContent = job.lastSuccess ? 'Letzter Erfolg: ' + date(job.lastSuccess) : 'Noch kein erfolgreicher Lauf';
-    const syncing = job.settings?.mode === 'sync';
-    $('#driveStart').textContent = syncing ? 'Jetzt synchronisieren' : 'Jetzt nach Drive kopieren';
-    $('#overviewDriveStart').textContent = syncing ? 'Jetzt synchronisieren' : 'Nach Drive kopieren';
+    const syncing = job.settings?.mode === 'sync', versioned = job.settings?.mode === 'backup';
+    const modeLabel = versioned ? 'Sicherung mit Versionen' : syncing ? 'Abgleich mit Löschen' : 'Abgleich ohne Löschen';
+    $('#driveStart').textContent = versioned ? 'Jetzt mit Versionen sichern' : syncing ? 'Jetzt synchronisieren' : 'Jetzt nach Drive kopieren';
+    $('#overviewDriveStart').textContent = versioned ? 'Jetzt mit Versionen sichern' : syncing ? 'Jetzt synchronisieren' : 'Nach Drive kopieren';
     const busy = ['running','queued','cancelling'].includes(job.status);
     $('#driveStart').disabled = busy || pendingAction || !job.settings?.sources.length; $('#driveCancel').hidden = !busy; $('#driveCancel').disabled = job.status === 'cancelling';
     const connectionFailed = job.connection?.ok === false && Date.parse(job.connection.checkedAt) > (Date.parse(job.lastSuccess) || 0);
@@ -26,7 +27,7 @@ export function installDrive({ api, element, notice, scheduleText, date }) {
     const selected = (job.sources || []).map(source => source.name).join(', ');
     $('#overviewDriveSummary').textContent = configured ? `${job.settings.remote}:${job.settings.folder} · ${selected}` : 'Quellen und Google-Zugang unter Backup-Ziele einrichten.';
     $('#overviewDriveSummary').title = $('#overviewDriveSummary').textContent;
-    $('#overviewDrivePlan').textContent = configured ? `${syncing ? 'Synchronisierung' : 'Kopie'} · ${scheduleText(job.settings.schedule)}${job.nextAt ? ' · Nächster Termin: ' + date(job.nextAt) : ''} · ${job.timezone} · ${job.lastSuccess ? 'Letzter Erfolg: ' + date(job.lastSuccess) : 'Noch kein erfolgreicher Lauf'}` : 'Normale Dateikopie · Zeitplan unabhängig von PBS';
+    $('#overviewDrivePlan').textContent = configured ? `${modeLabel} · ${scheduleText(job.settings.schedule)}${job.nextAt ? ' · Nächster Termin: ' + date(job.nextAt) : ''} · ${job.timezone} · ${job.lastSuccess ? 'Letzter Erfolg: ' + date(job.lastSuccess) : 'Noch kein erfolgreicher Lauf'}` : 'Normale Dateikopie · Zeitplan unabhängig von PBS';
     $('#overviewDriveStart').disabled = !configured || busy || pendingAction; $('#overviewDriveStart').hidden = busy || !configured;
     $('#overviewDriveCancel').hidden = !busy; $('#overviewDriveCancel').disabled = job.status === 'cancelling' || pendingAction;
     $('#overviewDriveProgress').hidden = !busy && !['failed','interrupted'].includes(job.status);
