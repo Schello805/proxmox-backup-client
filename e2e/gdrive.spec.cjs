@@ -48,3 +48,17 @@ test('Aktiviertes ntfy meldet Google-Drive-Fehler ohne Zugangsdaten',async({page
   expect((await page.request.post('/api/gdrive',{headers,data:{remote:'gdrive',folder:'QNAP',sources:['daten'],schedule:''}})).ok()).toBe(true);await app.setMount('/mnt/Daten/Daten',{source:'//test-nas/wrong'});expect((await page.request.post('/api/gdrive/start',{headers,data:{}})).ok()).toBe(true);
   await expect.poll(async()=>(await app.notifications()).filter(item=>item.message.startsWith('Google Drive: Kopie fehlgeschlagen')).length).toBe(1);const messages=await app.notifications();expect(JSON.stringify(messages)).not.toContain('private-ntfy-test-token');expect(JSON.stringify(messages)).not.toContain('/mnt/Daten');
 });
+test('Drive-Fortschritt ersetzt oben den letzten PBS-Erfolg und meldet keinen vorzeitigen Abschluss',async({page})=>{
+ await page.route('**/api/activity',async route=>{
+  const response=await route.fetch(),data=await response.json();data.active=null;data.queue=[];
+  data.jobs.software={status:'success',endedAt:new Date().toISOString(),estimate:{percent:100,status:'complete'}};
+  data.drive={...data.drive,status:'running',source:'Daten',message:'Daten → gdrive:QNAP-Backup/daten',progress:{bytes:62,totalBytes:100,speed:1,eta:38}};
+  await route.fulfill({response,json:data});
+ });
+ await login(page,{sourceDetails:false});await expect(page.locator('#activityTitle')).toHaveText('Google Drive · Daten');
+ await expect(page.locator('#queueInfo')).toContainText('62 %');await expect(page.locator('#overviewDriveProgress')).toContainText('62 %');await expect(page.locator('#queueInfo')).not.toContainText('Abgeschlossen');await expect(page.locator('#queueInfo progress')).toHaveAttribute('value','62');
+ await page.unroute('**/api/activity');await page.route('**/api/activity',async route=>{
+  const response=await route.fetch(),data=await response.json();data.active=null;data.queue=[];data.drive={...data.drive,status:'running',source:'Daten',message:'Abschluss läuft',progress:{bytes:100,totalBytes:100,speed:0,eta:0}};await route.fulfill({response,json:data});
+ });
+ await page.getByRole('button',{name:'↻ Aktualisieren',exact:true}).click();await expect(page.locator('#queueInfo')).toContainText('99 %');await expect(page.locator('#queueInfo')).toContainText('Abschluss läuft');await expect(page.locator('#queueInfo')).not.toContainText('Abgeschlossen');
+});

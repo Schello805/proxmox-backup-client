@@ -296,8 +296,9 @@ async function refreshActivity() {
     if (['queued','running','cancelling'].includes(data.drive?.status)) {
       $('#runningCount').textContent = (data.active ? 1 : 0) + data.queue.length + 1;
       $('#cancelAll').hidden = false; $('#cancelAll').disabled = false;
-      if (!data.active) { $('#activityTitle').textContent = 'Google Drive · ' + (data.drive.source || 'Ausgewählte Quellen'); $('#activityDescription').textContent = data.drive.message; $('#activityBadge').textContent = data.drive.status === 'queued' ? 'Drive wartet' : data.drive.status === 'cancelling' ? 'Abbruch läuft' : 'Drive läuft'; $('#activityBadge').className = 'badge busy'; }
+      if (!data.active) { drive?.renderActivity($('#queueInfo'),data.drive); $('.activity').classList.toggle('running',data.drive.status!=='queued'); $('#activityTitle').textContent = 'Google Drive · ' + (data.drive.source || 'Ausgewählte Quellen'); $('#activityDescription').textContent = data.drive.message; $('#activityBadge').textContent = data.drive.status === 'queued' ? 'Drive wartet' : data.drive.status === 'cancelling' ? 'Abbruch läuft' : 'Drive läuft'; $('#activityBadge').className = 'badge busy'; }
     }
+    $('#activityTitle').title = $('#activityTitle').textContent; $('#activityDescription').title = $('#activityDescription').textContent;
     if (data.notification && !$('#notifyDetails').open) $('#notificationResult').textContent = `${data.notification.message} (${date(data.notification.at)})`;
     if (logFolder) await refreshLog();
   } catch (e) { if (authenticated) { $('#activityBadge').textContent = 'Verbindung unterbrochen'; $('#activityBadge').className = 'badge bad'; notice(e.message, true); } }

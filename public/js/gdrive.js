@@ -33,9 +33,9 @@ export function installDrive({ api, element, notice, scheduleText, date }) {
     if (progress) {
       const mb = value => ((value || 0) / 1024 ** 2).toLocaleString('de-DE', { maximumFractionDigits: 1 });
       $('#driveProgressText').textContent = `${mb(bytes)} / ${mb(total)} MiB · ${mb(progress.speed)} MiB/s${Number.isFinite(progress.eta) ? ' · ca. ' + Math.ceil(progress.eta / 60) + ' min verbleibend' : ''}`;
-      const meter = $('#driveMeter'); if (total > 0) { meter.value = Math.min(100, bytes / total * 100); $('#drivePercent').textContent = Math.floor(meter.value) + ' %'; } else { meter.removeAttribute('value'); $('#drivePercent').textContent = 'Dateien werden ermittelt …'; }
+      const meter = $('#driveMeter'); if (total > 0) { meter.value = Math.min(job.status === 'success' ? 100 : 99, bytes / total * 100); $('#drivePercent').textContent = Math.floor(meter.value) + ' %'; } else { meter.removeAttribute('value'); $('#drivePercent').textContent = 'Dateien werden ermittelt …'; }
     }
-    if (busy && progress) $('#overviewDriveProgress').textContent = `${job.message || ''} · ${total > 0 ? Math.floor(Math.min(100, bytes / total * 100)) + ' % · ' : ''}${$('#driveProgressText').textContent} (aktuelle Quelle)`;
+    if (busy && progress) $('#overviewDriveProgress').textContent = `${job.message || ''} · ${total > 0 ? Math.floor(Math.min(job.status === 'success' ? 100 : 99, bytes / total * 100)) + ' % · ' : ''}${$('#driveProgressText').textContent} (aktuelle Quelle)`;
     $('#driveHistory').replaceChildren(...(job.history || []).map(run => element('li', `${date(run.endedAt)} · ${labels[run.status] || run.status} · ${(run.results || []).length} Quellen kopiert${run.message ? ' · ' + run.message : ''}`)));
   }
   async function load() {
@@ -95,5 +95,15 @@ export function installDrive({ api, element, notice, scheduleText, date }) {
   $('#configureDrive').addEventListener('click', () => { $('#addTargetMenu').open=false; $('#driveSettings').open = true; $('#drivePanel').scrollIntoView({ behavior: 'smooth', block: 'start' }); void load(); });
   $('#driveSettings').addEventListener('toggle', () => { if ($('#driveSettings').open) void load(); });
   window.addEventListener('hashchange', () => { if (location.hash === '#targets') void load(); });
-  return { update(job) { render(job); if (!initialized && location.hash === '#targets') void load(); }, load };
+  function renderActivity(container, job) {
+    container.replaceChildren();container.classList.add('progress-line');
+    const progress=job.progress, total=progress?.totalBytes, bytes=progress?.bytes;
+    const measuring=job.status!=='queued' && Number.isFinite(total) && total>0 && Number.isFinite(bytes);
+    const meter=element('progress');meter.max=100;meter.setAttribute('aria-label','Google-Drive-Fortschritt der aktuellen Quelle');
+    if(measuring)meter.value=Math.floor(Math.min(99,Math.max(0,bytes/total*100)));
+    if(job.status!=='queued')container.append(meter);
+    const text=element('span', job.status==='queued' ? 'Google Drive wartet · '+(job.message||'Startbedingungen werden geprüft.') : measuring ? $('#overviewDriveProgress').textContent+(bytes>=total?' · Datenmenge übertragen, Abschluss läuft …':'') : 'Google Drive · '+(job.message||'Warte auf Fortschrittsdaten …'));
+    text.id='progressEstimate';text.title='Google-Drive-Messwerte für die aktuelle Quelle. Der Auftrag ist erst nach erfolgreichem Prozessende abgeschlossen; Rclone kann die Gesamtmenge während des Laufs ändern.';container.append(text);
+  }
+  return { renderActivity, update(job) { render(job); if (!initialized && location.hash === '#targets') void load(); }, load };
 }
