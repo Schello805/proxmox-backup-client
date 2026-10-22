@@ -5,15 +5,18 @@ export function installDrive({ api, element, notice, scheduleText, date }) {
   for (let day = 1; day <= 31; day++) $('#driveMonth').append(new Option(String(day), String(day)));
   $('#driveMonth').append(new Option('Letzter Tag', 'last'));
   for (let day = 1; day <= 7; day++) { const label = element('label', dayNames[day - 1]); const input = element('input'); input.type = 'checkbox'; input.value = day; input.name = 'driveDay'; label.prepend(input); $('#driveDays').append(label); }
-  function modeChanged() { $('#driveDays').hidden = form.elements.mode.value !== 'weekly'; $('#driveMonthLabel').hidden = form.elements.mode.value !== 'monthly'; form.elements.time.disabled = form.elements.mode.value === 'manual'; }
+  function modeChanged() { $('#driveDays').hidden = form.elements.mode.value !== 'weekly'; $('#driveMonthLabel').hidden = form.elements.mode.value !== 'monthly'; form.elements.time.disabled = form.elements.mode.value === 'manual'; $('#driveSyncWarning').hidden = form.elements.transferMode.value !== 'sync'; }
   form.addEventListener('input', () => dirty = true); form.addEventListener('change', () => { dirty = true; modeChanged(); });
   function render(job) {
     if (!job) return;
     currentJob = job;
-    const labels = { idle: 'Noch keine Kopie', queued: 'Wartet', running: 'Läuft', cancelling: 'Abbruch läuft', cancelled: 'Abgebrochen', failed: 'Fehlgeschlagen', success: 'Erfolgreich', interrupted: 'Unterbrochen' };
+    const labels = { idle: 'Noch kein Lauf', queued: 'Wartet', running: 'Läuft', cancelling: 'Abbruch läuft', cancelled: 'Abgebrochen', failed: 'Fehlgeschlagen', success: 'Erfolgreich', interrupted: 'Unterbrochen' };
     $('#driveStatus').textContent = labels[job.status] || job.status;
     $('#driveMessage').textContent = job.message || 'Quellen auswählen, speichern und Verbindung prüfen.';
     $('#driveLast').textContent = job.lastSuccess ? 'Letzter Erfolg: ' + date(job.lastSuccess) : 'Noch kein erfolgreicher Lauf';
+    const syncing = job.settings?.mode === 'sync';
+    $('#driveStart').textContent = syncing ? 'Jetzt synchronisieren' : 'Jetzt nach Drive kopieren';
+    $('#overviewDriveStart').textContent = syncing ? 'Jetzt synchronisieren' : 'Nach Drive kopieren';
     const busy = ['running','queued','cancelling'].includes(job.status);
     $('#driveStart').disabled = busy || pendingAction || !job.settings?.sources.length; $('#driveCancel').hidden = !busy; $('#driveCancel').disabled = job.status === 'cancelling';
     const connectionFailed = job.connection?.ok === false && Date.parse(job.connection.checkedAt) > (Date.parse(job.lastSuccess) || 0);
@@ -23,7 +26,7 @@ export function installDrive({ api, element, notice, scheduleText, date }) {
     const selected = (job.sources || []).map(source => source.name).join(', ');
     $('#overviewDriveSummary').textContent = configured ? `${job.settings.remote}:${job.settings.folder} · ${selected}` : 'Quellen und Google-Zugang unter Backup-Ziele einrichten.';
     $('#overviewDriveSummary').title = $('#overviewDriveSummary').textContent;
-    $('#overviewDrivePlan').textContent = configured ? `${scheduleText(job.settings.schedule)}${job.nextAt ? ' · Nächster Termin: ' + date(job.nextAt) : ''} · ${job.timezone} · ${job.lastSuccess ? 'Letzter Erfolg: ' + date(job.lastSuccess) : 'Noch kein erfolgreicher Lauf'}` : 'Normale Dateikopie · Zeitplan unabhängig von PBS';
+    $('#overviewDrivePlan').textContent = configured ? `${syncing ? 'Synchronisierung' : 'Kopie'} · ${scheduleText(job.settings.schedule)}${job.nextAt ? ' · Nächster Termin: ' + date(job.nextAt) : ''} · ${job.timezone} · ${job.lastSuccess ? 'Letzter Erfolg: ' + date(job.lastSuccess) : 'Noch kein erfolgreicher Lauf'}` : 'Normale Dateikopie · Zeitplan unabhängig von PBS';
     $('#overviewDriveStart').disabled = !configured || busy || pendingAction; $('#overviewDriveStart').hidden = busy || !configured;
     $('#overviewDriveCancel').hidden = !busy; $('#overviewDriveCancel').disabled = job.status === 'cancelling' || pendingAction;
     $('#overviewDriveProgress').hidden = !busy && !['failed','interrupted'].includes(job.status);
@@ -43,6 +46,7 @@ export function installDrive({ api, element, notice, scheduleText, date }) {
       const data = await api('/api/gdrive'); render(data.job);
       $('#driveTimezone').textContent = 'Zeitzone: ' + data.timezone + ' · Startfenster und Pause gelten auch hier; das eigene Google-Drive-Upload-Limit steht unter Einstellungen.';
       if (!dirty) {
+        form.elements.transferMode.value = data.config.mode || 'copy'; form.elements.syncConfirmed.checked = Boolean(data.config.syncConfirmed);
         form.elements.remote.value = data.config.remote; form.elements.folder.value = data.config.folder;
         const schedule = data.config.schedule;
         form.elements.mode.value = schedule.monthDay !== undefined ? 'monthly' : schedule.days.length === 7 ? 'daily' : schedule.days.length ? 'weekly' : 'manual';
@@ -58,7 +62,8 @@ export function installDrive({ api, element, notice, scheduleText, date }) {
     const mode = form.elements.mode.value;
     const schedule = mode === 'manual' ? '' : { days: mode === 'daily' ? [1,2,3,4,5,6,7] : mode === 'weekly' ? [...form.querySelectorAll('[name="driveDay"]:checked')].map(input => Number(input.value)) : [], time: form.elements.time.value, ...(mode === 'monthly' ? { monthDay: form.elements.month.value === 'last' ? 'last' : Number(form.elements.month.value) } : {}) };
     if (mode === 'weekly' && !schedule.days.length) { $('#driveResult').textContent = 'Mindestens einen Wochentag auswählen.'; return; }
-    try { await api('/api/gdrive', { remote: form.elements.remote.value, folder: form.elements.folder.value, sources: [...form.querySelectorAll('[name="source"]:checked')].map(input => input.value), schedule }); dirty = false; $('#driveResult').textContent = 'Google-Drive-Einstellungen gespeichert.'; await load(); } catch (error) { $('#driveResult').textContent = error.message; }
+    if (form.elements.transferMode.value === 'sync' && !form.elements.syncConfirmed.checked) { $('#driveResult').textContent='Bitte das Entfernen zusätzlicher Dateien im Google-Ziel bestätigen.'; return; }
+    try { await api('/api/gdrive', { mode: form.elements.transferMode.value, syncConfirmed: form.elements.syncConfirmed.checked, remote: form.elements.remote.value, folder: form.elements.folder.value, sources: [...form.querySelectorAll('[name="source"]:checked')].map(input => input.value), schedule }); dirty = false; $('#driveResult').textContent = 'Google-Drive-Einstellungen gespeichert.'; await load(); } catch (error) { $('#driveResult').textContent = error.message; }
   });
   async function perform(action, button, overview = false) {
     const resultField = $(overview ? '#overviewDriveResult' : '#driveResult');

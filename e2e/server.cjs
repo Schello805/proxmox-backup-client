@@ -58,7 +58,7 @@ const realDrive = require('../lib/gdrive').createDrive;
 require('../lib/gdrive').createDrive = options => realDrive({ ...options, spawnProcess: (_, args) => {
   const child = new EventEmitter(); child.stdout = new EventEmitter(); child.stderr = new EventEmitter();
   child.kill = signal => setImmediate(() => child.emit('close', null, signal));
-  setImmediate(() => { if (args[0] === 'copy') child.stderr.emit('data', Buffer.from(JSON.stringify({stats:{bytes:1048576,totalBytes:2097152,speed:524288,eta:2}})+'\n')); else { if(args[0] === 'about') child.stdout.emit('data', Buffer.from(JSON.stringify({total:107374182400,used:21474836480,free:32212254720,other:42949672960,trashed:1073741824}))); if(args[0] === 'listremotes') child.stdout.emit('data', Buffer.from('gdrive: drive\n')); child.emit('close', 0); } });
+  setImmediate(() => { if (['copy','sync'].includes(args[0])) child.stderr.emit('data', Buffer.from(JSON.stringify({stats:{bytes:1048576,totalBytes:2097152,speed:524288,eta:2}})+'\n')); else { if(args[0] === 'about') child.stdout.emit('data', Buffer.from(JSON.stringify({total:107374182400,used:21474836480,free:32212254720,other:42949672960,trashed:1073741824}))); if(args[0] === 'listremotes') child.stdout.emit('data', Buffer.from('gdrive: drive\n')); child.emit('close', 0); } });
   return child;
 } });
 require('../server');

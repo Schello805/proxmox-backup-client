@@ -70,12 +70,12 @@ Eine Liste ohne Fehler bestätigt den Lesetest; bei leerer Ablage ist eine leere
 ## 6. App und erster Test
 
 1. **Backup-Ziele → Akkordeon Google Drive** öffnen. Remote `gdrive`, Zielordner beispielsweise `QNAP-Backup`, zunächst eine kleine Quelle auswählen.
-2. Optional täglichen, wöchentlichen oder monatlichen Zeitplan einstellen. Die Zeitzone steht unter Einstellungen. Fehlende Monatstage werden auf den letzten Monatstag gelegt.
-3. **Google Drive speichern → Google Drive prüfen → Jetzt nach Drive kopieren**. Der Verbindungstest liest; Schreibrechte werden beim Kopieren geprüft.
+2. **Übertragungsart** wählen: **Kopie** übernimmt neue und geänderte Dateien und behält zusätzliche Zieldateien. **Synchronisierung** spiegelt den aktuellen Quellinhalt und entfernt zusätzliche Dateien ausschließlich im jeweiligen Ziel-Unterordner `Remote:Zielordner/Backup-ID`. Dafür die Löschbestätigung aktivieren und unter Quellen die erwartete SMB-Freigabe bestätigen. Bestehende Einrichtungen bleiben auf Kopie. Anschließend optional täglichen, wöchentlichen oder monatlichen Zeitplan einstellen. Die Zeitzone steht unter Einstellungen. Fehlende Monatstage werden auf den letzten Monatstag gelegt.
+3. **Google Drive speichern → Google Drive prüfen → Jetzt nach Drive kopieren / Jetzt synchronisieren**. Der Verbindungstest liest; Schreibrechte werden beim Kopieren geprüft.
 4. Die Übersicht zeigt Quellen, Plan, nächsten Termin, letzten Erfolg und laufenden Fortschritt. Kopien dort starten oder abbrechen.
 5. Nach Erfolg in Google Drive `QNAP-Backup/<Backup-ID>/` öffnen, eine Datei herunterladen und ihren Inhalt prüfen. Erst dann weitere Quellen aktivieren.
 
-Neue Drive-Aufträge warten auf PBS-Aufträge, Pause und Startfenster. Ein laufender Auftrag wird fertiggestellt. Unter **Einstellungen → Startfenster & Bandbreite** hat Google Drive ein eigenes Upload-Limit (MiB/s; 0 = unbegrenzt), unabhängig vom PBS-Limit. Jede Quelle hat einen eigenen Unterordner. Änderungen ersetzen vorhandene Dateien; gelöschte Quelldateien bleiben im Ziel. Die App verwaltet keine eigenen Drive-Versionen. Zum Wiederherstellen Dateien aus Drive herunterladen und zunächst separat prüfen.
+Neue Drive-Aufträge warten auf PBS-Aufträge, Pause und Startfenster. Ein laufender Auftrag wird fertiggestellt. Unter **Einstellungen → Startfenster & Bandbreite** hat Google Drive ein eigenes Upload-Limit (MiB/s; 0 = unbegrenzt), unabhängig vom PBS-Limit. Jede Quelle hat einen eigenen Unterordner. Beide Modi vergleichen den vorhandenen Bestand und übertragen nur neue oder geänderte Dateien, nicht jedes Mal die gesamten 2 TB. Im Kopie-Modus bleiben gelöschte Quelldateien im Ziel; Synchronisierung entfernt sie dort nach den Übertragungen (`--delete-after`). Änderungen auf Google Drive werden niemals auf die Quelle zurückgeschrieben. Der Abgleich erfolgt pro manuellem oder geplantem Lauf, nicht in Echtzeit. Die App verwaltet keine eigenen Drive-Versionen. Zum Wiederherstellen Dateien aus Drive herunterladen und zunächst separat prüfen.
 
 Unter **Backup-Ziele → Speicherstände** und auf der Übersicht wird auch die Google-Kontoquote angezeigt. Andere Google-Dienste und der Papierkorb werden getrennt genannt, soweit Google Werte liefert. Geteilte Ablagen können ohne eigene Speicherquote erscheinen. Der Abruf erfolgt im Hintergrund oder per „Speicher aktualisieren“; bei Fehlern bleibt der letzte Stand erkennbar erhalten.
 
@@ -87,3 +87,5 @@ Aktiviertes ntfy meldet auch fehlgeschlagene Drive-Kopien, Verbindungs- und Spei
 - **Freigabe nach sieben Tagen abgelaufen:** Google-App auf „In Produktion“ stellen und über `rclone config` die Google-Anmeldung erneuern.
 - **Kopie fehlgeschlagen:** Speicherplatz und Schreibrechte in Drive sowie die SMB-Zuordnung und Lesbarkeit im LXC prüfen.
 - **Auftrag wartet:** PBS-Warteschlange, Pause und Startfenster kontrollieren. Dieser Zustand ist kein Fehler.
+
+Offizielle Erläuterungen: [rclone copy](https://rclone.org/commands/rclone_copy/) und [rclone sync](https://rclone.org/commands/rclone_sync/). Eine Spiegelung übernimmt auch versehentliche Löschungen und ersetzt keine versionierte Sicherung; PBS-Sicherungen bleiben separat.
