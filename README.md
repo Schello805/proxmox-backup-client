@@ -8,7 +8,9 @@ Backup-Ziele werden über eine gemeinsame Auswahl hinzugefügt. Kennzahlen zeige
 
 Das Dashboard hebt den PBS-Sicherungsstand mit überfälligen und noch ungesicherten Quellen hervor. Google Drive bündelt Status, Fortschritt und Aktionen direkt im Zielpanel. Zielprobleme bleiben auch bei geschlossenen Einstellungen sichtbar. Das Dashboard zeigt außerdem Mounts, Zielzustand, laufende Aufträge und Hinweise; ausführliche Auftragsdetails und Gantt sind aufklappbar. Unter Quellen stehen alle Datenquellen in einer durchsuchbaren Tabelle mit Statusfilter und feststehendem Tabellenkopf.
 
-Die Navigation steht links: Übersicht, Quellen und Backup-Ziele oben; Einstellungen und Anleitung unten über dem Controller-Hinweis. Allgemeine Optionen, Systeminformationen, Diagnose und Updates stehen gemeinsam unter Einstellungen; der PBS-Bestand bleibt direkt bei der PBS-Konfiguration erreichbar.
+Die eigene Seite „Protokoll“ bündelt aktuelle und archivierte PBS-Ausgaben, Drive-Laufergebnisse und Benachrichtigungsfehler mit Bereichs-, Quellen- und Zielfilter. PBS-Dateien werden bis 256 KiB angezeigt; für Drive stehen bisher Zusammenfassungen zur Verfügung.
+
+Die Navigation steht links: Übersicht, Quellen, Backup-Ziele und Protokoll oben; Einstellungen und Anleitung unten über dem Controller-Hinweis. Allgemeine Optionen, Systeminformationen, Diagnose und Updates stehen gemeinsam unter Einstellungen; der PBS-Bestand bleibt direkt bei der PBS-Konfiguration erreichbar.
 
 Verwaltung erfolgt über Quellen, Backup-Ziele und Einstellungen. Unter Quellen → Mounts verwalten stehen geprüfte Kopierbefehle für Änderungen an der LXC-Durchreichung; SMB-Storage selbst wird in der Proxmox-Weboberfläche verwaltet. Die App-Anleitung enthält die Übersicht „Verwaltung · Was geht wo?“. Entfernen in der App löscht keine Quelldaten oder Sicherungen.
 

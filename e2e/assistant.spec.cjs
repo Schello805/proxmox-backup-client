@@ -74,7 +74,7 @@ test('PBS-Assistent: eigener Server mit getrenntem Zugang, Backup und dauerhaft 
   await page.locator('tr[data-folder="software"]').getByRole('button', { name: 'Zeitplan Software bearbeiten' }).click();
   const detail = page.locator('#sourceDetail'); await detail.getByRole('combobox', { name: 'Backup-Ziel', exact: true }).selectOption('secondary'); await detail.getByRole('button', { name: 'Quelle speichern', exact: true }).click(); await expect(detail.locator('#sourceResult')).toContainText('gespeichert');
   await detail.getByRole('button', { name: 'Schließen', exact: true }).click();
-  await page.locator('tr[data-folder="software"]').getByRole('button', { name: '↗ Sichern', exact: true }).click(); await page.getByRole('button', { name: 'Live-Protokoll ↗' }).click();
+  await page.locator('tr[data-folder="software"]').getByRole('button', { name: '↗ Sichern', exact: true }).click(); await page.getByRole('link', { name: /Protokoll$/ }).click();
   await expect(page.locator('#logText')).toContainText('archive@pbs@pbs2.local:test-store'); await expect(page.locator('#logText')).toContainText('E2E namespace: archive'); await expect(page.locator('#logText')).toContainText('E2E credential match: true');
   app.finish(); await expect(page.locator('tr[data-folder="software"] .job-state')).toContainText('Erfolgreich');
   await page.getByRole('link', { name: /Backup-Ziele$/ }).click(); if ((await page.locator('#pbsSettings').getAttribute('open')) === null) await page.locator('#pbsSettings>summary').click();

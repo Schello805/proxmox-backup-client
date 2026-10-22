@@ -2,11 +2,6 @@ export function installMaintenance({ api, element, date, isAuthenticated, getEpo
 const $ = selector => document.querySelector(selector);
 let diagnosticTimer, diagnosticPolling = false;
 function showDiagnostics(report) {
-  $('#diagnosticChecks').replaceChildren();
-  for (const check of report.checks) {
-    const item = element('li'), badge = element('span', check.status === 'ok' ? 'OK' : check.status === 'warning' ? 'Hinweis' : 'Fehler', `badge ${check.status === 'ok' ? 'ok' : check.status === 'warning' ? 'busy' : 'bad'}`);
-    const content = element('div'); content.append(element('strong', check.name), element('small', check.message)); item.append(badge, content); $('#diagnosticChecks').append(item);
-  }
   const errors = report.checks.filter(check => check.status === 'error').length, warnings = report.checks.filter(check => check.status === 'warning').length;
   $('#diagnosticSummary').textContent = report.running ? `Prüfung läuft … ${report.checks.length} Ergebnisse vorhanden.` : report.checkedAt ? `${errors} Fehler · ${warnings} Hinweise · geprüft ${date(report.checkedAt)}` : 'Mounts, Verzeichniszugriff, PBS und Zeitpläne mit einem Klick prüfen.';
   $('#runDiagnostics').disabled = report.running;

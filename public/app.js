@@ -1,3 +1,4 @@
+import { installLogbook } from '/js/logbook.js';
 import { installDashboard } from '/js/dashboard.js';
 import { installDrive } from '/js/gdrive.js';
 import { installRestore } from '/js/restore.js';
@@ -17,7 +18,7 @@ const refreshWaiters = [];
 const $ = selector => document.querySelector(selector);
 const names = { software: 'Software', filme: 'Filme', serien: 'Serien', hoerspiele: 'Hörspiele', musik: 'Musik', daten: 'Daten' };
 const statuses = { idle: 'Noch kein Lauf', queued: 'Wartet', running: 'Läuft', success: 'Erfolgreich', failed: 'Fehler', interrupted: 'Unterbrochen', cancelling: 'Wird abgebrochen', cancelled: 'Abgebrochen' };
-let loaded = false, polling = false, logFolder = null, noticeTimer, authenticated = false, activityPolling = false, previousActive = null, authEpoch = 0, activeTimezone = 'Europe/Berlin', savedConfig = null, folderData = [], lastHealth = {}, logRun = null, sourceEditing = null, pbsData = null, sourcePage = 0, lastMainSnapshot = null, lastNotifySnapshot = null, mountDiscovery = { candidates: [] };
+let loaded = false, polling = false, noticeTimer, authenticated = false, activityPolling = false, previousActive = null, authEpoch = 0, activeTimezone = 'Europe/Berlin', savedConfig = null, folderData = [], lastHealth = {}, sourceEditing = null, pbsData = null, sourcePage = 0, lastMainSnapshot = null, lastNotifySnapshot = null, mountDiscovery = { candidates: [] };
 const api = createAPI(showLogin);
 const { element, date, nextText, renderJob, scheduleText, renderEstimate } = createViews(() => activeTimezone, statuses);
 const formState = createFormState(['configForm', 'preferencesForm', 'authForm', 'notifyForm'].map(id => document.getElementById(id)));
@@ -95,13 +96,13 @@ async function refresh() {
       const plan = element('td'); plan.append(element('span', scheduleText(folder.schedule)), element('small', nextText(folder.health), 'next-run')); plan.classList.add('plan-link'); plan.tabIndex = 0; plan.setAttribute('role', 'button'); plan.setAttribute('aria-label', `Zeitplan ${names[folder.id]} bearbeiten`); plan.addEventListener('click', () => editSource(folder.id, true)); plan.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); editSource(folder.id, true); } }); plan.title = `${scheduleText(folder.schedule)} · ${nextText(folder.health)} (${activeTimezone})`;
       const success = element('td'); success.className = 'source-health'; renderSourceHealth(success, folder, folder.job, folder.health); row.append(plan, success);
       const state = element('td'); state.className = 'job-state'; renderFolderState(state, folder, folder.job, folder.health); row.append(state); const status = folder.job.status;
-      const actions = element('td'), start = element('button', '↗ Sichern', 'row-action'), logs = element('button', 'Protokoll', 'row-action');
+      const actions = element('td'), start = element('button', '↗ Sichern', 'row-action');
       const targetReady = data.targets?.find(target => target.id === (folder.target || 'primary'))?.hasPassword ?? data.config.hasPassword;
       start.dataset.start = folder.id; start.dataset.available = String(Boolean(folder.ok && folder.targetRepository && targetReady));
       start.hidden = ['running','queued','cancelling'].includes(status);
       start.disabled = !folder.ok || !folder.targetRepository || !targetReady || ['running', 'queued', 'cancelling'].includes(status);
       start.addEventListener('click', async () => { start.disabled = true; try { await api(`/api/backup/${folder.id}`, {}); notice(`${names[folder.id]} zur Sicherung vorgemerkt.`); await refresh(); } catch (e) { notice(e.message, true); start.disabled = false; } });
-      logs.addEventListener('click', () => openLog(folder.id)); const cancel = element('button', 'Abbrechen', 'row-action'); cancel.dataset.cancel = folder.id; cancel.hidden = !['running','queued','cancelling'].includes(status); cancel.disabled = status === 'cancelling'; cancel.addEventListener('click', () => cancelBackup(folder.id)); actions.append(start, cancel, logs); row.append(actions); $('#folders').append(row);
+      const cancel = element('button', 'Abbrechen', 'row-action'); cancel.dataset.cancel = folder.id; cancel.hidden = !['running','queued','cancelling'].includes(status); cancel.disabled = status === 'cancelling'; cancel.addEventListener('click', () => cancelBackup(folder.id)); actions.append(start, cancel); row.append(actions); $('#folders').append(row);
     }
     $('#systemInfo').replaceChildren();
     for (const [label, value] of [['Host', data.system.hostname], ['System', data.system.platform], ['Backup Client', data.system.client], ['Zeitpläne', data.system.timezone]]) { const item = element('span'); item.append(element('strong', label), document.createTextNode(value)); $('#systemInfo').append(item); }
@@ -112,28 +113,24 @@ async function refresh() {
     await refreshActivity();
   } catch (e) { $('#updated').textContent = 'Aktualisierung fehlgeschlagen'; if (authenticated) notice(e.message, true); } finally { polling = false; if (refreshWaiters.length) { const waiters = refreshWaiters.splice(0); await refresh(); for (const resolve of waiters) resolve(); } }
 }
-async function refreshLog() { try { const data = await api(logRun ? `/api/history/${logFolder}/${logRun}` : `/api/logs/${logFolder}`); const pre = $('#logText'), bottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 40; pre.textContent = data.log; if (bottom) pre.scrollTop = pre.scrollHeight; } catch (e) { notice(e.message, true); } }
-async function openLog(id, runId = null) { logFolder = id; logRun = runId; $('#logTitle').textContent = `Protokoll · ${names[id]}`; $('#logText').textContent = 'Wird geladen …'; showContext('logDialog', id); await refreshLog(); }
-$('#liveDetails').addEventListener('click', () => { if (previousActive) openLog(previousActive); });
-$('#closeLog').addEventListener('click', closeContext);
+function openLog(id, runId = null) { location.hash = 'logs/' + id + (runId ? '/' + runId : ''); }
 let detailId = null;
-const homes = new Map(['sourceForm','historyDialog','logDialog','restorePanel'].map(id => [id, { parent: $('#' + id).parentNode, next: $('#' + id).nextSibling }]));
+const homes = new Map(['sourceForm','historyDialog','restorePanel'].map(id => [id, { parent: $('#' + id).parentNode, next: $('#' + id).nextSibling }]));
 function restoreContext() {
   for (const [id, home] of homes) home.parent.insertBefore($('#' + id), home.next?.parentNode === home.parent ? home.next : null);
-  $('#sourceDetail').hidden = true; $('#historyDialog').hidden = true; $('#logDialog').hidden = true; $('#restorePanel').hidden = true;
-  logFolder = null; logRun = null; detailId = null;
+  $('#sourceDetail').hidden = true; $('#historyDialog').hidden = true; $('#restorePanel').hidden = true;
+  detailId = null;
 }
 function closeContext() { location.hash = '#overview'; }
 function showContext(view, id) {
-  const route = `overview/${id}/${view === 'logDialog' ? 'log' : view === 'historyDialog' ? 'history' : view === 'restorePanel' ? 'restore' : 'edit'}`;
+  const route = `overview/${id}/${view === 'historyDialog' ? 'history' : view === 'restorePanel' ? 'restore' : 'edit'}`;
   if (location.hash.slice(1) !== route) history.pushState(null, '', '#' + route);
   document.querySelectorAll('.page').forEach(el => el.hidden = el.id !== 'overview');
   document.body.dataset.page = 'overview'; markNavigation('overview');
   $('#sourceDetail').hidden = false; detailId = id; $('#detailTitle').textContent = names[id] || id;
-  const slots = { sourceForm: 'detailEditor', historyDialog: 'detailHistorySlot', logDialog: 'detailLogSlot', restorePanel: 'detailRestoreSlot' };
+  const slots = { sourceForm: 'detailEditor', historyDialog: 'detailHistorySlot', restorePanel: 'detailRestoreSlot' };
   for (const [key, slot] of Object.entries(slots)) { $('#' + slot).hidden = key !== view; if (key === view) { $('#' + slot).append($('#' + key)); $('#' + key).hidden = false; } }
-  if (view !== 'logDialog') { logFolder = null; logRun = null; }
-  document.querySelectorAll('.detail-tabs button').forEach(button => button.classList.toggle('active', button.id === ({ sourceForm: 'detailEdit', historyDialog: 'detailHistory', logDialog: 'detailLog', restorePanel: 'detailRestore' })[view]));
+  document.querySelectorAll('.detail-tabs button').forEach(button => button.classList.toggle('active', button.id === ({ sourceForm: 'detailEdit', historyDialog: 'detailHistory', restorePanel: 'detailRestore' })[view]));
   $('#sourceDetail').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 function markNavigation(page, id) {
@@ -147,7 +144,7 @@ function navigate() {
   restoreContext();
   if (location.hash === '#systemDialog') { history.replaceState(null, '', '#settings'); $('#systemMaintenance').open = true; }
   const [requested, id, tab] = location.hash.slice(1).split('/');
-  const page = ['overview','settings','targets','guide','sourcesDialog','pbsDialog','mountTools','assistant'].includes(requested) ? requested : 'overview';
+  const page = ['overview','settings','targets','guide','sourcesDialog','pbsDialog','mountTools','logs','assistant'].includes(requested) ? requested : 'overview';
   document.body.dataset.page = page;
   if (!id || page === 'assistant') window.scrollTo({ top: 0, behavior: 'instant' });
   document.querySelectorAll('.page').forEach(el => el.hidden = el.id !== page);
@@ -157,6 +154,7 @@ function navigate() {
   if (page === 'mountTools') document.dispatchEvent(new Event('open-mount-tools'));
   if (page === 'sourcesDialog') renderSources();
   if (page === 'pbsDialog') openPBS();
+  if (page === 'logs') document.dispatchEvent(new Event('open-logbook'));
   if (page === 'settings') document.dispatchEvent(new Event('open-system'));
   if (page === 'overview' && names[id]) { if (tab === 'restore') void restore?.open(id); else if (tab === 'log') void openLog(id); else if (tab === 'history') void openHistory(id); else editSource(id, true); }
 }
@@ -164,7 +162,6 @@ window.addEventListener('hashchange', navigate); window.addEventListener('popsta
 $('#closeDetail').addEventListener('click', closeContext);
 $('#detailEdit').addEventListener('click', () => editSource(detailId, true));
 $('#detailHistory').addEventListener('click', () => openHistory(detailId));
-$('#detailLog').addEventListener('click', () => openLog(detailId));
 $('#detailRestore').addEventListener('click', () => restore.open(detailId));
 navigate();
 $('#backupAll').addEventListener('click', async () => {
@@ -263,7 +260,7 @@ async function refreshActivity() {
       $('#activityTitle').textContent = `${names[data.active]} · ${job.repository?.split(':').at(-1) || 'Ziel wird geprüft'} · ${job.status === 'cancelling' ? 'Wird abgebrochen …' : data.phase === 'checking' ? 'Quelle wird geprüft' : 'Backup läuft'}`;
       $('#activityDescription').textContent = job.progress ? `Messwert: ${date(job.progress.updatedAt)} · Upload zählt die vom Client gemeldeten Daten; Komprimierung und Deduplizierung beeinflussen den Netzverkehr.` : 'Warte auf Messwerte des Clients. Ältere Clients liefern eventuell erst am Ende Werte; das Live-Protokoll bleibt verfügbar.';
       for (const [label, value] of [['Laufzeit', duration(job.startedAt)], ['Verarbeitet', formatBytes(job.progress?.processedBytes)], ['Upload (Client)', formatBytes(job.progress?.uploadedBytes)], ['Ø Verarbeitung', job.progress?.processingBytesPerSecond != null ? formatBytes(job.progress.processingBytesPerSecond) + '/s' : '—']]) { const item = element('span'); item.append(element('strong', label), document.createTextNode(value)); $('#activityMeta').append(item); }
-      $('#liveDetails').hidden = false;
+
 
     } else {
       $('#activityTitle').textContent = 'Gerade läuft kein Backup';
@@ -271,7 +268,7 @@ async function refreshActivity() {
       if (latest?.[1].status === 'success') estimateJob = latest[1];
       if (latest && ['failed', 'interrupted'].includes(latest[1].status)) { $('#activityBadge').textContent = 'Letzter Lauf mit Fehler'; $('#activityBadge').className = 'badge bad'; }
       $('#activityDescription').textContent = latest ? `Letzter Lauf: ${names[latest[0]]} · ${statuses[latest[1].status]} · ${date(latest[1].endedAt)}${latest[1].error ? ' · ' + latest[1].error : ''}` : 'Starte unten eine Sicherung oder hinterlege einen Sicherungsplan an der Quelle.';
-      $('#liveDetails').hidden = true;
+
     }
     $('#activityTitle').title = $('#activityTitle').textContent;
     $('#activityDescription').title = $('#activityDescription').textContent;
@@ -300,7 +297,7 @@ async function refreshActivity() {
     }
     $('#activityTitle').title = $('#activityTitle').textContent; $('#activityDescription').title = $('#activityDescription').textContent;
     if (data.notification && !$('#notifyDetails').open) $('#notificationResult').textContent = `${data.notification.message} (${date(data.notification.at)})`;
-    if (logFolder) await refreshLog();
+
   } catch (e) { if (authenticated) { $('#activityBadge').textContent = 'Verbindung unterbrochen'; $('#activityBadge').className = 'badge bad'; notice(e.message, true); } }
   finally { activityPolling = false; }
 }
@@ -576,3 +573,5 @@ $('#removeTarget').addEventListener('click', async () => {
 
 $('#sourceOverviewDetails').open = true;
 $('#sourceOverviewDetails>summary').addEventListener('click', event => event.preventDefault());
+
+installLogbook({api,element,date,isAuthenticated:()=>authenticated});

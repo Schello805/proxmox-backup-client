@@ -79,8 +79,8 @@ test('Backup starten: Prozent, Restzeit, Live-Protokoll und Verlauf', async ({ p
   await expect(row.getByRole('button', { name: 'Abbrechen', exact: true })).toBeEnabled();
   expect(await page.locator('#statusDashboard').evaluate(element => element.getBoundingClientRect().bottom <= innerHeight)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('progress.png') });
-  await page.getByRole('button', { name: 'Live-Protokoll ↗' }).click(); await expect(page.locator('#logText')).toContainText('processed 5 GiB');
-  await page.locator('#closeDetail').click();
+  await page.getByRole('link', { name: /Protokoll$/ }).click(); await expect(page.locator('#logText')).toContainText('processed 5 GiB');
+  await page.getByRole('link',{name:/Übersicht/}).click();
   app.finish(); await expect(row.locator('.job-state')).toContainText('Erfolgreich');
   await expect(page.locator('#progressEstimate')).toHaveText('100 % · Abgeschlossen');
   await row.getByRole('button', { name: 'Software', exact: true }).click(); await expect(page.locator('#historyRows')).toContainText('Erfolgreich');
@@ -95,8 +95,7 @@ test('Fehlgeschlagenes Backup wird als Fehler angezeigt', async ({ page, app }) 
 test('Diagnose und Update-Prüfung über die Hauptnavigation öffnen', async ({ page }) => {
   await login(page); await page.getByRole('link',{name:/Einstellungen/}).click(); await page.locator('#systemMaintenance>summary').click(); await expect(page.locator('#installedVersion')).toContainText('Installiert: v');
   await page.getByRole('button', { name: 'Diagnose starten' }).click(); await expect(page.locator('#diagnosticSummary')).toContainText('geprüft');
-  await expect(page.locator('#diagnosticChecks')).toContainText('PBS-Verbindung');
-  await expect(page.locator('#diagnosticChecks')).toContainText('Nur manuelle Sicherung');
+  await page.getByRole('link',{name:/Protokoll$/}).click();await page.locator('#logKind').selectOption('System');await expect(page.locator('#logText')).toContainText('PBS-Verbindung');await expect(page.locator('#logText')).toContainText('Nur manuelle Sicherung');await page.getByRole('link',{name:/Einstellungen/}).click();
   await page.getByRole('button', { name: 'Auf Updates prüfen' }).click(); await expect(page.locator('#updateResult')).toContainText('Ein neuer Stand');
   await expect(page.locator('#latestVersionLink')).toHaveAttribute('href', /github\.com\/Schello805/);
 });
@@ -144,12 +143,12 @@ test('Zweiten Datastore einrichten, Quelle zuweisen und getrennten PBS-Bestand p
   await dialog.getByRole('button', { name: 'Quelle speichern' }).click(); await expect(dialog.locator('#sourceResult')).toContainText('Quelle und Sicherungsplan gespeichert');
   await dialog.getByRole('button', { name: 'Schließen', exact: true }).click();
   const row = page.locator('tr[data-folder="software"]'); await expect(row.locator('.source-target')).toHaveText('archive-store');
-  await row.getByRole('button', { name: '↗ Sichern', exact: true }).click(); await page.getByRole('button', { name: 'Live-Protokoll ↗' }).click();
+  await row.getByRole('button', { name: '↗ Sichern', exact: true }).click(); await page.getByRole('link', { name: /Protokoll$/ }).click();
   await expect(page.locator('#logText')).toContainText('E2E repository: test@pbs@localhost:archive-store');
-  await page.locator('#closeDetail').click();
+  await page.getByRole('link',{name:/Übersicht/}).click();
   app.finish(); await expect(row.locator('.job-state')).toContainText('Erfolgreich');
   await row.getByRole('button', { name: 'Software', exact: true }).click(); await expect(page.locator('#historyRows')).toContainText('test@pbs@localhost:archive-store');
-  await page.locator('#closeDetail').click();
+  await page.getByRole('link',{name:/Übersicht/}).click();
   await page.getByRole('link', { name: /Backup-Ziele$/ }).click(); if ((await page.locator('#pbsSettings').getAttribute('open')) === null) await page.locator('#pbsSettings>summary').click(); await page.getByRole('link', { name: 'PBS-Bestand', exact: true }).click();
   await page.getByRole('combobox', { name: 'Datastore auswählen' }).selectOption('secondary');
   await page.getByRole('button', { name: 'Vom PBS abrufen', exact: true }).click(); await expect(page.locator('#pbsRows')).toContainText('host/daten');

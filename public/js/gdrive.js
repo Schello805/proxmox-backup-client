@@ -36,7 +36,6 @@ export function installDrive({ api, element, notice, scheduleText, date }) {
       const meter = $('#driveMeter'); if (total > 0) { meter.value = Math.min(job.status === 'success' ? 100 : 99, bytes / total * 100); $('#drivePercent').textContent = Math.floor(meter.value) + ' %'; } else { meter.removeAttribute('value'); $('#drivePercent').textContent = 'Dateien werden ermittelt …'; }
     }
     if (busy && progress) $('#overviewDriveProgress').textContent = `${job.message || ''} · ${total > 0 ? Math.floor(Math.min(job.status === 'success' ? 100 : 99, bytes / total * 100)) + ' % · ' : ''}${$('#driveProgressText').textContent} (aktuelle Quelle)`;
-    $('#driveHistory').replaceChildren(...(job.history || []).map(run => element('li', `${date(run.endedAt)} · ${labels[run.status] || run.status} · ${(run.results || []).length} Quellen kopiert${run.message ? ' · ' + run.message : ''}`)));
   }
   async function load() {
     if (loading) return; loading = true;

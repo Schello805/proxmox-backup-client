@@ -45,6 +45,7 @@ let backups, pbs, capacity, drive;
 const configs = createConfigService({ initial, state, write: value => saveJSON(CONFIG, value), persist, password: PASS, isBusy: () => backups?.busy || drive?.busy || pbs?.busy || capacity?.busy, onChange: (previous, next) => { drive?.changed(previous, next); for (const target of ['primary','secondary']) if (JSON.stringify(targetConfig(previous,target)) !== JSON.stringify(targetConfig(next,target))) state.pbsCheckAfter[target] = new Date().toISOString(); if (['repository','secondaryDatastore','password','fingerprint','namespace','secondaryPBS'].some(key => JSON.stringify(previous[key]) !== JSON.stringify(next[key]))) pbs.invalidate(); } });
 const getConfig = configs.get;
 const isMaintenance = () => fs.existsSync(path.join(DATA, 'maintenance'));
+const logbook = require('./lib/logbook').createLogbook({getConfig,state,data:DATA,password:PASS,getDiagnostics:()=>diagnostics.current(),getUpdates:()=>updates.current()});
 const history = createHistory({ state, data: DATA, persist, getConfig, password: PASS });
 const notifier = createNotifier({ getConfig, state, persist });
 const inspectPath = createInspector(run);
@@ -87,7 +88,7 @@ const server = http.createServer(async (req, res) => {
       if (req.headers['x-requested-with'] !== 'qnap-dashboard') return json(res, 403, { error: 'Anfrage-Header fehlt.' });
     }
     // Nur die App-Hülle ist öffentlich. Daten und Aktionen benötigen eine Sitzung.
-    const assets = { '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], ...Object.fromEntries(['dashboard','gdrive','api','views','forms','maintenance','assistant','timeline','problems','operations','controls','restore'].map(name => ['/js/' + name + '.js', ['js/' + name + '.js', 'text/javascript']])) };
+    const assets = { '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], ...Object.fromEntries(['logbook','dashboard','gdrive','api','views','forms','maintenance','assistant','timeline','problems','operations','controls','restore'].map(name => ['/js/' + name + '.js', ['js/' + name + '.js', 'text/javascript']])) };
     if (req.method === 'GET' && assets[url.pathname]) {
       const [file, type] = assets[url.pathname]; res.writeHead(200, { 'Content-Type': `${type}; charset=utf-8`, 'Cache-Control': 'no-cache' });
       return res.end(fs.readFileSync(path.join(ROOT, 'public', file)));
@@ -211,6 +212,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && cancel) { backups.cancel(cancel[1]); return json(res, 202, { success: true }); }
     const backup = url.pathname.match(/^\/api\/backup\/([a-z][a-z0-9_-]{0,39})$/);
     if (req.method === 'POST' && backup) { backups.enqueue(backup[1], 'manual'); return json(res, 202, { success: true }); }
+    if (req.method === 'GET' && url.pathname === '/api/logbook') return json(res,200,{entries:logbook.list()});
+    if (req.method === 'GET' && url.pathname === '/api/logbook/content') return json(res,200,{log:logbook.read(url.searchParams.get('id'))});
     const logs = url.pathname.match(/^\/api\/logs\/([a-z][a-z0-9_-]{0,39})$/);
     if (req.method === 'GET' && logs && configs.sourceFor(logs[1])) {
       const file = path.join(DATA, logs[1] + '.log');
