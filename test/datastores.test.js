@@ -121,3 +121,15 @@ test('Ziele entfernen schützt Zuordnungen, Geheimnisse und laufende Aufträge',
  service.removeTarget('primary');assert.equal(service.get().repository,'');assert.equal(service.get().password,'');assert.equal(service.get().notifications.token,'keep-token');assert.equal(service.get().sources.length,base.sources.length);
  service.apply({...service.get(),sources:[],schedules:{}});assert.deepEqual(service.get().sources,[]);
 });
+
+test('PBS-Zielprüfung bestätigt ausschließlich aktuellen Snapshot mit erwartetem Archiv und frischer Abfrage', async () => {
+  const base = config(); let files = ['qnap-software.pxar.didx'], time = 1792454400, fail = false;
+  const pbs = createPBS({getConfig:()=>base,environment:()=>({}),cacheFile:'/tmp/pbs-verification-test.json',save(){},run:async()=>{if(fail)throw new Error('offline');return {stdout:JSON.stringify([{'backup-type':'host','backup-id':'software','backup-time':time,files}])};}});
+  const startedAt = new Date(time*1000).toISOString();
+  const job = {target:'primary',repository:repositoryFor(base,'primary'),namespace:targetConfig(base,'primary').namespace,startedAt,transferredAt:new Date(time*1000+5000).toISOString()};
+  assert.equal((await pbs.verifySnapshot('software',job)).status,'success');
+  files=[];assert.equal((await pbs.verifySnapshot('software',job)).status,'failed');
+  files=['qnap-software.pxar.didx'];time--;assert.equal((await pbs.verifySnapshot('software',job)).status,'failed');
+  time++;await pbs.verifySnapshot('software',job);fail=true;assert.equal((await pbs.verifySnapshot('software',job)).status,'failed');
+  assert.equal((await pbs.verifySnapshot('software',{...job,repository:'wrong'})).status,'failed');
+});

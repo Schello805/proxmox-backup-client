@@ -541,7 +541,7 @@ function renderSourceHealth(cell, folder, job, health) {
   cell.replaceChildren(element('span', date(job.lastSuccess)), badge);
 }
 function renderFolderState(cell, folder, job, health) {
-  renderJob(cell, job, health); const issue = issueFor(folder, job, health); if (!issue) return;
+  renderJob(cell, job, health); if (job.verification) { const v = job.verification; const hint = element('small', v.status === 'running' ? 'Snapshot wird geprüft …' : v.status === 'success' ? 'Snapshot + Archiv bestätigt' : v.status === 'cancelled' ? 'Zielprüfung abgebrochen' : 'Snapshot nicht bestätigt', 'hint'); hint.title = (v.message || '') + (v.checkedAt ? ' · ' + date(v.checkedAt) : ''); cell.append(hint); } const issue = issueFor(folder, job, health); if (!issue) return;
   if (['mount','target'].includes(issue.kind) && !['running','queued','cancelling'].includes(job.status)) { const badge = cell.querySelector('.badge'); badge.textContent = 'Handlungsbedarf'; badge.className = 'badge bad'; }
   cell.querySelector('.row-error')?.remove(); const text = element('small', issue.message, 'row-error problem-message'); text.title = issue.message + ' ' + issue.help;
   const button = element('button', issue.action, 'row-action problem-action'); button.type = 'button'; button.addEventListener('click', () => openProblem(folder, issue)); cell.append(text, button);

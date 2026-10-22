@@ -70,3 +70,7 @@ npm run test:browser
 ```
 
 Ohne echte CIFS-Mounts sind Backups gesperrt. Die Browsertests verwenden isolierte Testdaten.
+
+Nach jedem Drive-Upload vergleicht die App Dateinamen und Größen mit dem Ziel. Unter **Ziele → Google Drive → Zielbestand gründlich prüfen** startet ein lesender Vergleich mit verfügbaren Prüfsummen (sonst Größen). Zusätzliche Zieldateien sind nur beim Abgleich ohne Löschen erlaubt. Ergebnisse stehen getrennt vom Upload im Auftragsstatus und im zentralen Protokoll; Fehler lösen bei aktiviertem ntfy eine Meldung aus. Eine laufende Prüfung lässt sich abbrechen. Während des Vergleichs die Quelle möglichst nicht ändern.
+
+Nach einem PBS-Backup bestätigt die App den Snapshot samt erwartetem Archiv aus dem aktuellen Lauf. Dies prüft den Bestand, nicht sämtliche Datenblöcke. **Verify-Jobs und regelmäßige Wiederherstellungstests auf dem PBS bleiben erforderlich.**

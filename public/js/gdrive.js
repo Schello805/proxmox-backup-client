@@ -14,6 +14,8 @@ export function installDrive({ api, element, notice, scheduleText, date }) {
     $('#driveStatus').textContent = labels[job.status] || job.status;
     $('#driveMessage').textContent = job.message || 'Quellen auswählen, speichern und Verbindung prüfen.';
     $('#driveLast').textContent = job.lastSuccess ? 'Letzter Erfolg: ' + date(job.lastSuccess) : 'Noch kein erfolgreicher Lauf';
+    const v = job.verification; const verificationText = !v ? 'Zielbestand: noch nicht geprüft' : v.status === 'running' ? 'Zielbestand wird geprüft …' : `${v.status === 'success' ? 'Zielvergleich erfolgreich' : v.status === 'cancelled' ? 'Zielprüfung abgebrochen' : 'Zielprüfung fehlgeschlagen'} · ${v.method === 'hash' ? 'Prüfsummen soweit verfügbar' : 'Dateien und Größen'}${v.checkedAt ? ' · ' + date(v.checkedAt) : ''}`;
+    $('#driveVerification').textContent = verificationText;
     const syncing = job.settings?.mode === 'sync', versioned = job.settings?.mode === 'backup';
     const modeLabel = versioned ? 'Sicherung mit Versionen' : syncing ? 'Abgleich mit Löschen' : 'Abgleich ohne Löschen';
     $('#driveStart').textContent = versioned ? 'Jetzt mit Versionen sichern' : syncing ? 'Jetzt synchronisieren' : 'Jetzt nach Drive kopieren';
@@ -33,8 +35,12 @@ export function installDrive({ api, element, notice, scheduleText, date }) {
     $('#overviewDrivePlan').textContent=configured?`${scheduleText(job.settings.schedule)} · ${job.timezone}`:'Nur manuell';
     $('#overviewDriveStart').disabled = !configured || busy || pendingAction; $('#overviewDriveStart').hidden = busy || !configured;
     $('#overviewDriveCancel').hidden = !busy; $('#overviewDriveCancel').disabled = job.status === 'cancelling' || pendingAction;
-    $('#overviewDriveProgress').hidden = !busy && !['failed','interrupted'].includes(job.status);
-    $('#overviewDriveProgress').textContent = job.message || '';$('#overviewDriveProgress').title=job.message||'';
+    $('#driveVerify').disabled = busy || pendingAction || !configured;
+    $('#overviewDriveVerify').disabled = busy || pendingAction || !configured;
+    $('#overviewDriveProgress').hidden = false;
+    $('#overviewDriveProgress').textContent = busy ? job.message || '' : verificationText;
+    $('#overviewDriveProgress').title = verificationText;
+    $('#driveVerification').textContent = (job.transferredAt ? 'Übertragung beendet: ' + date(job.transferredAt) + ' · ' : '') + verificationText;$('#overviewDriveProgress').title=job.message||'';
     const progress = job.progress, total = progress?.totalBytes, bytes = progress?.bytes;
     $('#driveProgress').hidden = !progress;
     if (progress) {
@@ -78,6 +84,7 @@ export function installDrive({ api, element, notice, scheduleText, date }) {
     try {
       resultField.textContent = action === 'check' ? 'Google-Drive-Verbindung wird geprüft …' : '';
       const result = await api('/api/gdrive/' + action, {});
+      if (action === 'verify') resultField.textContent = 'Zielprüfung angefordert. Fortschritt unter Aufträge; Ergebnis im Protokoll.';
       if (action === 'start') resultField.textContent = 'Drive-Kopie angefordert. Den aktuellen Status siehst du direkt am Ziel.';
       if (action === 'cancel') resultField.textContent = 'Abbruch angefordert. Der Status zeigt, wann der Auftrag beendet ist.';
       if (action === 'check') resultField.textContent = result.ok ? 'Google Drive erreichbar (Lesetest). Schreibzugriff wird beim Kopieren geprüft.' : result.message;
@@ -85,8 +92,9 @@ export function installDrive({ api, element, notice, scheduleText, date }) {
     } catch (error) { resultField.textContent = error.message; }
     finally { if (overview && !resultField.textContent) resultField.hidden = true; pendingAction = false; button.disabled = false; render(currentJob); }
   }
-  for (const action of ['check','start','cancel']) $('#drive' + action[0].toUpperCase() + action.slice(1)).addEventListener('click', event => void perform(action, event.currentTarget));
+  for (const action of ['check','start','cancel','verify']) $('#drive' + action[0].toUpperCase() + action.slice(1)).addEventListener('click', event => void perform(action, event.currentTarget));
   $('#overviewDriveStart').addEventListener('click', event => void perform('start', event.currentTarget, true));
+  $('#overviewDriveVerify').addEventListener('click', event => void perform('verify', event.currentTarget, true));
   $('#overviewDriveCancel').addEventListener('click', event => void perform('cancel', event.currentTarget, true));
   function afterNavigation(hash, action) {
     if (location.hash === hash) action();

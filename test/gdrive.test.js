@@ -11,8 +11,8 @@ function fixture(options = {}) {
   const spawnProcess = (command,args,opts) => {
     const child = new EventEmitter(); child.stdout = new PassThrough(); child.stderr = new PassThrough(); child.kill = signal => { child.signal = signal; if (!options.holdKill) setImmediate(() => child.emit('close', null)); };
     calls.push({command,args,opts});
-    if (['copy','sync'].includes(args[0])) children.push(child);
-    else setImmediate(() => { if(args[0] === 'about') { if(options.quotaError) { child.emit('close',1); return; } child.stdout.write(JSON.stringify(options.quota || {total:1000,used:200,free:300,other:400,trashed:100})); } if(args[0] === 'listremotes') child.stdout.write(options.remote || 'gdrive: drive\n'); child.emit('close',0); });
+    if (['copy','sync'].includes(args[0]) || args[0] === 'check' && options.holdCheck) children.push(child);
+    else setImmediate(() => { if (args[0] === 'check' && options.checkError) { child.emit('close', 1); return; } if(args[0] === 'about') { if(options.quotaError) { child.emit('close',1); return; } child.stdout.write(JSON.stringify(options.quota || {total:1000,used:200,free:300,other:400,trashed:100})); } if(args[0] === 'listremotes') child.stdout.write(options.remote || 'gdrive: drive\n'); child.emit('close',0); });
     return child;
   };
   let blocked = false;
@@ -28,7 +28,7 @@ test('Drive kopiert Quellen seriell ohne Shell oder Löschbefehl und wertet JSON
   const f=fixture(); f.drive.start(); await tick();await tick();await tick();
   assert.equal(f.children.length,1); assert.equal(f.calls[2].args[0],'copy'); assert.equal(f.calls[2].args[2],'gdrive:QNAP Backup/daten'); assert.ok(f.calls[2].args.includes('--bwlimit'));assert.equal(f.calls[2].opts.shell,undefined);
   f.children[0].stderr.write(JSON.stringify({stats:{bytes:100,totalBytes:200,speed:10,eta:10}})+'\n');assert.equal(f.state.drive.progress.bytes,100);
-  f.children[0].emit('close',0);await tick(); assert.equal(f.children.length,2);f.children[1].emit('close',0);await tick();
+  f.children[0].emit('close',0);await tick();await tick(); assert.equal(f.children.length,2);f.children[1].emit('close',0);await tick();await tick();
   assert.equal(f.state.drive.status,'success'); assert.equal(f.state.drive.results.length,2);assert.equal(f.state.drive.history.length,1);assert.equal(f.drive.busy,false);
 });
 test('Drive wartet auf PBS, blockiert falsche Mounts und lehnt andere Remote-Typen ab',async()=>{
@@ -68,7 +68,7 @@ test('Synchronisierung benötigt ausdrückliche Löschbestätigung und verwendet
  const f=fixture();assert.equal(f.config.gdrive.mode,'copy');assert.throws(()=>validateDrive({...f.config.gdrive,mode:'sync'},f.config.sources),/bestätigen/);assert.throws(()=>validateDrive({...f.config.gdrive,mode:'bisync'},f.config.sources),/Modus/);
  f.config.gdrive=validateDrive({...f.config.gdrive,mode:'sync',syncConfirmed:true},f.config.sources);f.drive.start();await tick();await tick();await tick();
  const args=f.calls.find(call=>call.args[0]==='sync').args;assert.equal(args[1],'/mnt/Daten/Daten');assert.equal(args[2],'gdrive:QNAP Backup/daten');assert.ok(args.includes('--delete-after'));assert.ok(!args.includes('--ignore-errors'));assert.equal(f.state.drive.mode,'sync');
- f.children[0].emit('close',0);await tick();f.children[1].emit('close',0);await tick();assert.equal(f.state.drive.status,'success');assert.equal(f.state.drive.history[0].mode,'sync');assert.match(f.state.drive.message,/synchronisiert/);
+ f.children[0].emit('close',0);await tick();await tick();f.children[1].emit('close',0);await tick();await tick();assert.equal(f.state.drive.status,'success');assert.equal(f.state.drive.history[0].mode,'sync');assert.match(f.state.drive.message,/synchronisiert/);
 });
 test('Synchronisierung verweigert unbestätigte oder falsche SMB-Quellen',async()=>{
  for(const badMount of [false,true]){const f=fixture({badMount});f.config.gdrive=validateDrive({...f.config.gdrive,mode:'sync',syncConfirmed:true},f.config.sources);if(!badMount)f.config.sources[0].expectedSource='';f.drive.start();await tick();await tick();await tick();assert.equal(f.state.drive.status,'failed');assert.equal(f.calls.some(call=>call.args[0]==='sync'),false);}
@@ -77,6 +77,49 @@ test('Synchronisierung verweigert unbestätigte oder falsche SMB-Quellen',async(
 test('Versionierte Sicherung trennt aktuellen Stand und alte Dateien, nutzt eindeutige Laufordner und bleibt einseitig',async()=>{
  const f=fixture();f.config.gdrive=validateDrive({...f.config.gdrive,mode:'backup'},f.config.sources);f.drive.start();await tick();await tick();await tick();
  const args=f.calls.find(call=>call.args[0]==='sync').args,archive=args[args.indexOf('--backup-dir')+1];assert.equal(args[1],'/mnt/Daten/Daten');assert.equal(args[2],'gdrive:QNAP Backup/daten');assert.ok(archive.startsWith('gdrive:QNAP Backup.versions/daten/2026-10-21T01-00-00-000Z-'));assert.ok(!archive.startsWith(args[2]+'/'));assert.ok(args.includes('--delete-after'));assert.ok(!args.includes('--ignore-errors'));
- f.children[0].emit('close',0);await tick();const second=f.calls.filter(call=>call.args[0]==='sync')[1].args;assert.ok(second[second.indexOf('--backup-dir')+1].includes('.versions/musik/'));f.children[1].emit('close',0);await tick();assert.equal(f.state.drive.results[0].backupDirectory,archive);assert.equal(f.state.drive.history[0].mode,'backup');
+ f.children[0].emit('close',0);await tick();await tick();const second=f.calls.filter(call=>call.args[0]==='sync')[1].args;assert.ok(second[second.indexOf('--backup-dir')+1].includes('.versions/musik/'));f.children[1].emit('close',0);await tick();await tick();assert.equal(f.state.drive.results[0].backupDirectory,archive);assert.equal(f.state.drive.history[0].mode,'backup');
  f.drive.start();await tick();await tick();await tick();const next=f.calls.filter(call=>call.args[0]==='sync')[2].args;assert.notEqual(next[next.indexOf('--backup-dir')+1],archive);f.drive.cancel();await tick();
+});
+
+test('Drive prüft nach jedem Upload nur lesend Größen und erlaubt zusätzliche Dateien nur bei copy', async () => {
+  for (const mode of ['copy','sync','backup']) {
+    const f = fixture(); f.config.gdrive.mode = mode;
+    f.drive.start(); await tick(); await tick(); await tick();
+    f.children[0].emit('close', 0); await tick(); await tick();
+    const check = f.calls.find(call => call.args[0] === 'check');
+    assert.ok(check); assert.ok(check.args.includes('--size-only'));
+    assert.equal(check.args.includes('--one-way'), mode === 'copy');
+    assert.equal(check.args[1], '/mnt/Daten/Daten'); assert.equal(check.args[2], 'gdrive:QNAP Backup/daten');
+    assert.equal(f.state.drive.results[0].verification.status, 'success');
+    f.children[1].emit('close', 0); await tick(); await tick();
+    assert.equal(f.state.drive.verification.status, 'success');
+    assert.equal(f.state.drive.history[0].verification.method, 'size');
+  }
+});
+test('Gründliche Drive-Prüfung verändert keine Dateien und zählt nicht als neuer Upload-Erfolg', async () => {
+  const g = fixture(); g.state.drive.lastSuccess = '2026-10-01T01:00:00Z';
+  g.drive.start(true); await tick(); await tick(); await tick(); await tick(); await tick();
+  assert.equal(g.children.length, 0);
+  const checks = g.calls.filter(call => call.args[0] === 'check'); assert.equal(checks.length, 2);
+  assert.ok(checks.every(call => !call.args.includes('--size-only')));
+  assert.equal(g.state.drive.lastSuccess, '2026-10-01T01:00:00Z');
+  assert.equal(g.state.drive.verification.status, 'success');
+});
+test('Fehler im Zielvergleich erhält Upload-Ergebnis, meldet Fehler und startet keine nächste Quelle', async () => {
+  const f = fixture({checkError:true}); f.drive.start(); await tick(); await tick(); await tick();
+  f.children[0].emit('close',0); await tick(); await tick();
+  assert.equal(f.state.drive.status,'failed'); assert.equal(f.state.drive.results[0].status,'success');
+  assert.equal(f.state.drive.results[0].verification.status,'failed');
+  assert.equal(f.state.drive.verification.status,'failed'); assert.equal(f.children.length,1);
+  assert.equal(f.state.drive.lastSuccess,undefined); assert.match(f.notifications[0][0],/gdrive\/run/);
+});
+test('Abbruch während des Zielvergleichs wartet auf Prozessende und prüft keine weitere Quelle',async()=>{
+ const f=fixture({holdCheck:true,holdKill:true});f.drive.start();await tick();await tick();await tick();
+ f.children[0].emit('close',0);await tick();
+ assert.equal(f.state.drive.phase,'verification');assert.equal(f.state.drive.verification.status,'running');
+ f.drive.cancel();assert.equal(f.drive.busy,true);assert.equal(f.children[1].signal,'SIGTERM');
+ f.children[1].emit('close',null);await tick();
+ assert.equal(f.drive.busy,false);assert.equal(f.state.drive.verification.status,'cancelled');
+ assert.equal(f.state.drive.results[0].status,'success');assert.equal(f.state.drive.results[0].verification.status,'cancelled');
+ assert.equal(f.children.length,2);
 });

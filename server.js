@@ -57,7 +57,7 @@ function environment(target = 'primary') {
   for (const key of Object.keys(env)) if (key.startsWith('PBS_')) delete env[key];
   return { ...env, PBS_REPOSITORY: config.repository, PBS_PASSWORD: config.password, PBS_FINGERPRINT: config.fingerprint, PBS_NAMESPACE: config.namespace };
 }
-backups = createBackups({ state, data: DATA, persist, getConfig, inspectPath, environment, log: history.log, archive: history.archive, notify: notifier.notify, isMaintenance, isBlocked: () => drive?.active, getSourceSize: source => sourceSizes.peek(source), onBatchComplete: batch => notifier.notify('summary/'+batch.id, backupSummary(batch), {success:true,warning:batch.results.some(result=>result.status!=='success')}) });
+backups = createBackups({ state, data: DATA, persist, getConfig, inspectPath, environment, log: history.log, archive: history.archive, verifySnapshot: (id, job) => pbs.verifySnapshot(id, job), notify: notifier.notify, isMaintenance, isBlocked: () => drive?.active, getSourceSize: source => sourceSizes.peek(source), onBatchComplete: batch => notifier.notify('summary/'+batch.id, backupSummary(batch), {success:true,warning:batch.results.some(result=>result.status!=='success')}) });
 drive = require('./lib/gdrive').createDrive({ getConfig, state, persist, data: DATA, inspectPath, notify: notifier.notify, blocked: () => backups.busy || pbs?.busy || capacity?.busy || isMaintenance() || backups.paused });
 const driveTimer = setInterval(() => drive.tick(), 10000);
 const scheduler = createScheduler({ getConfig, state, persist, backups, log: history.log, notify: notifier.notify, isMaintenance });
@@ -113,6 +113,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/gdrive') { configs.apply({ ...getConfig(), gdrive: await body(req) }); return json(res, 200, { success: true }); }
     if (req.method === 'POST' && url.pathname === '/api/gdrive/check') return json(res, 200, await drive.check());
     if (req.method === 'POST' && url.pathname === '/api/gdrive/start') { if (isMaintenance()) throw new Error('Update läuft.'); drive.start(); return json(res, 202, { success: true }); }
+    if (req.method === 'POST' && url.pathname === '/api/gdrive/verify') { if (isMaintenance()) throw new Error('Update läuft.'); drive.start(true); return json(res, 202, { success: true }); }
     if (req.method === 'POST' && url.pathname === '/api/gdrive/cancel') { drive.cancel(); return json(res, 202, { success: true }); }
     if (req.method === 'GET' && url.pathname === '/api/activity') {
       const file = backups.active ? path.join(DATA, backups.active.folder + '.log') : null;

@@ -70,3 +70,16 @@ test('Synchronisierung muss bestätigt werden, bleibt gespeichert und startet ü
 test('Drei einseitige Betriebsarten pro Drive-Ziel; versionierte Sicherung ist speicherbar und ausführbar',async({page},testInfo)=>{
  await login(page,{sourceDetails:false});await page.getByRole('link',{name:/Ziele$/}).click();await page.locator('#driveSettings>summary').click();await expect(page.locator('#driveTransferMode option')).toHaveText(['Sicherung mit Versionen','Abgleich ohne Löschen','Abgleich mit Löschen']);await page.locator('#driveTransferMode').selectOption('backup');await page.locator('#drivePanel').getByLabel('Daten',{exact:true}).check();await expect(page.locator('#driveBackupInfo')).toContainText('keine vollständigen Snapshots');await expect(page.locator('#driveVersionPath')).toHaveText('gdrive:QNAP-Backup.versions/<Backup-ID>/<Lauf>/');await expect(page.locator('#driveSyncWarning')).toBeHidden();await page.getByRole('button',{name:'Google Drive speichern',exact:true}).click();await expect(page.locator('#driveResult')).toContainText('gespeichert');await page.reload();await expect(page.locator('#driveTransferMode')).toHaveValue('backup');await page.locator('#driveTransferMode').scrollIntoViewIfNeeded();await page.screenshot({path:testInfo.outputPath('drive-versioned-backup.png')});await page.getByRole('button',{name:'Jetzt mit Versionen sichern',exact:true}).click();await expect(page.locator('#driveStatus')).toHaveText('Läuft');await page.locator('#driveCancel').click();await expect(page.locator('#driveStatus')).toHaveText('Abgebrochen');
 });
+
+test('Zielbestand gründlich prüfen zeigt getrenntes Ergebnis und Protokoll ohne Upload',async({page})=>{
+ await login(page);await page.getByRole('link',{name:/Ziele$/}).click();await page.locator('#driveSettings>summary').click();
+ await page.locator('#drivePanel').getByLabel('Daten',{exact:true}).check();
+ await page.getByRole('button',{name:'Google Drive speichern',exact:true}).click();await expect(page.locator('#driveResult')).toContainText('gespeichert');
+ await page.getByRole('link',{name:/Aufträge$/}).click();await page.locator('#overviewDriveVerify').click();
+ await page.getByRole('link',{name:/Ziele$/}).click();
+ await expect(page.locator('#driveVerification')).toContainText('Zielvergleich erfolgreich');
+ await expect(page.locator('#driveLast')).toHaveText('Noch kein erfolgreicher Lauf');
+ await page.getByRole('link',{name:/Aufträge$/}).click();await expect(page.locator('#overviewDriveProgress')).toContainText('Zielvergleich erfolgreich');
+ await page.getByRole('link',{name:/Protokoll$/}).click();await page.locator('#logKind').selectOption('Google Drive');
+ await expect(page.locator('#logText')).toContainText('Zielprüfung: success');
+});
