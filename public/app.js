@@ -553,7 +553,7 @@ function renderSourceProblem(id) {
 }
 timeline = installTimeline({ element, openSource: id => editSource(id, true) });
 
-for (const details of document.querySelectorAll('#targets>.target-accordion, #sourceOverviewDetails, #overviewPlan')) {
+for (const details of document.querySelectorAll('#targets>.target-accordion, #overviewPlan')) {
   try { details.open = localStorage.getItem('backup-target-' + details.id) === 'open'; } catch {}
   details.addEventListener('toggle', () => { try { localStorage.setItem('backup-target-' + details.id, details.open ? 'open' : 'closed'); } catch {} });
 }
@@ -573,3 +573,6 @@ $('#removeTarget').addEventListener('click', async () => {
   try { await api('/api/targets/remove',{target:$('#removeTargetId').value});$('#confirmTargetRemoval').checked=false;lastMainSnapshot=null;loaded=false;await refresh();result.textContent='Ziel aus der App entfernt. Sicherungen und Quelldaten bleiben erhalten.'; }
   catch(error){result.textContent=error.message;}finally{button.disabled=false;}
 });
+
+$('#sourceOverviewDetails').open = true;
+$('#sourceOverviewDetails>summary').addEventListener('click', event => event.preventDefault());

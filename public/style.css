@@ -2150,3 +2150,4 @@ aside a.system-link { display:flex; align-items:center; justify-content:center; 
 .system-maintenance-content{padding-top:18px}.system-maintenance-content .system{padding:0;border:0;box-shadow:none;background:transparent}.system-maintenance-content .maintenance-section{min-width:0}.system-maintenance-content .update-command{overflow-wrap:anywhere}
 #sourcesDialog>.panel-title{flex-wrap:wrap}#sourcesDialog>.panel-title h2{flex:1;min-width:160px}#mountCommand{white-space:pre-wrap;overflow-wrap:anywhere}#mountTools .settings-grid>*{min-width:0}
 #mountTools .settings-grid{gap:12px 18px;margin-top:16px}#mountTools label{margin-top:0;gap:5px}#mountTools select{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:6px;background:#f9fcfa;color:inherit;font:inherit}#mountTools .page-heading{margin-bottom:20px}
+#sourceOverviewDetails>summary{cursor:default;list-style:none}#sourceOverviewDetails>summary::-webkit-details-marker{display:none}
