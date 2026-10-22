@@ -76,3 +76,5 @@ Nach jedem Drive-Upload vergleicht die App Dateinamen und Größen mit dem Ziel.
 Nach einem PBS-Backup bestätigt die App den Snapshot samt erwartetem Archiv aus dem aktuellen Lauf. Dies prüft den Bestand, nicht sämtliche Datenblöcke. **Verify-Jobs und regelmäßige Wiederherstellungstests auf dem PBS bleiben erforderlich.**
 
 Neben der Versionsnummer zeigt die App den Update-Status. GitHub wird beim Öffnen und danach stündlich bei geöffneter App geprüft; ein Klick auf die Anzeige öffnet System & Wartung. Updates bleiben manuell.
+
+SMB/CIFS und NFS (NFSv3/NFSv4) werden als Quellen unterstützt. Nach einem Protokollwechsel unter **Quellen → Bearbeiten → Mount-Quelle ermitteln → Quelle speichern** die neue Zuordnung bestätigen, z. B. `192.168.1.21:/Daten`. Eine alte SMB-Zuordnung wird aus Sicherheitsgründen nicht automatisch ersetzt.

@@ -1,6 +1,6 @@
 'use strict';
 const { test }=require('node:test');const assert=require('node:assert/strict');
-test('Probleme nennen falsche SMB-Zuordnungen und führen zur Quelle statt zur unbemerkten Bestätigung',async()=>{
+test('Probleme nennen falsche Mount-Zuordnungen und führen zur Quelle statt zur unbemerkten Bestätigung',async()=>{
  const {sourceProblem}=await import('../public/js/problems.js');const folder={name:'Daten',ok:false,expectedSource:'//nas/Daten',mount:{source:'//nas/Software',type:'cifs'}};const issue=sourceProblem(folder);
  assert.equal(issue.message,'Daten zeigt auf „Software“ statt „Daten“.');assert.equal(issue.action,'Zuordnung prüfen');assert.equal(issue.view,'source');
  assert.match(sourceProblem({...folder,expectedSource:'//old/Software'}).message,/\/\/nas\/Software/);

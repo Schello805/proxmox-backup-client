@@ -27,7 +27,7 @@ test('Refresh stays responsive while SMB readability is slow; changed mappings d
   const daten = page.locator('[data-folder="daten"]'); await expect(daten).toContainText('Prüfung läuft');
   await app.setMount('/mnt/Daten/Daten', { source: '//test-nas/software', checkDelayMs: 0 });
   await page.getByRole('button', { name: '↻ Aktualisieren', exact: true }).click();
-  await expect(daten).toContainText('SMB geändert'); await expect(daten.getByRole('button', { name: 'Starten', exact: true })).toBeDisabled();
+  await expect(daten).toContainText('Mount geändert'); await expect(daten.getByRole('button', { name: 'Starten', exact: true })).toBeDisabled();
 });
 
 test('Alle sichern runs sources sequentially, skips duplicate starts and supports cancelling the rest', async ({ page, app }) => {

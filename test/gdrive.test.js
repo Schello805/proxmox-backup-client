@@ -70,7 +70,7 @@ test('Synchronisierung benötigt ausdrückliche Löschbestätigung und verwendet
  const args=f.calls.find(call=>call.args[0]==='sync').args;assert.equal(args[1],'/mnt/Daten/Daten');assert.equal(args[2],'gdrive:QNAP Backup/daten');assert.ok(args.includes('--delete-after'));assert.ok(!args.includes('--ignore-errors'));assert.equal(f.state.drive.mode,'sync');
  f.children[0].emit('close',0);await tick();await tick();f.children[1].emit('close',0);await tick();await tick();assert.equal(f.state.drive.status,'success');assert.equal(f.state.drive.history[0].mode,'sync');assert.match(f.state.drive.message,/synchronisiert/);
 });
-test('Synchronisierung verweigert unbestätigte oder falsche SMB-Quellen',async()=>{
+test('Synchronisierung verweigert unbestätigte oder falsche Mount-Quellen',async()=>{
  for(const badMount of [false,true]){const f=fixture({badMount});f.config.gdrive=validateDrive({...f.config.gdrive,mode:'sync',syncConfirmed:true},f.config.sources);if(!badMount)f.config.sources[0].expectedSource='';f.drive.start();await tick();await tick();await tick();assert.equal(f.state.drive.status,'failed');assert.equal(f.calls.some(call=>call.args[0]==='sync'),false);}
 });
 

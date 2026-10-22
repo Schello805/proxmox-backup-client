@@ -28,12 +28,12 @@ test('Health never reports unknown or stale checks as current success; latest PB
 });
 test('Health distinguishes SMB mismatch, missing target, failed, overdue, busy and cancelled runs',async()=>{
  const {sourceHealth}=await import('../public/js/problems.js');const folder={name:'Daten',ok:true,expectedSource:'//nas/Daten',targetRepository:'u@pbs@pbs:store',mount:{source:'//nas/Daten',type:'cifs'}};
- assert.equal(sourceHealth({...folder,ok:false,mount:{source:'//nas/Software',type:'cifs'}}).label,'SMB-Zuordnung falsch');
- assert.equal(sourceHealth({...folder,ok:false,mount:{source:'/dev/sda1',type:'ext4'}}).label,'SMB nicht verfügbar');
+ assert.equal(sourceHealth({...folder,ok:false,mount:{source:'//nas/Software',type:'cifs'}}).label,'Mount-Zuordnung falsch');
+ assert.equal(sourceHealth({...folder,ok:false,mount:{source:'/dev/sda1',type:'ext4'}}).label,'Mount nicht verfügbar');
  assert.equal(sourceHealth({...folder,targetRepository:''}).label,'PBS einrichten');
  assert.equal(sourceHealth(folder,{status:'failed'}).view,'log');assert.equal(sourceHealth(folder,{status:'interrupted'}).view,'backup');
  assert.equal(sourceHealth(folder,{status:'success'},{missed:true}).label,'Sicherung überfällig');assert.equal(sourceHealth(folder,{status:'running'}).label,'Backup läuft');assert.equal(sourceHealth(folder,{status:'cancelled'}).label,'Abgebrochen');
- assert.equal(sourceHealth({...folder,expectedSource:''}).label,'SMB bestätigen');
+ assert.equal(sourceHealth({...folder,expectedSource:''}).label,'Mount bestätigen');
 });
 
 test('Changed PBS credentials invalidate older success evidence; live client upload is fresh evidence',async()=>{

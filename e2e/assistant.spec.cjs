@@ -9,7 +9,7 @@ test('Quellen-Assistent: Kopierbefehle, freier Mount-Slot, Identitätsprüfung u
   await wizard.getByRole('textbox', { name: 'Quellenname', exact: true }).fill('Fotos');
   await wizard.getByRole('textbox', { name: 'Backup-ID', exact: true }).fill('fotos');
   await wizard.getByRole('textbox', { name: 'Pfad im LXC', exact: true }).fill('/mnt/Daten/Fotos');
-  await wizard.getByRole('textbox', { name: 'SMB-Freigabe', exact: true }).fill('//test-nas/fotos');
+  await wizard.getByRole('textbox', { name: 'Netzwerkfreigabe', exact: true }).fill('//test-nas/fotos');
   await wizard.getByRole('button', { name: 'Weiter', exact: true }).click();
   await wizard.getByRole('spinbutton', { name: 'LXC-ID', exact: true }).fill('120');
   const command = await wizard.locator('.command-card pre').first().textContent();
@@ -21,7 +21,7 @@ test('Quellen-Assistent: Kopierbefehle, freier Mount-Slot, Identitätsprüfung u
   const duplicate = spawnSync('bash', ['-c', stubs.replace('/mnt/Daten/FotosAlt','/mnt/Daten/Fotos') + command], { encoding: 'utf8' });
   expect(duplicate.status).toBe(1); expect(duplicate.stdout).toContain('Zielpfad bereits konfiguriert');
   const wrong = spawnSync('bash', ['-c', stubs.replace('//test-nas/fotos','//test-nas/wrong') + command], { encoding: 'utf8' });
-  expect(wrong.status).toBe(1); expect(wrong.stdout).toContain('SMB-Freigabe am Host stimmt nicht');
+  expect(wrong.status).toBe(1); expect(wrong.stdout).toContain('Netzwerkfreigabe am Host stimmt nicht');
   await wizard.getByRole('button', { name: '1 · Proxmox-Host · Bash kopieren', exact: true }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(command);
   await page.evaluate(() => Object.defineProperty(window, 'isSecureContext', { configurable: true, get: () => false }));
@@ -31,7 +31,7 @@ test('Quellen-Assistent: Kopierbefehle, freier Mount-Slot, Identitätsprüfung u
   await wizard.getByRole('button', { name: 'Weiter', exact: true }).click();
   await app.setMount('/mnt/Daten/Fotos',{ source: '//test-nas/wrong' });
   await wizard.getByRole('button', { name: 'Quelle prüfen & hinzufügen', exact: true }).click();
-  await expect(wizard.locator('#assistantResult')).toContainText(/SMB/); await expect(wizard).toBeVisible();
+  await expect(wizard.locator('#assistantResult')).toContainText(/Mount|Netzwerk|Freigabe/); await expect(wizard).toBeVisible();
   const before = await (await page.request.get('/api/status')).json(); expect(before.config.sources.some(source => source.id === 'fotos')).toBe(false);
   await app.setMount('/mnt/Daten/Fotos',{ source: '//test-nas/fotos' });
   await wizard.getByRole('button', { name: 'Quelle prüfen & hinzufügen', exact: true }).click();

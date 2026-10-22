@@ -65,7 +65,7 @@ async function refresh() {
     if (epoch !== authEpoch) return;
     mountDiscovery = data.discovery || { candidates: [] };
     $('#showDiscovered').hidden = !mountDiscovery.candidates.length;
-    $('#showDiscovered').textContent = `Neue SMB-Freigaben (${mountDiscovery.candidates.length})`;
+    $('#showDiscovered').textContent = `Neue Netzwerkfreigaben (${mountDiscovery.candidates.length})`;
     lastTargets = data.targets || []; lastConnections = data.connections || {}; lastCapacities = data.capacities || {};
     savedConfig = data.config; activeTimezone = data.config.timezone; folderData = data.folders;
     for (const key of Object.keys(names)) delete names[key]; for (const source of data.config.sources) names[source.id] = source.name;
@@ -88,7 +88,7 @@ async function refresh() {
     $('#previousSources').disabled = sourcePage === 0; $('#nextSources').disabled = (sourcePage + 1) * 6 >= data.folders.length;
     for (const folder of data.folders) {
       const row = element('tr'); row.dataset.folder = folder.id; const source = element('td'); const sourceButton = element('button', names[folder.id], 'source-link'); sourceButton.title = 'Details, Zeitplan und Verlauf öffnen'; sourceButton.addEventListener('click', () => openHistory(folder.id)); const path = element('code', folder.path); path.title = folder.path; const target = element('small', folder.targetRepository?.split(':').at(-1) || 'Ziel fehlt', 'source-target'); target.title = folder.targetRepository || 'PBS-Ziel noch nicht konfiguriert'; const heading = element('div', undefined, 'source-heading'); heading.append(sourceButton); source.append(heading, path); row.append(source);
-      const mount = element('td'), badge = element('span', folder.ok ? '● Eingebunden' : folder.checking ? '● Prüfung läuft' : ['cifs','smb3'].includes(folder.mount?.type) && folder.mount?.source && folder.expectedSource && folder.mount.source !== folder.expectedSource ? '● SMB geändert' : '● Nicht verfügbar', `badge ${folder.ok ? 'ok' : folder.checking ? 'busy' : 'bad'}`); badge.title = folder.ok ? `${folder.mount.source} → ${folder.mount.target} (${folder.mount.type}) · ${folder.identityConfirmed ? 'SMB-Identität bestätigt' : 'SMB-Quelle noch nicht festgelegt: unter Quellen bestätigen'}` : `${folder.error}${folder.mount?.source ? ' Erkannt: ' + folder.mount.source : ''}`; if (folder.checking) badge.title += ' · Lesbarkeit wird im Hintergrund geprüft'; if (folder.checkedAt) badge.title += ' · Letzte Prüfung: ' + date(folder.checkedAt); mount.append(badge);
+      const mount = element('td'), badge = element('span', folder.ok ? '● Eingebunden' : folder.checking ? '● Prüfung läuft' : ['cifs','smb3','nfs','nfs4'].includes(folder.mount?.type) && folder.mount?.source && folder.expectedSource && folder.mount.source !== folder.expectedSource ? '● Mount geändert' : '● Nicht verfügbar', `badge ${folder.ok ? 'ok' : folder.checking ? 'busy' : 'bad'}`); badge.title = folder.ok ? `${folder.mount.source} → ${folder.mount.target} (${folder.mount.type}) · ${folder.identityConfirmed ? 'Mount-Identität bestätigt' : 'Mount-Quelle noch nicht festgelegt: unter Quellen bestätigen'}` : `${folder.error}${folder.mount?.source ? ' Erkannt: ' + folder.mount.source : ''}`; if (folder.checking) badge.title += ' · Lesbarkeit wird im Hintergrund geprüft'; if (folder.checkedAt) badge.title += ' · Letzte Prüfung: ' + date(folder.checkedAt); mount.append(badge);
       const size = folder.size;
       const sizeLabel = size?.bytes != null ? new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 }).format(size.bytes / 1024 ** 3) + ' GiB' : ({ scanning: 'Größe wird ermittelt …', pending: 'Größe vorgemerkt …', error: 'Größe nicht verfügbar' }[size?.status] || (folder.mount?.source && !folder.ok ? 'Erkannt: ' + folder.mount.source : 'Größe: —'));
       const sizeInfo = element('small', sizeLabel, 'source-size');
@@ -185,7 +185,7 @@ $('#refresh').addEventListener('click', async () => {
     const result = await api('/api/refresh', {});
     await refresh();
     setTimeout(() => { if (authenticated) void refresh(); }, 1500);
-    notice(result.discovery.error || (result.sizeDeferred ? 'Mount-Zuordnung aktualisiert; Lesbarkeit wird im Hintergrund geprüft. Größenmessungen warten auf das Ende laufender Sicherungen bzw. der Wartung.' : 'Mount-Zuordnung aktualisiert. Lesbarkeit und Größen werden im Hintergrund geprüft.') + (result.discovery.candidates.length ? ` ${result.discovery.candidates.length} neue SMB-Freigabe(n) erkannt.` : ''), Boolean(result.discovery.error));
+    notice(result.discovery.error || (result.sizeDeferred ? 'Mount-Zuordnung aktualisiert; Lesbarkeit wird im Hintergrund geprüft. Größenmessungen warten auf das Ende laufender Sicherungen bzw. der Wartung.' : 'Mount-Zuordnung aktualisiert. Lesbarkeit und Größen werden im Hintergrund geprüft.') + (result.discovery.candidates.length ? ` ${result.discovery.candidates.length} neue Netzwerkfreigabe(n) erkannt.` : ''), Boolean(result.discovery.error));
   } catch (e) { notice(e.message, true); }
   finally { button.disabled = false; button.textContent = '↻ Aktualisieren'; }
 });
@@ -332,14 +332,14 @@ function renderSources() {
   for (const source of sources) {
     const row = element('tr', undefined, 'source-editor-row'), info = element('td'); row.dataset.sourceId=source.id;
     const folder=folderData.find(item=>item.id===source.id)||{};
-    info.append(element('strong', source.name), element('code', source.path), element('small', source.expectedSource || 'SMB-Identität noch nicht festgelegt', 'hint'));
+    info.append(element('strong', source.name), element('code', source.path), element('small', source.expectedSource || 'Mount-Identität noch nicht festgelegt', 'hint'));
 
     const detected = folderData.find(item => item.id === source.id)?.mount?.source; if (detected) info.append(element('small', `Aktuell erkannt: ${detected}`, 'hint'));
     const actions = element('td', undefined, 'source-editor-actions');
     const edit = element('button', 'Bearbeiten', 'row-action'); edit.addEventListener('click', () => {
       editSource(source.id);
     });
-    const pin = element('button', 'SMB bestätigen', 'row-action'); pin.addEventListener('click', async () => {
+    const pin = element('button', 'Mount bestätigen', 'row-action'); pin.addEventListener('click', async () => {
       pin.disabled = true;
       try { const check = await api('/api/sources/probe', { path: source.path }); if (!check.ok) throw new Error(check.error); await api('/api/sources', { sources: savedConfig.sources.map(item => item.id === source.id ? { ...item, expectedSource: check.mount.source } : item) }); loaded = false; await refresh(); renderSources(); $('#sourceResult').textContent = `Bestätigt: ${check.mount.source}`; }
       catch (e) { $('#sourceResult').textContent = e.message; } finally { pin.disabled = false; }
@@ -537,7 +537,7 @@ function renderSourceHealth(cell, folder, job, health) {
   if (!folder) return;
   const target = folder.target || 'primary', status = sourceHealth(folder, job, health, lastTargets.find(item => item.id === target), lastConnections[target], lastCapacities[target]);
   const badge = element('button', status.label, `badge health-badge ${status.tone}`); badge.type = 'button'; badge.setAttribute('aria-label', `${folder.name}: ${status.label}`);
-  badge.title = `${status.message}${folder.checkedAt ? ' · SMB-Stand: ' + date(folder.checkedAt) : ''}${status.checkedAt ? ' · PBS-Stand: ' + date(status.checkedAt) : ''} · ${status.action}`;
+  badge.title = `${status.message}${folder.checkedAt ? ' · Mount-Stand: ' + date(folder.checkedAt) : ''}${status.checkedAt ? ' · PBS-Stand: ' + date(status.checkedAt) : ''} · ${status.action}`;
   badge.addEventListener('click', () => openProblem(folder, status));
   cell.replaceChildren(element('span', date(job.lastSuccess)), badge);
 }
@@ -550,7 +550,7 @@ function renderFolderState(cell, folder, job, health) {
 function renderSourceProblem(id) {
   const folder = folderData.find(item => item.id === id), issue = issueFor(folder), box = $('#sourceProblem'); box.hidden = !issue; box.replaceChildren(); if (!issue) return;
   box.append(element('strong', issue.message), element('p', issue.help, 'hint'));
-  if (issue.kind === 'mount') { box.append(element('code', 'Erkannt: ' + (folder.mount?.source || 'kein SMB-Mount')), element('code', 'Erwartet: ' + (folder.expectedSource || 'noch nicht festgelegt'))); }
+  if (issue.kind === 'mount') { box.append(element('code', 'Erkannt: ' + (folder.mount?.source || 'kein Netzwerk-Mount')), element('code', 'Erwartet: ' + (folder.expectedSource || 'noch nicht festgelegt'))); }
   else { const button = element('button', issue.action, 'secondary'); button.type = 'button'; button.addEventListener('click', () => openProblem(folder, issue)); box.append(button); }
 }
 timeline = installTimeline({ element, openSource: id => editSource(id, true) });

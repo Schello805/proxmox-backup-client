@@ -30,3 +30,10 @@ test('Quellenformular meldet doppelte IDs und überlappende Pfade vor dem Speich
  const {validateSourceForm}=await import('../public/js/forms.js');const source={id:'daten',name:'Daten',path:'/mnt/Daten/Daten',expectedSource:''};
  assert.deepEqual(validateSourceForm(source,[],null),{});const errors=validateSourceForm(source,[source],null);assert.ok(errors.id);assert.ok(errors.path);assert.deepEqual(validateSourceForm(source,[source],'daten'),{});
 });
+
+test('Quellenformular akzeptiert NFS-Exporte und lehnt unvollständige NFS-Adressen ab',async()=>{
+ const {validateSourceForm}=await import('../public/js/forms.js');
+ const source={id:'daten',name:'Daten',path:'/mnt/Daten/Daten',expectedSource:'192.168.1.21:/Daten'};
+ assert.deepEqual(validateSourceForm(source,[],null),{});
+ assert.ok(validateSourceForm({...source,expectedSource:'nas:Daten'},[],null).expectedSource);
+});

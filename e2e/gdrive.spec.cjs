@@ -13,7 +13,7 @@ test('Google Drive einrichten, Monatsplan speichern, prüfen, kopieren und abbre
   const queued=await page.request.post('/api/backup/software',{headers:{'X-Requested-With':'qnap-dashboard'},data:{}});expect(queued.ok()).toBe(true);const state=await(await page.request.get('/api/activity')).json();expect(state.jobs.software.status).toBe('queued');
   await page.locator('#driveCancel').click();await expect(page.locator('#driveStatus')).toHaveText('Abgebrochen');await page.getByRole('link',{name:/Protokoll$/}).click();await page.locator('#logKind').selectOption('Google Drive');await expect(page.locator('#logEntries')).toContainText('Abgebrochen');await page.request.post('/api/backups/cancel',{headers:{'X-Requested-With':'qnap-dashboard'},data:{}});
 });
-test('Google-Drive-Kopie bleibt bei falscher SMB-Zuordnung gesperrt',async({page,app})=>{
+test('Google-Drive-Kopie bleibt bei falscher Mount-Zuordnung gesperrt',async({page,app})=>{
   await login(page);await page.getByRole('link',{name:/Ziele$/}).click();await page.locator('#driveSettings>summary').click();await page.locator('#drivePanel').getByLabel('Daten',{exact:true}).check();await page.getByRole('button',{name:'Google Drive speichern',exact:true}).click();await expect(page.locator('#driveResult')).toContainText('gespeichert');
   await app.setMount('/mnt/Daten/Daten',{source:'//test-nas/software'});await page.locator('#driveStart').click();await expect(page.locator('#driveStatus')).toHaveText('Fehlgeschlagen');await expect(page.locator('#driveMessage')).toContainText(/SMB|Freigabe|Quelle/);await page.setViewportSize({width:390,height:844});await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });

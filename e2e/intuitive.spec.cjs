@@ -16,7 +16,7 @@ test('Backup-Ziele, Allgemeines und Quellenpläne bleiben bei Änderungen vonein
   const config=(await (await page.request.get('/api/status')).json()).config; expect(config.timezone).toBe('UTC'); expect(config.schedules.software).toEqual({days:[1,2,3,4,5],time:'03:45'}); expect(config.repository).toBe('test@pbs@pbs-neu.local:test-store');
 });
 
-test('Falsche SMB-Zuordnung nennt die Freigabe und bietet eine konkrete Prüfung ohne automatische Bestätigung', async ({ page, app },testInfo) => {
+test('Falsche Mount-Zuordnung nennt die Freigabe und bietet eine konkrete Prüfung ohne automatische Bestätigung', async ({ page, app },testInfo) => {
   await login(page); await app.setMount('/mnt/Daten/Daten',{source:'//test-nas/software'}); await page.getByRole('button',{name:'↻ Aktualisieren',exact:true}).click();
   const row=page.locator('tr[data-folder="daten"]'); await expect(row.locator('.problem-message')).toHaveText('Daten zeigt auf „software“ statt „daten“.');
   await row.getByRole('button',{name:'Zuordnung prüfen',exact:true}).click(); await expect(page).toHaveURL(/#jobs\/daten\/edit$/);
