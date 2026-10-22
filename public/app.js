@@ -121,12 +121,14 @@ function restoreContext() {
   $('#sourceDetail').hidden = true; $('#historyDialog').hidden = true; $('#restorePanel').hidden = true;
   detailId = null;
 }
-function closeContext() { location.hash = '#overview'; }
+function closeContext() { location.hash = document.body.dataset.page === 'sourcesDialog' && detailId ? '#sourcesDialog' : '#jobs'; }
 function showContext(view, id) {
-  const route = `overview/${id}/${view === 'historyDialog' ? 'history' : view === 'restorePanel' ? 'restore' : 'edit'}`;
+  const base = ['jobs','sourcesDialog'].includes(document.body.dataset.page) ? document.body.dataset.page : 'jobs';
+  const route = `${base}/${id}/${view === 'historyDialog' ? 'history' : view === 'restorePanel' ? 'restore' : 'edit'}`;
   if (location.hash.slice(1) !== route) history.pushState(null, '', '#' + route);
-  document.querySelectorAll('.page').forEach(el => el.hidden = el.id !== 'overview');
-  document.body.dataset.page = 'overview'; markNavigation('overview');
+  document.querySelectorAll('.page').forEach(el => el.hidden = el.id !== base);
+  document.body.dataset.page = base; markNavigation(base); $('#' + base).append($('#sourceDetail'));
+  if (base === 'jobs') $('#jobsActivitySlot').append($('.activity'));
   $('#sourceDetail').hidden = false; detailId = id; $('#detailTitle').textContent = names[id] || id;
   const slots = { sourceForm: 'detailEditor', historyDialog: 'detailHistorySlot', restorePanel: 'detailRestoreSlot' };
   for (const [key, slot] of Object.entries(slots)) { $('#' + slot).hidden = key !== view; if (key === view) { $('#' + slot).append($('#' + key)); $('#' + key).hidden = false; } }
@@ -143,12 +145,14 @@ function markNavigation(page, id) {
 function navigate() {
   restoreContext();
   if (location.hash === '#systemDialog') { history.replaceState(null, '', '#settings'); $('#systemMaintenance').open = true; }
+  if (/^#overview\/[a-z][a-z0-9_-]*\/(edit|history|restore|log)$/.test(location.hash)) history.replaceState(null, '', location.hash.replace('#overview/', '#jobs/'));
   const [requested, id, tab] = location.hash.slice(1).split('/');
-  const page = ['overview','settings','targets','guide','sourcesDialog','pbsDialog','mountTools','logs','assistant'].includes(requested) ? requested : 'overview';
+  const page = ['overview','settings','targets','guide','sourcesDialog','pbsDialog','mountTools','logs','jobs','assistant'].includes(requested) ? requested : 'overview';
   document.body.dataset.page = page;
   if (!id || page === 'assistant') window.scrollTo({ top: 0, behavior: 'instant' });
   document.querySelectorAll('.page').forEach(el => el.hidden = el.id !== page);
   markNavigation(page, id);
+  (page === 'jobs' ? $('#jobsActivitySlot') : $('#overviewActivitySlot')).append($('.activity'));
   if (!savedConfig) return;
   if (page === 'assistant') assistant?.open(id);
   if (page === 'mountTools') document.dispatchEvent(new Event('open-mount-tools'));
@@ -156,7 +160,7 @@ function navigate() {
   if (page === 'pbsDialog') openPBS();
   if (page === 'logs') document.dispatchEvent(new Event('open-logbook'));
   if (page === 'settings') document.dispatchEvent(new Event('open-system'));
-  if (page === 'overview' && names[id]) { if (tab === 'restore') void restore?.open(id); else if (tab === 'log') void openLog(id); else if (tab === 'history') void openHistory(id); else editSource(id, true); }
+  if (['overview','jobs','sourcesDialog'].includes(page) && names[id]) { if (tab === 'restore') void restore?.open(id); else if (tab === 'log') void openLog(id); else if (tab === 'history') void openHistory(id); else editSource(id, true); }
 }
 window.addEventListener('hashchange', navigate); window.addEventListener('popstate', navigate);
 $('#closeDetail').addEventListener('click', closeContext);
@@ -514,7 +518,7 @@ function editSource(id, inline = false) {
 }
 fillSourcePlan({ days: [], time: '' });
 
-assistant = installAssistant({ api, getConfig: () => savedConfig, refresh, openSource: id => editSource(id, true) });
+assistant = installAssistant({ api, getConfig: () => savedConfig, refresh, openSource: id => { location.hash = 'sourcesDialog/' + id + '/edit'; } });
 
 $('#configForm').elements.secondaryOwnServer.addEventListener('change', event => { $('#secondaryFields').hidden = !event.target.checked; });
 
@@ -554,7 +558,7 @@ for (const details of document.querySelectorAll('#targets>.target-accordion, #ov
   try { details.open = localStorage.getItem('backup-target-' + details.id) === 'open'; } catch {}
   details.addEventListener('toggle', () => { try { localStorage.setItem('backup-target-' + details.id, details.open ? 'open' : 'closed'); } catch {} });
 }
-dashboard = installDashboard({ element, date, openSource: source => { $('#sourceSearch').value = source.name; $('#sourceSearch').dataset.exactId=source.id; location.hash = 'sourcesDialog'; renderSources(); }, resolveProblem: (source, issue) => { if (issue.view === 'source') editSource(source.id, true); else if (issue.view === 'log') void openLog(source.id); else if (issue.view === 'backup') void runSource(source.id); else { $('#pbsSettings').open=true;location.hash='targets'; } } });
+dashboard = installDashboard({ element, date, openSource: source => { $('#sourceSearch').value = source.name; $('#sourceSearch').dataset.exactId=source.id; location.hash = 'sourcesDialog'; renderSources(); }, resolveProblem: (source, issue) => { if (issue.view === 'source') location.hash = 'sourcesDialog/' + source.id + '/edit'; else if (issue.view === 'log') void openLog(source.id); else if (issue.view === 'backup') location.hash = 'jobs'; else { $('#pbsSettings').open=true;location.hash='targets'; } } });
 drive = installDrive({ api, element, notice, scheduleText, date });
 operations = installOperations({api,element,refresh,date});
 

@@ -23,6 +23,8 @@ export function installDrive({ api, element, notice, scheduleText, date }) {
     const connectionFailed = job.connection?.ok === false && Date.parse(job.connection.checkedAt) > (Date.parse(job.lastSuccess) || 0);
     const configured = Boolean(job.settings?.sources.length), status = !configured ? 'Keine Quellen' : connectionFailed && !busy ? 'Zugang prüfen' : job.status === 'idle' ? job.connection?.ok ? 'Bereit' : 'Ungeprüft' : labels[job.status] || job.status;
     const badge = $('#overviewDriveStatus'); badge.textContent = status; badge.className = 'badge ' + (['failed','interrupted'].includes(job.status) || connectionFailed && !busy ? 'bad' : busy ? 'busy' : job.connection?.ok || job.status === 'success' ? 'ok' : '');
+    $('#dashboardDriveStatus').textContent=badge.textContent;$('#dashboardDriveStatus').className=badge.className;
+    $('#dashboardDriveSummary').textContent=job.settings?.sources.length?`${job.settings.sources.length} Quellen · ${modeLabel}`:'Keine Quellen ausgewählt';
     $('#driveOverview').classList.toggle('is-configured', configured);
     const selected = (job.sources || []).map(source => source.name).join(', ');
     $('#overviewDriveSummary').textContent = configured ? `${job.settings.remote}:${job.settings.folder} · ${selected}` : 'Quellen und Google-Zugang unter Backup-Ziele einrichten.';

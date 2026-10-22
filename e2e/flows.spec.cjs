@@ -27,7 +27,7 @@ test('Zeitzonen-Dropdown und Wochenplan an der Quelle speichern; Polling bewahrt
   await expect(zone).toHaveJSProperty('tagName', 'SELECT'); await zone.selectOption('UTC');
   await page.clock.fastForward(16_000); await expect(zone).toHaveValue('UTC');
   await page.getByRole('button', { name: 'Einstellungen speichern', exact: true }).click(); await expect(page.locator('#preferencesResult')).toContainText('gespeichert');
-  await page.getByRole('link', { name: /Übersicht/ }).click(); await page.locator('tr[data-folder="software"]').getByRole('button', { name: 'Zeitplan Software bearbeiten' }).click();
+  await page.getByRole('link', { name: /Aufträge$/ }).click(); await page.locator('tr[data-folder="software"]').getByRole('button', { name: 'Zeitplan Software bearbeiten' }).click();
   const detail = page.locator('#sourceDetail');
   await detail.getByRole('combobox', { name: 'Frequenz', exact: true }).selectOption('custom');
   await detail.getByRole('button', { name: 'Sicherung Fr', exact: true }).click();
@@ -80,7 +80,7 @@ test('Backup starten: Prozent, Restzeit, Live-Protokoll und Verlauf', async ({ p
   expect(await page.locator('#statusDashboard').evaluate(element => element.getBoundingClientRect().bottom <= innerHeight)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('progress.png') });
   await page.getByRole('link', { name: /Protokoll$/ }).click(); await expect(page.locator('#logText')).toContainText('processed 5 GiB');
-  await page.getByRole('link',{name:/Übersicht/}).click();
+  await page.getByRole('link',{name:/Aufträge$/}).click();
   app.finish(); await expect(row.locator('.job-state')).toContainText('Erfolgreich');
   await expect(page.locator('#progressEstimate')).toHaveText('100 % · Abgeschlossen');
   await row.getByRole('button', { name: 'Software', exact: true }).click(); await expect(page.locator('#historyRows')).toContainText('Erfolgreich');
@@ -136,7 +136,7 @@ test('Zweiten Datastore einrichten, Quelle zuweisen und getrennten PBS-Bestand p
   await page.getByRole('button', { name: 'Verbindung prüfen', exact: true }).click();
   await expect(page.locator('#connectionResult')).toContainText('archive-store: PBS erreichbar');
   await expect(page.locator('#connectionResult')).toContainText('test-store: PBS erreichbar');
-  await page.getByRole('link', { name: /Übersicht/ }).click(); await page.getByRole('link', { name: 'Quellen', exact: true }).click();
+  await page.getByRole('link', { name: /Aufträge$/ }).click(); await page.getByRole('link', { name: 'Quellen', exact: true }).click();
   const dialog = page.getByRole('region', { name: 'Backup-Quellen' });
   await dialog.locator('.source-editor-row').filter({ has: page.getByText('Software', { exact: true }) }).getByRole('button', { name: 'Bearbeiten' }).click();
   await dialog.getByRole('combobox', { name: 'Backup-Ziel', exact: true }).selectOption('secondary');
@@ -145,10 +145,10 @@ test('Zweiten Datastore einrichten, Quelle zuweisen und getrennten PBS-Bestand p
   const row = page.locator('tr[data-folder="software"]'); await expect(row.locator('.source-target')).toHaveText('archive-store');
   await row.getByRole('button', { name: '↗ Sichern', exact: true }).click(); await page.getByRole('link', { name: /Protokoll$/ }).click();
   await expect(page.locator('#logText')).toContainText('E2E repository: test@pbs@localhost:archive-store');
-  await page.getByRole('link',{name:/Übersicht/}).click();
+  await page.getByRole('link',{name:/Aufträge$/}).click();
   app.finish(); await expect(row.locator('.job-state')).toContainText('Erfolgreich');
   await row.getByRole('button', { name: 'Software', exact: true }).click(); await expect(page.locator('#historyRows')).toContainText('test@pbs@localhost:archive-store');
-  await page.getByRole('link',{name:/Übersicht/}).click();
+  await page.getByRole('link',{name:/Aufträge$/}).click();
   await page.getByRole('link', { name: /Backup-Ziele$/ }).click(); if ((await page.locator('#pbsSettings').getAttribute('open')) === null) await page.locator('#pbsSettings>summary').click(); await page.getByRole('link', { name: 'PBS-Bestand', exact: true }).click();
   await page.getByRole('combobox', { name: 'Datastore auswählen' }).selectOption('secondary');
   await page.getByRole('button', { name: 'Vom PBS abrufen', exact: true }).click(); await expect(page.locator('#pbsRows')).toContainText('host/daten');
@@ -171,7 +171,7 @@ test('Aktualisieren erkennt geänderte und neue SMB-Mounts ohne automatische Fre
   await expect(data.getByText('● SMB geändert', { exact: true })).toBeVisible();
   await expect(data.locator('.source-size')).not.toHaveText('10 GiB');
   await expect(data.getByRole('button', { name: '↗ Sichern', exact: true })).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Neue SMB-Freigaben (1)', exact: true })).toBeVisible();
+  await page.getByRole('link',{name:/Übersicht/}).click();await expect(page.getByRole('button', { name: 'Neue SMB-Freigaben (1)', exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('mount-refresh.png') });
   await page.getByRole('button', { name: 'Neue SMB-Freigaben (1)', exact: true }).click();
   const dialog = page.getByRole('region', { name: 'Backup-Quellen' });
@@ -212,9 +212,9 @@ test('Navigation als Seiten und Drilldown: Quelle und Wochenplan direkt in der �
   await expect(page).toHaveURL(/#sourcesDialog$/);
   await expect(page.getByRole('region', { name: 'Backup-Quellen' })).toBeVisible();
   await expect(page.locator('dialog:not(#loginDialog)')).toHaveCount(0);
-  await page.goBack(); await expect(page.locator('#overview')).toBeVisible();
+  await page.goBack(); await expect(page.locator('#jobs')).toBeVisible();
   await page.locator('tr[data-folder="software"]').getByRole('button', { name: 'Zeitplan Software bearbeiten' }).click();
-  await expect(page).toHaveURL(/#overview\/software\/edit$/);
+  await expect(page).toHaveURL(/#jobs\/software\/edit$/);
   const detail = page.locator('#sourceDetail');
   await expect(detail).toBeVisible(); await expect(page.locator('#folders')).toBeVisible();
   await detail.getByLabel('Name', { exact: true }).fill('Software neu');

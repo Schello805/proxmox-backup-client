@@ -22,7 +22,7 @@ test('Übersicht zeigt den Drive-Plan und unterstützt Start, Fortschritt und Ab
   const saved=await page.request.post('/api/gdrive',{headers:{'X-Requested-With':'qnap-dashboard'},data:{remote:'gdrive',folder:'QNAP-Backup',sources:['daten'],schedule:{days:[],time:'04:15',monthDay:'last'}}});expect(saved.ok()).toBe(true);await page.reload();
   await expect(page.locator('#overviewDriveSummary')).toContainText('gdrive:QNAP-Backup · Daten');await expect(page.locator('#overviewDrivePlan')).toContainText('Monatlich · letzter Tag · 04:15');await expect(page.locator('#overviewDrivePlan')).toContainText('Nächster Termin:');await expect(page.locator('#overviewDrivePlan')).toContainText('Europe/Berlin');
   await page.screenshot({path:testInfo.outputPath('drive-overview.png')});
-  await page.locator('#overviewDriveStart').click();await expect(page.locator('#overviewDriveStatus')).toHaveText('Läuft');await expect(page.locator('#overviewDriveProgress')).toContainText('50 %');await expect(page).toHaveURL(/\/#?overview?$|\/$/);
+  await page.locator('#overviewDriveStart').click();await expect(page.locator('#overviewDriveStatus')).toHaveText('Läuft');await expect(page.locator('#overviewDriveProgress')).toContainText('50 %');await expect(page).toHaveURL(/#jobs$/);
   await page.locator('#overviewDriveCancel').click();await expect(page.locator('#overviewDriveStatus')).toHaveText('Abgebrochen');
   await overview.getByRole('link',{name:'Drive bearbeiten',exact:true}).click();await expect(page.locator('#drivePanel')).toBeInViewport();
 });

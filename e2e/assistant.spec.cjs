@@ -4,7 +4,7 @@ const { spawnSync } = require('node:child_process');
 
 test('Quellen-Assistent: Kopierbefehle, freier Mount-Slot, Identitätsprüfung und Übernahme', async ({ page, app, context }, testInfo) => {
   await login(page); await context.grantPermissions(['clipboard-read','clipboard-write']);
-  await page.getByRole('link', { name: '+ Hinzufügen', exact: true }).click();
+  await page.getByRole('link', {name:/Übersicht/}).click();await page.getByRole('link', { name: '+ Hinzufügen', exact: true }).click();
   const wizard = page.getByRole('region', { name: 'Einrichtungsassistent' });
   await wizard.getByRole('textbox', { name: 'Quellenname', exact: true }).fill('Fotos');
   await wizard.getByRole('textbox', { name: 'Backup-ID', exact: true }).fill('fotos');
@@ -35,7 +35,7 @@ test('Quellen-Assistent: Kopierbefehle, freier Mount-Slot, Identitätsprüfung u
   const before = await (await page.request.get('/api/status')).json(); expect(before.config.sources.some(source => source.id === 'fotos')).toBe(false);
   await app.setMount('/mnt/Daten/Fotos',{ source: '//test-nas/fotos' });
   await wizard.getByRole('button', { name: 'Quelle prüfen & hinzufügen', exact: true }).click();
-  await expect(page).toHaveURL(/#overview\/fotos\/edit$/); await expect(page.locator('#sourceDetail')).toContainText('Fotos');
+  await expect(page).toHaveURL(/#sourcesDialog\/fotos\/edit$/); await expect(page.locator('#sourceDetail')).toContainText('Fotos');
   const after = await (await page.request.get('/api/status')).json(); expect(after.config.schedules.fotos.days).toEqual([]); expect(after.config.sources.find(source => source.id === 'fotos').expectedSource).toBe('//test-nas/fotos');
 });
 
@@ -70,7 +70,7 @@ test('PBS-Assistent: eigener Server mit getrenntem Zugang, Backup und dauerhaft 
   await wizard.getByRole('button', { name: 'Weiter', exact: true }).click(); await wizard.getByRole('button', { name: 'Weiter', exact: true }).click();
   await wizard.getByRole('button', { name: 'Ziel speichern & prüfen', exact: true }).click(); await expect(wizard.locator('#assistantResult')).toContainText('PBS erreichbar');
   const data = await (await page.request.get('/api/status')).json(); expect(data.targets[1].repository).toBe('archive@pbs@pbs2.local:test-store'); expect(data.config.secondaryPBS.hasPassword).toBe(true); expect(data.config.secondaryPBS.fingerprint).toBe(secondFingerprint); expect(data.config.fingerprint).toBe(''); expect(JSON.stringify(data)).not.toContain('e2e-second-secret');
-  await page.getByRole('link', { name: 'Zur Übersicht', exact: true }).click();
+  await page.getByRole('link', { name: /Aufträge$/ }).click();
   await page.locator('tr[data-folder="software"]').getByRole('button', { name: 'Zeitplan Software bearbeiten' }).click();
   const detail = page.locator('#sourceDetail'); await detail.getByRole('combobox', { name: 'Backup-Ziel', exact: true }).selectOption('secondary'); await detail.getByRole('button', { name: 'Quelle speichern', exact: true }).click(); await expect(detail.locator('#sourceResult')).toContainText('gespeichert');
   await detail.getByRole('button', { name: 'Schließen', exact: true }).click();

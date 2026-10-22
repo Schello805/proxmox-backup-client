@@ -2,7 +2,7 @@ const {test,expect,login}=require('./fixtures.cjs');
 const headers={'X-Requested-With':'qnap-dashboard'};
 test('Restore tab opens matching datastore, retrieves only source snapshots and shows compact instructions',async({page},testInfo)=>{
  await login(page);await page.locator('[data-folder="software"]').getByRole('button',{name:'Software',exact:true}).click();await page.getByRole('button',{name:'Wiederherstellen',exact:true}).click();
- await expect(page).toHaveURL(/#overview\/software\/restore$/);await expect(page.locator('#restoreInfo')).toContainText('Bestand noch nicht abgerufen');await expect(page.locator('#copyRestoreSnapshot')).toBeDisabled();
+ await expect(page).toHaveURL(/#jobs\/software\/restore$/);await expect(page.locator('#restoreInfo')).toContainText('Bestand noch nicht abgerufen');await expect(page.locator('#copyRestoreSnapshot')).toBeDisabled();
  await expect(page.getByRole('link',{name:'PBS-Inhalt öffnen ↗'})).toHaveAttribute('href','https://localhost:8007/#DataStore-test-store:content');
  await page.getByRole('button',{name:'Bestand vom PBS abrufen',exact:true}).click();await expect(page.locator('#restoreSnapshot option')).toHaveCount(1);await expect(page.locator('#restoreSelection')).toContainText('host/software/');await expect(page.locator('#restoreSelection')).toContainText('qnap-software.pxar.didx');
  await expect(page.locator('.restore-steps li')).toHaveCount(3);await page.screenshot({path:testInfo.outputPath('restore-source.png'),fullPage:true});
@@ -19,8 +19,8 @@ test('Restore uses second PBS and namespace; absent source snapshots stay absent
 });
 test('Compact health badges link to useful actions, and current success opens restore',async({page,app},testInfo)=>{
  await login(page);const row=page.locator('[data-folder="software"]');await expect(row.getByRole('button',{name:'Software: Noch keine Sicherung',exact:true})).toBeVisible();await row.getByRole('button',{name:'Software: Noch keine Sicherung',exact:true}).click();await expect(row.getByRole('button',{name:'Software: Backup läuft',exact:true})).toBeVisible();app.finish();
- await expect(row.getByRole('button',{name:'Software: Alles aktuell',exact:true})).toBeVisible();await row.getByRole('button',{name:'Software: Alles aktuell',exact:true}).click();await expect(page).toHaveURL(/#overview\/software\/restore$/);await page.locator('#closeDetail').click();
- await app.setMount('/mnt/Daten/Daten',{source:'//test-nas/software'});await page.getByRole('button',{name:'↻ Aktualisieren',exact:true}).click();await page.locator('[data-folder="daten"]').getByRole('button',{name:'Daten: SMB-Zuordnung falsch',exact:true}).click();await expect(page).toHaveURL(/#overview\/daten\/edit$/);await page.locator('#closeDetail').click();
+ await expect(row.getByRole('button',{name:'Software: Alles aktuell',exact:true})).toBeVisible();await row.getByRole('button',{name:'Software: Alles aktuell',exact:true}).click();await expect(page).toHaveURL(/#jobs\/software\/restore$/);await page.locator('#closeDetail').click();
+ await app.setMount('/mnt/Daten/Daten',{source:'//test-nas/software'});await page.getByRole('button',{name:'↻ Aktualisieren',exact:true}).click();await page.locator('[data-folder="daten"]').getByRole('button',{name:'Daten: SMB-Zuordnung falsch',exact:true}).click();await expect(page).toHaveURL(/#jobs\/daten\/edit$/);await page.locator('#closeDetail').click();
  await page.route('**/api/status',async route=>{const response=await route.fetch(),data=await response.json();data.connections.primary={ok:false,message:'PBS nicht erreichbar'};await route.fulfill({response,json:data});});await page.getByRole('button',{name:'↻ Aktualisieren',exact:true}).click();await row.getByRole('button',{name:'Software: PBS-Zugang gestört',exact:true}).click();await expect(page).toHaveURL(/#targets$/);await page.screenshot({path:testInfo.outputPath('health-target-action.png')});
 });
 

@@ -2,7 +2,7 @@ const {test,expect,login}=require('./fixtures.cjs');
 const fs=require('node:fs');
 const headers={'X-Requested-With':'qnap-dashboard'};
 test('Queue can be paused after current backup, reordered, trimmed and resumed',async({page,app})=>{
- await login(page);await page.getByRole('button',{name:'Alle sichern',exact:true}).click();await page.locator('#queueSummary').click();
+ await login(page);await page.getByRole('button',{name:'Alle sichern',exact:true}).click();if(!(await page.locator('#queueDetails').evaluate(node=>node.open)))await page.locator('#queueSummary').click();
  await page.getByRole('button',{name:'Nach diesem Backup pausieren',exact:true}).click();
  await page.getByRole('button',{name:'Serien: Nach oben',exact:true}).click();await page.getByRole('button',{name:'Hörspiele: Entfernen',exact:true}).click();
  let data=await(await page.request.get('/api/activity')).json();expect(data.active).toBe('software');expect(data.queue).toEqual(['serien','filme','musik','daten']);expect(data.paused).toBe(true);
