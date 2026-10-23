@@ -2172,3 +2172,11 @@ aside a.system-link { display:flex; align-items:center; justify-content:center; 
 .datastore-table{overflow-x:auto;margin-top:12px}.datastore-table table{min-width:720px;width:100%}.datastore-table td{vertical-align:top;padding:12px}.datastore-table td:first-child{width:21%}.datastore-table input{font:inherit;width:100%;min-width:110px;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:#f9fcfa}.datastore-table code,.datastore-table small{display:block}.datastore-actions{display:flex;gap:8px 12px;flex-wrap:wrap;align-items:center}.datastore-confirm{margin-top:10px;padding:10px;background:#fff6e7;border-radius:6px}.additional-targets{padding-top:18px}
 
 .partition-table td:first-child small { display: block; }
+
+#sourcePartitions .auto-allocation { border:1px solid var(--line); border-radius:8px; padding:12px; margin:16px 0; min-width:0; }
+.auto-allocation legend { font-weight:600; padding:0 5px; }
+.auto-allocation .allocation-target { display:grid; grid-template-columns:minmax(90px,1fr) 70px 34px; align-items:center; gap:8px; min-width:240px; flex:1; padding:10px; border:1px solid var(--line); border-radius:6px; background:#f9fcfa; }
+.auto-allocation .allocation-target label { margin:0; }
+.auto-allocation .allocation-target>label:not(.checkbox-label) { font-size:10px; }
+.auto-allocation .allocation-target input[type=number] { width:70px; padding:7px; margin-top:4px; }
+.auto-allocation .allocation-target button { padding:7px; }

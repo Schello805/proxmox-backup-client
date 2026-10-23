@@ -1,5 +1,5 @@
 export function sourceProblem(folder, job = folder.job || {}, health = folder.health || {}, target = {}, connection) {
-  if(folder.partitioned)return null;
+  if(folder.partitioned)return null;if(folder.selection?.length===0)return {label:'Wartet auf Dateien',tone:'',action:'Aufteilung öffnen',view:'source',message:'Dieses Ziel übernimmt neue Dateien automatisch gemäß der Zielreihenfolge.'};
   const actual = folder.mount?.source, expected = folder.expectedSource;
   if (actual && expected && actual !== expected && ['cifs','smb3','nfs','nfs4'].includes(folder.mount?.type)) {
     const name = value => value.split('/').filter(Boolean).at(-1);

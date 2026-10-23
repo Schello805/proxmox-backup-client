@@ -19,7 +19,7 @@ let lastTargets = [], lastConnections = {}, lastCapacities = {}, lastPreferences
 const refreshWaiters = [];
 const $ = selector => document.querySelector(selector);
 const names = { software: 'Software', filme: 'Filme', serien: 'Serien', hoerspiele: 'Hörspiele', musik: 'Musik', daten: 'Daten' };
-const statuses = { idle: 'Noch kein Lauf', queued: 'Wartet', running: 'Läuft', success: 'Erfolgreich', failed: 'Fehler', interrupted: 'Unterbrochen', cancelling: 'Wird abgebrochen', cancelled: 'Abgebrochen' };
+const statuses = { skipped:'Noch keine Dateien', idle: 'Noch kein Lauf', queued: 'Wartet', running: 'Läuft', success: 'Erfolgreich', failed: 'Fehler', interrupted: 'Unterbrochen', cancelling: 'Wird abgebrochen', cancelled: 'Abgebrochen' };
 let loaded = false, polling = false, noticeTimer, authenticated = false, activityPolling = false, previousActive = null, authEpoch = 0, activeTimezone = 'Europe/Berlin', savedConfig = null, folderData = [], lastHealth = {}, sourceEditing = null, pbsData = null, sourcePage = 0, lastMainSnapshot = null, lastNotifySnapshot = null, mountDiscovery = { candidates: [] };
 const api = createAPI(showLogin);
 const { element, date, nextText, renderJob, scheduleText, renderEstimate } = createViews(() => activeTimezone, statuses);

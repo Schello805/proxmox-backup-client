@@ -1,0 +1,36 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');
+const {planFiles,validateAutoPartition}=require('../lib/auto-partitions');
+const MiB=1024**2;
+const policy={targets:[{id:'secondary',maxPercent:80},{id:'extra1',maxPercent:80}]};
+const cap=used=>({total:1000*MiB,used:used*MiB,available:(1000-used)*MiB,checkedAt:new Date().toISOString()});
+const file=(name,bytes)=>({name,bytes:bytes*MiB,mtimeMs:1,kind:'file'});
+test('Neue Dateien füllen zuerst PBS2 bis zur Grenze, danach PBS3; Reservierungen überleben Planung und Neustart',()=>{
+ const files=[file('A.ts',200),file('B.ts',100)],capacities={secondary:cap(550),extra1:cap(100)};
+ const first=planFiles({files,assignments:[],policy,capacities});assert.deepEqual(first.files,[{name:'A.ts',target:'secondary'},{name:'B.ts',target:'extra1'}]);assert.equal(first.ledger.every(item=>!item.uploaded),true);
+ const repeat=planFiles({files:[...files,file('Neu.ts',90)],assignments:first.files,previous:JSON.parse(JSON.stringify(first.ledger)),policy,capacities});assert.equal(repeat.files.find(item=>item.name==='Neu.ts').target,'extra1');assert.deepEqual(repeat.files.slice(0,2),first.files);
+ const backed=first.ledger.map(item=>({...item,uploaded:true}));const next=planFiles({files:[...files,file('Neu.ts',90)],assignments:first.files,previous:backed,policy,capacities:{secondary:cap(750),extra1:cap(200)}});assert.equal(next.files.find(item=>item.name==='Neu.ts').target,'extra1');
+});
+test('Voller Speicher, unbekannte Kapazität, gewachsene Bestandsdateien und neue Verweise werden nicht ignoriert',()=>{
+ const files=[file('Film.ts',200)],capacities={secondary:cap(790),extra1:cap(790)};assert.throws(()=>planFiles({files,assignments:[],policy,capacities}),/Kein Ziel/);
+ assert.throws(()=>planFiles({files,assignments:[],policy,capacities:{...capacities,extra1:{...cap(0),error:'offline'}}}),/Speicherstand/);
+ const first=planFiles({files,assignments:[],policy,capacities:{secondary:cap(0),extra1:cap(0)}});assert.throws(()=>planFiles({files:[file('Film.ts',900)],assignments:first.files,previous:first.ledger.map(item=>({...item,uploaded:true})),policy,capacities:{secondary:cap(200),extra1:cap(0)}}),/bereits zugeordnete/);
+ assert.throws(()=>planFiles({files:[{name:'link',kind:'symlink',bytes:null}],assignments:[],policy,capacities:{secondary:cap(0),extra1:cap(0)}}),/Verweis/);
+});
+test('Automatik prüft Zielreihenfolge und Prozentgrenzen strikt',()=>{for(const value of [{targets:[]},{targets:[{id:'secondary',maxPercent:80},{id:'secondary',maxPercent:80}]},{targets:[{id:'secondary',maxPercent:100},{id:'extra1',maxPercent:80}]}])assert.throws(()=>validateAutoPartition(value));assert.deepEqual(validateAutoPartition(policy),policy);});
+test('Abgebrochene Vorbereitung schreibt weder neue Auswahl noch Reservierungen',async()=>{
+ const {createAutoPartitions}=require('../lib/auto-partitions');const parent={id:'filme',path:'/mnt/Daten/Filme',autoPartition:policy},source={id:'files2',parentId:'filme',selection:['A.ts'],target:'secondary'};const config={repository:'root@pam@pbs:pbs1',password:'secret',secondaryDatastore:'pbs2',additionalDatastores:[{id:'extra1',datastore:'pbs3'}],sources:[parent,source,{id:'files3',parentId:'filme',selection:[],target:'extra1'}]};const state={};let writes=0;const service=createAutoPartitions({getConfig:()=>config,list:async()=>({folders:[],files:[{...file('A.ts',1),target:'secondary'},{...file('Neu.ts',1),target:''}]}),capacity:{refresh:async()=>cap(0)},updateSelections:()=>writes++,state,persist:()=>writes++});await assert.rejects(service.prepare(source,()=>false),/abgebrochen/);assert.equal(writes,0);assert.deepEqual(state.autoFiles,{});
+});
+test('Leere automatische Zielaufträge sind erlaubt und bleiben für neue Dateien konfiguriert',()=>{
+ const {validateConfig}=require('../lib/validation');const config={...require('../config.example.json'),repository:'root@pam@pbs:pbs1',password:'secret',secondaryDatastore:'pbs2',additionalDatastores:[{id:'extra1',datastore:'pbs3'}],sources:[{id:'filme',name:'Filme',path:'/mnt/Daten/Filme',expectedSource:'nas:/Filme',partitioned:true,autoPartition:policy},{id:'files2',name:'Filme PBS2',path:'/mnt/Daten/Filme',expectedSource:'nas:/Filme',parentId:'filme',target:'secondary',selection:[]},{id:'files3',name:'Filme PBS3',path:'/mnt/Daten/Filme',expectedSource:'nas:/Filme',parentId:'filme',target:'extra1',selection:[]}],schedules:{}};const clean=validateConfig(config,{password:''});assert.deepEqual(clean.sources[1].selection,[]);assert.throws(()=>validateConfig({...config,sources:config.sources.filter(source=>source.id!=='files3')},clean),/jedes automatische Ziel/);
+});
+test('Geänderte Quelle oder PBS-Verbindung verliert alte Upload-Annahmen; andere Reservierungen zählen mit',()=>{
+ const files=[file('Film.ts',200)],capacities={secondary:cap(0),extra1:cap(0)};const saved=planFiles({files,assignments:[],policy,capacities,identities:{secondary:'alter-server'}});const previous=saved.ledger.map(item=>({...item,uploaded:true}));assert.throws(()=>planFiles({files,assignments:saved.files,previous,policy,capacities:{secondary:cap(700),extra1:cap(0)},identities:{secondary:'neuer-server'}}),/bereits zugeordnete/);
+ const next=planFiles({files,assignments:[],policy,capacities:{secondary:cap(550),extra1:cap(0)},reservedElsewhere:{secondary:100*MiB}});assert.equal(next.files[0].target,'extra1');
+});
+test('Aktivieren nach einem erfolgreichen manuellen Datei-Backup reserviert dessen unveränderte Dateien nicht doppelt',async()=>{
+ const {createAutoPartitions}=require('../lib/auto-partitions'),{selectionKey}=require('../lib/file-selection');const parent={id:'filme',path:'/mnt/Daten/Filme',expectedSource:'nas:/Filme'},child={id:'files2',parentId:'filme',path:parent.path,selection:['Film.ts'],target:'secondary'};const config={repository:'root@pam@pbs:pbs1',password:'secret',namespace:'',secondaryDatastore:'pbs2',additionalDatastores:[{id:'extra1',datastore:'pbs3'}],sources:[parent,child]};const state={history:{files2:[{status:'success',path:child.path,repository:'root@pam@pbs:pbs2',namespace:'',selectionKey:selectionKey(child),startedAt:'2026-10-20T12:00:00Z'}]}};const service=createAutoPartitions({getConfig:()=>config,list:async()=>({folders:[],files:[{...file('Film.ts',600),target:'secondary'}]}),capacity:{refresh:async()=>cap(700)},updateSelections(){},state,persist(){}});const result=await service.plan('filme',policy,[{name:'Film.ts',target:'secondary'}]);assert.equal(result.ledger[0].uploaded,true);assert.equal(result.estimates[0].projectedPercent,70);
+});
+test('Leere Automatik-Aufträge werden in der Zusammenfassung nicht als fehlgeschlagen bezeichnet',()=>{
+ const {backupSummary}=require('../lib/backup-summary');const message=backupSummary({results:[{name:'PBS2',status:'success',durationSeconds:2},{name:'PBS3',status:'skipped',durationSeconds:1}]});assert.match(message,/PBS3: noch keine Dateien/);assert.doesNotMatch(message,/fehlgeschlagen/);
+});

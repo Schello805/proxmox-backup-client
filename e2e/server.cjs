@@ -10,9 +10,10 @@ Object.assign(config, { repository: 'test@pbs@localhost:test-store', password: '
 for (const source of config.sources) source.expectedSource = '//test-nas/' + source.id;
 fs.writeFileSync(process.env.CONFIG_FILE, JSON.stringify(config));
 let mountNumber = 10;
-const partitionEntries=new Map();
+const partitionEntries=new Map(),capacityEntries=new Map();
 const actualMounts = new Map(config.sources.map(source => [source.path, { id: String(mountNumber++), device: '0:10', target: source.path, root: '/', type: 'cifs', source: source.expectedSource, bytes: 10737418240 }]));
 process.on('message', message => {
+  if(message?.type==='capacity'){capacityEntries.set(message.datastore,message.value);process.send({ack:message.request});return;}
   if(message?.type==='partition-entries'){partitionEntries.set(message.path,message.entries);process.send({ack:message.request});return;}
   if (message?.type !== 'mount') return;
   const previous = actualMounts.get(message.path);
@@ -29,7 +30,7 @@ cp.execFile = (file, args, options, callback) => {
   if(file===process.execPath&&args[1]?.includes('QNAP_FILE_SELECTION')){const entries=partitionEntries.get(args[2]);return setImmediate(()=>callback(null,JSON.stringify({names:[...(entries?.folders||[]),...(entries?.files||[]).map(item=>item.name)],bytes:args.slice(3).reduce((sum,name)=>sum+(entries?.files.find(item=>item.name===name)?.bytes||0),0)}),''));}
   if (file === process.execPath && args[1]?.includes('readdirSync')) return setImmediate(()=>callback(null,JSON.stringify(partitionEntries.get(args[2])||{folders:args[2]==='/mnt/Daten/Filme'?['Aufnahme A','Aufnahme B','Aufnahme C']:['images'],files:[],otherEntries:0}),''));
   if (file === 'du') return setImmediate(() => process.env.E2E_SOURCE_SIZE === 'false' ? callback(new Error('Size unavailable')) : callback(null, `${actualMounts.get(args.at(-1))?.bytes ?? 10737418240}\t${args.at(-1)}\n`, ''));
-  if (file === 'proxmox-backup-client') return setImmediate(() => callback(null, args[0] === 'version' ? 'test-client' : args[0] === 'status' ? JSON.stringify({total:1099511627776,used:options.env?.PBS_REPOSITORY?.endsWith(':archive-store')?824633720832:549755813888,avail:options.env?.PBS_REPOSITORY?.endsWith(':archive-store')?274877906944:549755813888}) : JSON.stringify([{ 'backup-type': 'host', 'backup-id': options.env?.PBS_REPOSITORY?.endsWith(':archive-store') ? 'daten' : 'software', 'backup-time': 1792454400, files: ['qnap-software.pxar.didx'], size: 1024 }]), ''));
+  if (file === 'proxmox-backup-client') return setImmediate(() => callback(null, args[0] === 'version' ? 'test-client' : args[0] === 'status' ? JSON.stringify(capacityEntries.get(options.env?.PBS_REPOSITORY?.split(':').at(-1))||{total:1099511627776,used:options.env?.PBS_REPOSITORY?.endsWith(':archive-store')?824633720832:549755813888,avail:options.env?.PBS_REPOSITORY?.endsWith(':archive-store')?274877906944:549755813888}) : JSON.stringify([{ 'backup-type': 'host', 'backup-id': options.env?.PBS_REPOSITORY?.endsWith(':archive-store') ? 'daten' : 'software', 'backup-time': 1792454400, files: ['qnap-software.pxar.didx'], size: 1024 }]), ''));
   return realExecFile(file, args, options, callback);
 };
 cp.execFile[require('node:util').promisify.custom] = (...args) => new Promise((resolve, reject) => cp.execFile(...args, (error, stdout, stderr) => error ? reject(error) : resolve({ stdout, stderr })));
@@ -42,7 +43,7 @@ require('../lib/inspect').createInspector = () => async (target, expectedSource)
 };
 const realBackups = require('../lib/backups').createBackups;
 let activeChild, activeJob;
-require('../lib/backups').createBackups = options => realBackups({ ...options, spawnProcess: (_, args, spawnOptions) => {
+require('../lib/backups').createBackups = options => realBackups({ ...options, capacityInterval:50, spawnProcess: (_, args, spawnOptions) => {
   const child = new EventEmitter(); child.stdout = new EventEmitter(); child.stderr = new EventEmitter();
   child.kill = signal => { if (activeChild === child) { activeChild = null; child.emit('close', null, signal); } };
   activeChild = child; activeJob = options.state.jobs[args[args.indexOf('--backup-id') + 1]];

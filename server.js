@@ -41,7 +41,7 @@ const initial = loadConfig(CONFIG, path.join(ROOT, 'config.example.json'), PASS)
 const STATE = path.join(DATA, 'state.json'), state = loadState(STATE);
 const persist = () => saveJSON(STATE, state);
 for (const source of initial.sources) state.watchSince[source.id] ||= new Date().toISOString();
-let backups, pbs, capacity, drive;
+let backups, pbs, capacity, drive, autoPartitions;
 const { createPartitions } = require('./lib/partitions');
 const configs = createConfigService({ initial, state, write: value => saveJSON(CONFIG, value), persist, password: PASS, isBusy: () => backups?.busy || drive?.busy || pbs?.busy || capacity?.busy, onChange: (previous, next) => { drive?.changed(previous, next); for (const target of [...new Set([...targetsFor(previous),...targetsFor(next)].map(item=>item.id))]) if (JSON.stringify(targetConfig(previous,target)) !== JSON.stringify(targetConfig(next,target))) state.pbsCheckAfter[target] = new Date().toISOString(); if (['additionalDatastores','repository','secondaryDatastore','password','fingerprint','namespace','secondaryPBS'].some(key => JSON.stringify(previous[key]) !== JSON.stringify(next[key]))) pbs.invalidate(); } });
 const getConfig = configs.get;
@@ -58,13 +58,14 @@ function environment(target = 'primary') {
   for (const key of Object.keys(env)) if (key.startsWith('PBS_')) delete env[key];
   return { ...env, PBS_REPOSITORY: config.repository, PBS_PASSWORD: config.password, PBS_FINGERPRINT: config.fingerprint, PBS_NAMESPACE: config.namespace };
 }
-backups = createBackups({ state, data: DATA, persist, getConfig, inspectPath, environment, log: history.log, archive: history.archive, verifySnapshot: (id, job) => pbs.verifySnapshot(id, job), notify: notifier.notify, isMaintenance, isBlocked: () => drive?.active, getSourceSize: source => sourceSizes.peek(source), onBatchComplete: batch => notifier.notify('summary/'+batch.id, backupSummary(batch), {success:true,warning:batch.results.some(result=>result.status!=='success')}) });
+backups = createBackups({ state, data: DATA, persist, getConfig, inspectPath, prepareSource:(source,isCurrent)=>autoPartitions.prepare(source,isCurrent), checkCapacity:source=>autoPartitions.check(source), afterSuccess:source=>autoPartitions.succeeded(source), environment, log: history.log, archive: history.archive, verifySnapshot: (id, job) => pbs.verifySnapshot(id, job), notify: notifier.notify, isMaintenance, isBlocked: () => drive?.active, getSourceSize: source => sourceSizes.peek(source), onBatchComplete: batch => notifier.notify('summary/'+batch.id, backupSummary(batch), {success:true,warning:batch.results.some(result=>!['success','skipped'].includes(result.status))}) });
 drive = require('./lib/gdrive').createDrive({ getConfig, state, persist, data: DATA, inspectPath, notify: notifier.notify, blocked: () => backups.busy || pbs?.busy || capacity?.busy || isMaintenance() || backups.paused });
 const driveTimer = setInterval(() => drive.tick(), 10000);
 const scheduler = createScheduler({ getConfig, state, persist, backups, log: history.log, notify: notifier.notify, isMaintenance });
 pbs = createPBS({ getConfig, environment, run, cacheFile: path.join(DATA, 'pbs.json'), save: saveJSON });
 capacity = createCapacity({getConfig,environment,run,save:saveJSON,cacheFile:path.join(DATA,'capacity.json')});
-const partitions = createPartitions({getConfig,inspectPath,run,getSourceSize:source=>source.path?sourceSizes.peek(source):null,apply: input=>configs.apply(input)});
+const partitions = createPartitions({getConfig,inspectPath,run,getSourceSize:source=>source.path?sourceSizes.peek(source):null,apply: input=>configs.apply(input),planAutomatic:(...args)=>autoPartitions.plan(...args),saveLedger:(id,ledger)=>{state.autoFiles[id]=ledger;persist();}});
+autoPartitions=require('./lib/auto-partitions').createAutoPartitions({getConfig,list:partitions.list,capacity,updateSelections:configs.updateSelections,state,persist});
 async function pollCapacity(){ if(backups.busy||drive.busy||pbs.busy||capacity.busy||isMaintenance())return; for(const target of targetsFor(getConfig())){if(backups.busy||isMaintenance())break;if(capacity.due(target.id))await capacity.refresh(target.id);} if(drive.capacityDue())await drive.refreshCapacity(); }
 const capacityTimer=setInterval(()=>void pollCapacity().catch(()=>console.warn('Speicherstand konnte nicht gespeichert werden.')),60000);
 void pollCapacity().catch(()=>console.warn('Speicherstand konnte nicht gespeichert werden.'));
@@ -187,11 +188,13 @@ const server = http.createServer(async (req, res) => {
       }
       return json(res, 200, { success: true, target });
     }
+    const autoPreview=url.pathname.match(/^\/api\/partitions\/([a-z][a-z0-9_-]{0,39})\/preview$/);
+    if(req.method==='POST'&&autoPreview){if(backups.busy||drive.busy||isMaintenance())throw Error('Ein Auftrag läuft.');const input=await body(req),listing=await partitions.list(autoPreview[1]);if(input.mapping)listing.folders=listing.folders.map(item=>({...item,target:input.mapping.find(value=>value.folder===item.name)?.target||''}));return json(res,200,await autoPartitions.plan(autoPreview[1],require('./lib/auto-partitions').validateAutoPartition(input.autoPartition),input.files||[],listing));}
     const partitionRoute=url.pathname.match(/^\/api\/partitions\/([a-z][a-z0-9_-]{0,39})(\/restore)?$/);
     if(partitionRoute){
       const id=partitionRoute[1];
       if(req.method==='GET'&&!partitionRoute[2]) return json(res,200,await partitions.list(id));
-      if(req.method==='POST'){const input=await body(req);if(input.confirmed!==true)throw new Error('Aufteilung ausdrücklich bestätigen.');return json(res,200,partitionRoute[2]?partitions.restore(id):await partitions.save(id,input.mapping,input.files));}
+      if(req.method==='POST'){const input=await body(req);if(input.confirmed!==true)throw new Error('Aufteilung ausdrücklich bestätigen.');return json(res,200,partitionRoute[2]?partitions.restore(id):await partitions.save(id,input.mapping,input.files,input.autoPartition));}
     }
     if (req.method === 'POST' && url.pathname === '/api/sources/probe') {
       const input = await body(req); return json(res, 200, await inspectPath(input.path, input.expectedSource || ''));
