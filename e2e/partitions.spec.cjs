@@ -10,7 +10,7 @@ test('Datastore 3 und 4 hinzufügen und Filmordner auf PBS 2 und 3 verteilen',as
  await wizard.getByRole('button',{name:'Ziel speichern & prüfen',exact:true}).click();await expect(wizard.locator('#assistantResult')).toContainText('Ziel gespeichert');
  const fourth=await page.request.post('/api/targets/setup',{headers,data:{datastore:'pbs4'}});expect(fourth.ok()).toBe(true);
  await page.reload();await page.getByRole('link',{name:/Ziele$/}).click();await page.locator('#pbsSettings>summary').click();
- await expect(page.locator('#additionalTargets')).toContainText('Weitere Datastores');await expect(page.locator('#additionalTargets input')).toHaveCount(2);
+ await expect(page.locator('#additionalTargets')).toContainText('Datastores · 4');await expect(page.locator('#additionalTargets input')).toHaveCount(4);
  await page.getByRole('link',{name:/Quellen$/}).click();
  await page.locator('#sourceList tr[data-source-id="filme"]').getByRole('button',{name:'Unterordner zuordnen',exact:true}).click();
  const partition=page.locator('#sourcePartitions');await expect(partition).toContainText('Aufnahme A');
@@ -29,7 +29,7 @@ test('Zusätzliche Datastores lassen sich bearbeiten und unbenutzte App-Ziele en
  for(const datastore of ['pbs2','pbs3','pbs4'])expect((await page.request.post('/api/targets/setup',{headers,data:{datastore}})).ok()).toBe(true);
  await page.reload();await page.getByRole('link',{name:/Ziele$/}).click();await page.locator('#pbsSettings>summary').click();
  const extras=page.locator('#additionalTargets');await extras.getByLabel('Datastore pbs4',{exact:true}).fill('archive4');
- await extras.locator('.actions').nth(1).getByRole('button',{name:'Änderung speichern',exact:true}).click();await expect(page.locator('#notice')).toContainText('Datastore gespeichert');
- await extras.locator('.actions').first().getByRole('button',{name:'Entfernen',exact:true}).click();await expect(extras.locator('input')).toHaveCount(1);await expect(extras.locator('input')).toHaveValue('archive4');
+ await extras.locator('[data-datastore="extra2"]').getByRole('button',{name:'Änderung speichern',exact:true}).click();await expect(page.locator('#notice')).toContainText('Datastore gespeichert');
+ await extras.locator('[data-datastore="extra1"]').getByRole('button',{name:'Entfernen',exact:true}).click();await extras.locator('[data-datastore="extra1"]').getByRole('button',{name:'Entfernen bestätigen',exact:true}).click();await expect(extras.locator('input')).toHaveCount(3);await expect(extras.locator('[data-datastore="extra2"] input')).toHaveValue('archive4');
  const config=(await(await page.request.get('/api/status')).json()).config;expect(config.additionalDatastores).toEqual([{id:'extra2',datastore:'archive4'}]);
 });

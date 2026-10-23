@@ -131,8 +131,8 @@ test('Mobile Navigation und Einstellungen ohne horizontales Seiten-Scrollen', as
 
 test('Zweiten Datastore einrichten, Quelle zuweisen und getrennten PBS-Bestand prüfen', async ({ page, app }, testInfo) => {
   await login(page); await page.getByRole('link', { name: /Ziele$/ }).click(); if ((await page.locator('#pbsSettings').getAttribute('open')) === null) await page.locator('#pbsSettings>summary').click();
-  await page.getByRole('textbox', { name: /^Datastore 2/ }).fill('archive-store');
-  await page.getByRole('button', { name: 'Backup-Ziele speichern' }).click(); await expect(page.locator('#settingsResult')).toContainText(/gespeichert/i);
+  await page.locator('#additionalTargets').getByRole('link',{name:'+ Datastore hinzufügen',exact:true}).click();
+  const wizard=page.getByRole('region',{name:'Einrichtungsassistent'});await wizard.getByRole('textbox',{name:'Neuer Datastore',exact:true}).fill('archive-store');await wizard.getByRole('button',{name:'Weiter',exact:true}).click();await wizard.getByRole('button',{name:'Weiter',exact:true}).click();await wizard.getByRole('button',{name:'Ziel speichern & prüfen',exact:true}).click();await expect(wizard.locator('#assistantResult')).toContainText('Ziel gespeichert');await page.getByRole('link',{name:/Ziele$/}).click();
   await page.getByRole('button', { name: 'Verbindung prüfen', exact: true }).click();
   await expect(page.locator('#connectionResult')).toContainText('archive-store: PBS erreichbar');
   await expect(page.locator('#connectionResult')).toContainText('test-store: PBS erreichbar');
@@ -158,8 +158,7 @@ test('Zweiten Datastore einrichten, Quelle zuweisen und getrennten PBS-Bestand p
   await page.screenshot({ path: testInfo.outputPath('two-datastores.png') });
   await page.reload(); await expect(page.locator('tr[data-folder="software"] .source-target')).toHaveText('archive-store');
   await page.getByRole('link', { name: /Ziele$/ }).click(); if ((await page.locator('#pbsSettings').getAttribute('open')) === null) await page.locator('#pbsSettings>summary').click();
-  await page.getByRole('textbox', { name: /^Datastore 2/ }).fill(''); await page.getByRole('button', { name: 'Backup-Ziele speichern' }).click();
-  await expect(page.locator('#settingsResult')).toContainText('noch von Quellen verwendet');
+  await page.locator('[data-datastore="secondary"]').getByRole('button',{name:'Entfernen',exact:true}).click();await page.locator('[data-datastore="secondary"]').getByRole('button',{name:'Entfernen bestätigen',exact:true}).click();await expect(page.locator('#notice')).toContainText(/Datastore 2/);
 });
 
 test('Aktualisieren erkennt geänderte und neue SMB-Mounts ohne automatische Freigabe', async ({ page, app }, testInfo) => {
@@ -232,8 +231,6 @@ test('Navigation als Seiten und Drilldown: Quelle und Wochenplan direkt in der �
   await page.reload(); await expect(detail).toBeVisible(); await expect(detail.getByLabel('Name', { exact: true })).toHaveValue('Software neu');
   await detail.getByRole('button', { name: 'Schließen', exact: true }).click(); await expect(detail).not.toBeVisible();
   await page.getByRole('link', { name: /Ziele$/ }).click(); if ((await page.locator('#pbsSettings').getAttribute('open')) === null) await page.locator('#pbsSettings>summary').click();
-  const first = await page.getByRole('textbox', { name: 'Datastore 1', exact: true }).boundingBox();
-  const second = await page.getByRole('textbox', { name: /^Datastore 2/ }).boundingBox();
-  expect(Math.abs(first.y - second.y)).toBeLessThan(2);
+  await expect(page.locator('#additionalTargets tbody tr')).toHaveCount(1);await expect(page.locator('#additionalTargets').getByLabel('Datastore test-store',{exact:true})).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('compact-datastores.png') });
 });

@@ -13,7 +13,7 @@ import { createAPI } from '/js/api.js';
 import { createViews, dayNames } from '/js/views.js';
 import { createFormState, clearFieldErrors, showFieldErrors, serverField, validateMainForm, validateNotifyForm, validateSourceForm } from '/js/forms.js';
 'use strict';
-let additionalTargetsSnapshot = null;
+let additionalTargetsSnapshot = null, requestedPBSTarget = null;
 let partitionTools, assistant, timeline, operations, controls, restore, drive, dashboard;
 let lastTargets = [], lastConnections = {}, lastCapacities = {}, lastPreferencesSnapshot = null;
 const refreshWaiters = [];
@@ -197,9 +197,10 @@ $('#nextSources').addEventListener('click', () => { sourcePage++; void refresh()
 $('#configForm').addEventListener('submit', async event => {
   event.preventDefault(); if (!loaded) return notice('Konfiguration zuerst laden.', true);
   const form = event.currentTarget, button = form.querySelector('[type=submit]'), data = {};
-  const target = Object.fromEntries(['server','authId','datastore'].map(key => [key, form.elements[key].value.trim()]));
+  const target = {...Object.fromEntries(['server','authId'].map(key => [key, form.elements[key].value.trim()])),datastore:savedConfig.repository.split(':').at(-1)||'pbs1'};
   data.repository = target.server || target.authId || form.elements.password.value ? `${target.authId}@${target.server}:${target.datastore}` : '';
-  for (const key of ['password', 'fingerprint', 'namespace', 'secondaryDatastore']) data[key] = form.elements[key].value;
+  for (const key of ['password', 'fingerprint', 'namespace']) data[key] = form.elements[key].value;
+  data.secondaryDatastore=savedConfig.secondaryDatastore||'';
   data.capacityWarnPercent = Number(form.elements.capacityWarnPercent.value);
   data.secondaryPBS = form.elements.secondaryOwnServer.checked ? Object.fromEntries([['server','secondaryServer'],['authId','secondaryAuthId'],['password','secondaryPassword'],['fingerprint','secondaryFingerprint'],['namespace','secondaryNamespace']].map(([key, field]) => [key, form.elements[field].value])) : null;
   const errors = validateMainForm({ ...savedConfig, ...target, ...data }); showFieldErrors(form, errors);
@@ -400,6 +401,7 @@ async function openPBS() {
   $('#pbsFilter').replaceChildren(); const all = element('option','Alle Gruppen'); all.value = ''; $('#pbsFilter').append(all);
   for (const [id,name] of Object.entries(names)) { const option = element('option',name); option.value = id; $('#pbsFilter').append(option); }
   $('#pbsTarget').replaceChildren(...backupTargets().map(target => { const option = element('option', target.name); option.value = target.id; return option; }));
+  if(requestedPBSTarget && [...$('#pbsTarget').options].some(item=>item.value===requestedPBSTarget))$('#pbsTarget').value=requestedPBSTarget;requestedPBSTarget=null;
   await loadPBS();
 }
 async function loadPBS(force = false) {
@@ -573,13 +575,6 @@ controls = installControls({ api, element, refresh, refreshActivity, notice, dat
 restore = installRestore({ api, element, date, showContext });
 
 installMountTools({ getConfig: () => savedConfig, element });
-$('#removeTarget').addEventListener('click', async () => {
-  const result=$('#removeTargetResult');
-  if (!$('#confirmTargetRemoval').checked) { result.textContent='Bitte das Entfernen der App-Zuordnung bestätigen.'; return; }
-  const button=$('#removeTarget');button.disabled=true;
-  try { await api('/api/targets/remove',{target:$('#removeTargetId').value});$('#confirmTargetRemoval').checked=false;lastMainSnapshot=null;loaded=false;await refresh();result.textContent='Ziel aus der App entfernt. Sicherungen und Quelldaten bleiben erhalten.'; }
-  catch(error){result.textContent=error.message;}finally{button.disabled=false;}
-});
 
 $('#sourceOverviewDetails').open = true;
 $('#sourceOverviewDetails>summary').addEventListener('click', event => event.preventDefault());
@@ -587,14 +582,28 @@ $('#sourceOverviewDetails>summary').addEventListener('click', event => event.pre
 installLogbook({api,element,date,isAuthenticated:()=>authenticated});
 
 function renderAdditionalTargets(config) {
- const root=$('#additionalTargets'),snapshot=JSON.stringify(config.additionalDatastores||[]);
- if(snapshot===additionalTargetsSnapshot || root.contains(document.activeElement)&&document.activeElement.tagName==='INPUT')return;additionalTargetsSnapshot=snapshot;root.replaceChildren();
- if(config.additionalDatastores?.length)root.append(element('h3','Weitere Datastores auf PBS 1'));
- for(const entry of config.additionalDatastores||[]){
-  const row=element('div',undefined,'actions'),label=element('label','Datastore auf PBS 1'),input=element('input');input.value=entry.datastore;input.setAttribute('aria-label','Datastore '+entry.datastore);label.append(input);
-  const save=element('button','Änderung speichern','secondary');save.type='button';save.onclick=async()=>{try{await api('/api/targets',{additionalDatastores:config.additionalDatastores.map(item=>item.id===entry.id?{...item,datastore:input.value.trim()}:item)});loaded=false;await refresh();notice('Datastore gespeichert.');}catch(error){notice(error.message,true);}};
-  const remove=element('button','Entfernen','secondary');remove.type='button';remove.onclick=async()=>{try{await api('/api/targets/remove',{target:entry.id});loaded=false;await refresh();notice('App-Ziel entfernt. PBS-Datastore und Sicherungen bleiben erhalten.');}catch(error){notice(error.message,true);}};
-  row.append(label,save,remove);root.append(row);
+ const root=$('#additionalTargets'),snapshot=JSON.stringify([config.repository,config.secondaryDatastore,config.secondaryPBS,config.additionalDatastores,config.namespace,config.sources.map(item=>[item.id,item.target]),lastConnections]);
+ if(snapshot===additionalTargetsSnapshot || root.contains(document.activeElement)&&document.activeElement.tagName==='INPUT')return;
+ additionalTargetsSnapshot=snapshot;root.replaceChildren();
+ const stores=[...(config.repository?[{id:'primary',datastore:config.repository.split(':').at(-1),repository:config.repository,namespace:config.namespace}]:[]),...(config.secondaryDatastore?[{id:'secondary',datastore:config.secondaryDatastore,repository:config.secondaryPBS?config.secondaryPBS.authId+'@'+config.secondaryPBS.server+':'+config.secondaryDatastore:config.repository.slice(0,config.repository.lastIndexOf(':')+1)+config.secondaryDatastore,namespace:config.secondaryPBS?.namespace??config.namespace}]:[]),...(config.additionalDatastores||[]).map(item=>({...item,repository:config.repository.slice(0,config.repository.lastIndexOf(':')+1)+item.datastore,namespace:config.namespace}))];
+ const heading=element('div',undefined,'panel-title'),add=element('a','+ Datastore hinzufügen','secondary');add.href='#assistant/pbs';heading.append(element('h3','Datastores · '+stores.length),add);root.append(heading);
+ if(!stores.length){root.append(element('p','Noch kein Datastore eingerichtet. Über den Assistenten hinzufügen.','hint'));return;}
+ const table=element('table'),head=element('thead'),columns=element('tr');for(const name of ['Datastore','PBS / Namespace','Quellen','Status','Aktionen'])columns.append(element('th',name));head.append(columns);table.append(head);const body=element('tbody');
+ for(const entry of stores){
+  const row=element('tr');row.dataset.datastore=entry.id;
+  const cell=element('td'),input=element('input');input.value=entry.datastore;input.setAttribute('aria-label','Datastore '+entry.datastore);cell.append(input);
+  const server=element('td');server.append(element('code',entry.repository.slice(entry.repository.lastIndexOf('@')+1,entry.repository.lastIndexOf(':'))),element('small',entry.namespace?'Namespace: '+entry.namespace:'Standard-Namespace','hint'));
+  const related=config.sources.filter(item=>!item.partitioned&&(item.target||'primary')===entry.id),status=lastConnections[entry.id],badge=element('span',status?status.ok?'Erreichbar':'Prüfung fehlgeschlagen':'Ungeprüft','badge '+(status?status.ok?'ok':'bad':''));badge.title=status?.message||'Verbindung noch nicht geprüft.';
+  const state=element('td');state.append(badge);
+  const actions=element('td'),buttons=element('div',undefined,'datastore-actions');
+  const save=element('button','Änderung speichern','row-action');save.type='button';save.onclick=async()=>{
+   const name=input.value.trim();if(!/^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,63}$/.test(name)){notice('Gültigen Datastore-Namen angeben.',true);return;}save.disabled=true;
+   try{const changes=entry.id==='primary'?{repository:savedConfig.repository.slice(0,savedConfig.repository.lastIndexOf(':')+1)+name}:entry.id==='secondary'?{secondaryDatastore:name}:{additionalDatastores:savedConfig.additionalDatastores.map(item=>item.id===entry.id?{...item,datastore:name}:item)};await api('/api/targets',changes);loaded=false;await refresh();notice('Datastore gespeichert.');}catch(error){notice(error.message,true);}finally{save.disabled=false;}
+  };
+  const check=element('button','Prüfen','row-action');check.type='button';check.onclick=async()=>{check.disabled=true;try{const result=await api('/api/connection',{target:entry.id});await refresh();notice(entry.datastore+': '+result.message,!result.ok);}catch(error){notice(error.message,true);}finally{check.disabled=false;}};
+  const inventory=element('a','Bestand','row-action');inventory.href='#pbsDialog';inventory.onclick=()=>{requestedPBSTarget=entry.id;};
+  const remove=element('button','Entfernen','row-action');remove.type='button';const confirmation=element('div',undefined,'datastore-confirm');confirmation.hidden=true;confirmation.append(element('small','Nur App-Ziel entfernen? PBS-Datastore und Sicherungen bleiben erhalten.','hint'));const yes=element('button','Entfernen bestätigen','row-action'),no=element('button','Behalten','row-action');yes.type=no.type='button';no.onclick=()=>{confirmation.hidden=true;};yes.onclick=async()=>{yes.disabled=true;try{await api('/api/targets/remove',{target:entry.id});loaded=false;await refresh();notice('App-Ziel entfernt. PBS-Datastore und Sicherungen bleiben erhalten.');}catch(error){notice(error.message,true);}finally{yes.disabled=false;}};confirmation.append(yes,no);remove.onclick=()=>{confirmation.hidden=!confirmation.hidden;};
+  buttons.append(save,check,inventory,remove);actions.append(buttons,confirmation);row.append(cell,server,element('td',String(related.length)),state,actions);body.append(row);
  }
- if(config.additionalDatastores?.length)root.append(element('p','Gleicher PBS, Zugang, Fingerprint und Namespace wie Datastore 1. Entfernen löscht nur die App-Zuordnung.','hint'));
+ table.append(body);const wrap=element('div',undefined,'datastore-table');wrap.append(table);root.append(wrap,element('p','Namen ändern aktualisiert nur die App-Zuordnung. Neue Datastores über den Assistenten anlegen oder verbinden. Zusätzliche Datastores auf PBS 1 teilen dessen Zugang und Fingerprint.','hint'));
 }
