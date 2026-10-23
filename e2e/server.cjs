@@ -10,8 +10,10 @@ Object.assign(config, { repository: 'test@pbs@localhost:test-store', password: '
 for (const source of config.sources) source.expectedSource = '//test-nas/' + source.id;
 fs.writeFileSync(process.env.CONFIG_FILE, JSON.stringify(config));
 let mountNumber = 10;
+const partitionEntries=new Map();
 const actualMounts = new Map(config.sources.map(source => [source.path, { id: String(mountNumber++), device: '0:10', target: source.path, root: '/', type: 'cifs', source: source.expectedSource, bytes: 10737418240 }]));
 process.on('message', message => {
+  if(message?.type==='partition-entries'){partitionEntries.set(message.path,message.entries);process.send({ack:message.request});return;}
   if (message?.type !== 'mount') return;
   const previous = actualMounts.get(message.path);
   actualMounts.set(message.path, { id: String(mountNumber++), device: '0:10', target: message.path, root: '/', type: 'cifs', bytes: 10737418240, ...previous, ...message.values, ...(message.values.source ? { id: String(mountNumber++) } : {}) });
@@ -24,7 +26,8 @@ require('../lib/mount-status').createMountStatus = options => realMountStatus({ 
 const cp = require('node:child_process');
 const realExecFile = cp.execFile;
 cp.execFile = (file, args, options, callback) => {
-  if (file === process.execPath && args[1]?.includes('readdirSync')) return setImmediate(()=>callback(null,JSON.stringify({folders:['Aufnahme A','Aufnahme B','Aufnahme C'],otherEntries:0}),''));
+  if(file===process.execPath&&args[1]?.includes('QNAP_FILE_SELECTION')){const entries=partitionEntries.get(args[2]);return setImmediate(()=>callback(null,JSON.stringify({names:[...(entries?.folders||[]),...(entries?.files||[]).map(item=>item.name)],bytes:args.slice(3).reduce((sum,name)=>sum+(entries?.files.find(item=>item.name===name)?.bytes||0),0)}),''));}
+  if (file === process.execPath && args[1]?.includes('readdirSync')) return setImmediate(()=>callback(null,JSON.stringify(partitionEntries.get(args[2])||{folders:args[2]==='/mnt/Daten/Filme'?['Aufnahme A','Aufnahme B','Aufnahme C']:['images'],files:[],otherEntries:0}),''));
   if (file === 'du') return setImmediate(() => process.env.E2E_SOURCE_SIZE === 'false' ? callback(new Error('Size unavailable')) : callback(null, `${actualMounts.get(args.at(-1))?.bytes ?? 10737418240}\t${args.at(-1)}\n`, ''));
   if (file === 'proxmox-backup-client') return setImmediate(() => callback(null, args[0] === 'version' ? 'test-client' : args[0] === 'status' ? JSON.stringify({total:1099511627776,used:options.env?.PBS_REPOSITORY?.endsWith(':archive-store')?824633720832:549755813888,avail:options.env?.PBS_REPOSITORY?.endsWith(':archive-store')?274877906944:549755813888}) : JSON.stringify([{ 'backup-type': 'host', 'backup-id': options.env?.PBS_REPOSITORY?.endsWith(':archive-store') ? 'daten' : 'software', 'backup-time': 1792454400, files: ['qnap-software.pxar.didx'], size: 1024 }]), ''));
   return realExecFile(file, args, options, callback);
@@ -43,7 +46,7 @@ require('../lib/backups').createBackups = options => realBackups({ ...options, s
   const child = new EventEmitter(); child.stdout = new EventEmitter(); child.stderr = new EventEmitter();
   child.kill = signal => { if (activeChild === child) { activeChild = null; child.emit('close', null, signal); } };
   activeChild = child; activeJob = options.state.jobs[args[args.indexOf('--backup-id') + 1]];
-  setImmediate(() => child.stdout.emit('data', Buffer.from(`E2E repository: ${spawnOptions.env.PBS_REPOSITORY}\nE2E rate: ${args[args.indexOf('--rate') + 1]}\nE2E namespace: ${spawnOptions.env.PBS_NAMESPACE}\nE2E credential match: ${spawnOptions.env.PBS_PASSWORD === (spawnOptions.env.PBS_REPOSITORY.includes('pbs2.local') ? 'e2e-second-secret' : 'e2e-pbs-secret')}\nprocessed 5 GiB in 2min, uploaded 1 GiB\n`)));
+  setImmediate(() => child.stdout.emit('data', Buffer.from(`E2E repository: ${spawnOptions.env.PBS_REPOSITORY}\nE2E selection: ${JSON.stringify(args.filter((arg,index)=>args[index-1]==='--exclude'))}\nE2E rate: ${args[args.indexOf('--rate') + 1]}\nE2E namespace: ${spawnOptions.env.PBS_NAMESPACE}\nE2E credential match: ${spawnOptions.env.PBS_PASSWORD === (spawnOptions.env.PBS_REPOSITORY.includes('pbs2.local') ? 'e2e-second-secret' : 'e2e-pbs-secret')}\nprocessed 5 GiB in 2min, uploaded 1 GiB\n`)));
   return child;
 } });
 process.on('message', message => { if (message?.type === 'finish' && activeChild) { const child = activeChild; if (Number.isFinite(message.durationSeconds) && message.durationSeconds >= 0) activeJob.startedAt = new Date(Date.now() - message.durationSeconds * 1000).toISOString(); activeChild = null; child.emit('close', message.code, null); } });

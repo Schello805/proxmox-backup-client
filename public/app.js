@@ -90,7 +90,7 @@ async function refresh() {
     $('#overviewPager').hidden = true; $('#sourcePage').textContent = `Seite ${sourcePage + 1} / ${Math.ceil(data.folders.length / 6)}`;
     $('#previousSources').disabled = sourcePage === 0; $('#nextSources').disabled = (sourcePage + 1) * 6 >= data.folders.length;
     for (const folder of data.folders.filter(item=>!item.partitioned)) {
-      const row = element('tr'); row.dataset.folder = folder.id; const source = element('td'); const sourceButton = element('button', names[folder.id], 'source-link'); sourceButton.title = 'Details, Zeitplan und Verlauf öffnen'; sourceButton.addEventListener('click', () => openHistory(folder.id)); const path = element('code', folder.path); path.title = folder.path; const target = element('small', folder.targetRepository?.split(':').at(-1) || 'Ziel fehlt', 'source-target'); target.title = folder.targetRepository || 'PBS-Ziel noch nicht konfiguriert'; const heading = element('div', undefined, 'source-heading'); heading.append(sourceButton); source.append(heading, path); row.append(source);
+      const row = element('tr'); row.dataset.folder = folder.id; const source = element('td'); const sourceButton = element('button', names[folder.id], 'source-link'); sourceButton.title = 'Details, Zeitplan und Verlauf öffnen'; sourceButton.addEventListener('click', () => openHistory(folder.id)); const path = element('code', folder.path); path.title = folder.path; const target = element('small', folder.targetRepository?.split(':').at(-1) || 'Ziel fehlt', 'source-target'); target.title = folder.targetRepository || 'PBS-Ziel noch nicht konfiguriert'; const heading = element('div', undefined, 'source-heading'); heading.append(sourceButton); source.append(heading, path);if(folder.selection)source.append(element('small',folder.selection.length+' ausgewählte Dateien','hint')); row.append(source);
       const mount = element('td'), badge = element('span', folder.ok ? '● Eingebunden' : folder.checking ? '● Prüfung läuft' : ['cifs','smb3','nfs','nfs4'].includes(folder.mount?.type) && folder.mount?.source && folder.expectedSource && folder.mount.source !== folder.expectedSource ? '● Mount geändert' : '● Nicht verfügbar', `badge ${folder.ok ? 'ok' : folder.checking ? 'busy' : 'bad'}`); badge.title = folder.ok ? `${folder.mount.source} → ${folder.mount.target} (${folder.mount.type}) · ${folder.identityConfirmed ? 'Mount-Identität bestätigt' : 'Mount-Quelle noch nicht festgelegt: unter Quellen bestätigen'}` : `${folder.error}${folder.mount?.source ? ' Erkannt: ' + folder.mount.source : ''}`; if (folder.checking) badge.title += ' · Lesbarkeit wird im Hintergrund geprüft'; if (folder.checkedAt) badge.title += ' · Letzte Prüfung: ' + date(folder.checkedAt); mount.append(badge);
       const size = folder.size;
       const sizeLabel = size?.bytes != null ? new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 }).format(size.bytes / 1024 ** 3) + ' GiB' : ({ scanning: 'Größe wird ermittelt …', pending: 'Größe vorgemerkt …', error: 'Größe nicht verfügbar' }[size?.status] || (folder.mount?.source && !folder.ok ? 'Erkannt: ' + folder.mount.source : 'Größe: —'));
@@ -336,6 +336,7 @@ function renderSources() {
   for (const source of sources) {
     const row = element('tr', undefined, 'source-editor-row'), info = element('td'); row.dataset.sourceId=source.id;
     const folder=folderData.find(item=>item.id===source.id)||{};
+    if(source.selection)info.append(element('small',source.selection.length+' ausgewählte Dateien','hint'));
     info.append(element('strong', source.name), element('code', source.path), element('small', source.expectedSource || 'Mount-Identität noch nicht festgelegt', 'hint'));
 
     const detected = folderData.find(item => item.id === source.id)?.mount?.source; if (detected) info.append(element('small', `Aktuell erkannt: ${detected}`, 'hint'));
@@ -355,9 +356,9 @@ function renderSources() {
     });
     const mount=element('td');mount.append(element('span',folder.ok?'Eingebunden':folder.checking?'Wird geprüft':'Nicht verfügbar','badge '+(folder.ok?'ok':folder.checking?'busy':'bad')));if(folder.error)mount.append(element('small',folder.error,'row-error'));
     const size=element('td',folder.size?.bytes!=null?new Intl.NumberFormat('de-DE',{maximumFractionDigits:1}).format(folder.size.bytes/1024**3)+' GiB':'Noch nicht ermittelt');
-    const target=element('td');target.append(element('span',source.partitioned ? 'Aufgeteilt · '+savedConfig.sources.filter(item=>item.parentId===source.id).length+' Ordner' : backupTargets().find(target=>target.id===(source.target||'primary'))?.name||'PBS fehlt'));if(savedConfig.gdrive.sources.includes(source.id))target.append(element('small','+ Google Drive','hint'));
+    const target=element('td');target.append(element('span',source.partitioned ? 'Aufgeteilt · '+savedConfig.sources.filter(item=>item.parentId===source.id).length+' Aufträge' : backupTargets().find(target=>target.id===(source.target||'primary'))?.name||'PBS fehlt'));if(savedConfig.gdrive.sources.includes(source.id))target.append(element('small','+ Google Drive','hint'));
     const plan=element('td',scheduleText(savedConfig.schedules[source.id]));
-    const split=element('button',source.partitioned?'Aufteilung bearbeiten':'Unterordner zuordnen','row-action');split.type='button';split.onclick=()=>partitionTools.open(source.id);
+    const split=element('button',source.partitioned?'Aufteilung bearbeiten':'Dateien & Ordner zuordnen','row-action');split.type='button';split.onclick=()=>partitionTools.open(source.id);
     actions.append(edit,pin,...(!source.parentId?[split]:[]),remove);row.append(info,mount,size,target,plan,actions);$('#sourceList').append(row);
   }
 }

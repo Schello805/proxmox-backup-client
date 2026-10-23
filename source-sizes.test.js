@@ -65,3 +65,6 @@ test('Entfernte Quellen werden nicht später aus der Größen-Warteschlange gele
   sizes.retain([source]); finish({ stdout: `100\t${source.path}\n` }); await tick();
   assert.deepEqual(paths, [source.path]); assert.equal(sizes.peek(source).bytes, 100);
 });
+test('Dateigruppen mit gleichem Pfad haben getrennte Summen und werden nicht mit du vollständig gemessen',async()=>{
+ const calls=[];const sizes=createSourceSizes({inspectPath:async()=>({ok:true}),run:async(file,args)=>{calls.push(file);assert.equal(file,process.execPath);return {stdout:JSON.stringify({names:['a.ts','b.ts'],bytes:args.at(-1)==='a.ts'?7:3})};}});const a={...source,selection:['a.ts']},b={...source,selection:['b.ts']};sizes.read(a,true);sizes.read(b,true);await tick();await tick();assert.equal(sizes.peek(a).bytes,7);assert.equal(sizes.peek(b).bytes,3);assert.equal(sizes.peek(source),null);assert.equal(calls.length,2);assert.equal(sizes.peek({...a,selection:['c.ts']}),null);
+});

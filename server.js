@@ -75,8 +75,9 @@ const diagnostics = createDiagnostics({ getConfig, system, inspectPath, pbs, sto
 const auth = createAuth({ getConfig, password: PASS, json });
 function json(res, code, data) { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(data)); }
 async function body(req) {
+  req.setEncoding('utf8');
   let text = '';
-  for await (const chunk of req) { text += chunk; if (Buffer.byteLength(text) > 1024 * 1024) throw new Error('Anfrage zu groß.'); }
+  for await (const chunk of req) { text += chunk; if (Buffer.byteLength(text) > 4 * 1024 * 1024) throw new Error('Anfrage zu groß.'); }
   return JSON.parse(text);
 }
 const server = http.createServer(async (req, res) => {
@@ -111,7 +112,7 @@ const server = http.createServer(async (req, res) => {
       configs.setNotifications(await body(req)); return json(res, 200, { success: true });
     }
     if (req.method === 'POST' && url.pathname === '/api/logout') { auth.logout(req, res); return json(res, 200, { success: true }); }
-    if (req.method === 'GET' && url.pathname === '/api/gdrive') return json(res, 200, { config: getConfig().gdrive, sources: getConfig().sources, timezone: getConfig().timezone, job: drive.snapshot() });
+    if (req.method === 'GET' && url.pathname === '/api/gdrive') return json(res, 200, { config: getConfig().gdrive, sources: getConfig().sources.filter(source=>!source.selection), timezone: getConfig().timezone, job: drive.snapshot() });
     if (req.method === 'POST' && url.pathname === '/api/gdrive') { configs.apply({ ...getConfig(), gdrive: await body(req) }); return json(res, 200, { success: true }); }
     if (req.method === 'POST' && url.pathname === '/api/gdrive/check') return json(res, 200, await drive.check());
     if (req.method === 'POST' && url.pathname === '/api/gdrive/start') { if (isMaintenance()) throw new Error('Update läuft.'); drive.start(); return json(res, 202, { success: true }); }
@@ -190,7 +191,7 @@ const server = http.createServer(async (req, res) => {
     if(partitionRoute){
       const id=partitionRoute[1];
       if(req.method==='GET'&&!partitionRoute[2]) return json(res,200,await partitions.list(id));
-      if(req.method==='POST'){const input=await body(req);if(input.confirmed!==true)throw new Error('Aufteilung ausdrücklich bestätigen.');return json(res,200,partitionRoute[2]?partitions.restore(id):await partitions.save(id,input.mapping));}
+      if(req.method==='POST'){const input=await body(req);if(input.confirmed!==true)throw new Error('Aufteilung ausdrücklich bestätigen.');return json(res,200,partitionRoute[2]?partitions.restore(id):await partitions.save(id,input.mapping,input.files));}
     }
     if (req.method === 'POST' && url.pathname === '/api/sources/probe') {
       const input = await body(req); return json(res, 200, await inspectPath(input.path, input.expectedSource || ''));

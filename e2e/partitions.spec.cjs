@@ -12,9 +12,9 @@ test('Datastore 3 und 4 hinzufügen und Filmordner auf PBS 2 und 3 verteilen',as
  await page.reload();await page.getByRole('link',{name:/Ziele$/}).click();await page.locator('#pbsSettings>summary').click();
  await expect(page.locator('#additionalTargets')).toContainText('Datastores · 4');await expect(page.locator('#additionalTargets input')).toHaveCount(4);
  await page.getByRole('link',{name:/Quellen$/}).click();
- await page.locator('#sourceList tr[data-source-id="filme"]').getByRole('button',{name:'Unterordner zuordnen',exact:true}).click();
+ await page.locator('#sourceList tr[data-source-id="filme"]').getByRole('button',{name:'Dateien & Ordner zuordnen',exact:true}).click();
  const partition=page.locator('#sourcePartitions');await expect(partition).toContainText('Aufnahme A');
- await partition.getByLabel('Ziel für alle Unterordner',{exact:true}).selectOption('secondary');await partition.getByRole('button',{name:'Allen zuweisen',exact:true}).click();
+ await partition.getByLabel('Ziel für alle Einträge',{exact:true}).selectOption('secondary');await partition.getByRole('button',{name:'Allen zuweisen',exact:true}).click();
  await partition.getByLabel('Ziel für Aufnahme C',{exact:true}).selectOption('extra1');await partition.getByRole('checkbox').check();
  await partition.getByRole('button',{name:'Zuordnung speichern',exact:true}).click();await expect(partition).toContainText('Gespeichert: 3 Unterordner-Aufträge');await partition.screenshot({path:testInfo.outputPath('film-partition.png')});
  const state=await(await page.request.get('/api/status')).json();const children=state.config.sources.filter(item=>item.parentId==='filme');expect(children).toHaveLength(3);expect(children.find(item=>item.path.endsWith('/Aufnahme C')).target).toBe('extra1');
@@ -32,4 +32,17 @@ test('Zusätzliche Datastores lassen sich bearbeiten und unbenutzte App-Ziele en
  await extras.locator('[data-datastore="extra2"]').getByRole('button',{name:'Änderung speichern',exact:true}).click();await expect(page.locator('#notice')).toContainText('Datastore gespeichert');
  await extras.locator('[data-datastore="extra1"]').getByRole('button',{name:'Entfernen',exact:true}).click();await extras.locator('[data-datastore="extra1"]').getByRole('button',{name:'Entfernen bestätigen',exact:true}).click();await expect(extras.locator('input')).toHaveCount(3);await expect(extras.locator('[data-datastore="extra2"] input')).toHaveValue('archive4');
  const config=(await(await page.request.get('/api/status')).json()).config;expect(config.additionalDatastores).toEqual([{id:'extra2',datastore:'archive4'}]);
+});
+test('Root-Dateien nach Größe auf PBS 2 und 3 verteilen, Auswahl prüfen und als Sammelauftrag sichern',async({page,app},testInfo)=>{
+ await app.setPartitionEntries('/mnt/Daten/Filme',{folders:['@Recently-Snapshot','images'],files:Array.from({length:1415},(_,index)=>({name:`Aufnahme ${String(index+1).padStart(4,'0')}.ts`,kind:'file',bytes:(index+1)*1048576})),otherEntries:1415});
+ await login(page,{sourceDetails:false});const headers={'X-Requested-With':'qnap-dashboard'};
+ for(const datastore of ['pbs2','pbs3'])expect((await page.request.post('/api/targets/setup',{headers,data:{datastore}})).ok()).toBe(true);
+ await page.reload();await page.getByRole('link',{name:/Quellen$/}).click();await page.locator('#sourceList tr[data-source-id="filme"]').getByRole('button',{name:'Dateien & Ordner zuordnen',exact:true}).click();const partition=page.locator('#sourcePartitions');
+ await expect(partition).toContainText('Quelle: /mnt/Daten/Filme');await expect(partition).toContainText('//test-nas/filme');await expect(partition).toContainText('1415 Dateien');await expect(partition.locator('tbody tr')).toHaveCount(100);
+ await partition.getByLabel('Erstes Ziel für Dateiverteilung',{exact:true}).selectOption('secondary');await partition.getByLabel('Zweites Ziel für Dateiverteilung',{exact:true}).selectOption('extra1');await partition.getByRole('button',{name:'Dateien nach Größe verteilen',exact:true}).click();
+ await partition.getByLabel('Ziel für @Recently-Snapshot',{exact:true}).selectOption('skip');await partition.getByLabel('Ziel für images',{exact:true}).selectOption('skip');await partition.getByRole('button',{name:'Zuordnung speichern',exact:true}).click();await expect(partition).toContainText('Bitte die Aufteilung bestätigen');
+ await partition.getByRole('checkbox').check();await partition.getByRole('button',{name:'Zuordnung speichern',exact:true}).click();await expect(partition).toContainText('2 Datei-Sammelaufträge');
+ const state=await(await page.request.get('/api/status')).json(),children=state.config.sources.filter(item=>item.parentId==='filme');expect(children).toHaveLength(2);expect(children.map(item=>item.target).sort()).toEqual(['extra1','secondary']);expect(children.every(item=>item.path==='/mnt/Daten/Filme')).toBe(true);const names=children.flatMap(item=>item.selection);expect(names).toHaveLength(1415);expect(new Set(names).size).toBe(1415);expect(state.config.sources.find(item=>item.id==='filme').partitionSkipped).toEqual(['@Recently-Snapshot','images']);
+ await partition.screenshot({path:testInfo.outputPath('file-allocation.png')});
+ await page.getByRole('link',{name:/Aufträge$/}).click();const selected=children.find(item=>item.target==='extra1');await page.locator(`#folders tr[data-folder="${selected.id}"]`).getByRole('button',{name:'Starten',exact:true}).click();await expect(page.locator('#activityTitle')).toContainText('Filme');await app.finish();await page.getByRole('link',{name:/Protokoll$/}).click();await expect(page.locator('#logText')).toContainText('pbs3');await expect(page.locator('#logText')).toContainText('E2E selection: ["/*","!/Aufnahme');
 });
