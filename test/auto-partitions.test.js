@@ -40,3 +40,6 @@ test('Vorschau verteilt Dateien trotz offener Ordner, Speichern und Lauf bleiben
 test('Platzfehler nennt nutzbare Kapazität, Zielnamen und tatsächliche Belegung',()=>{
  assert.throws(()=>planFiles({files:[file('Film.ts',900)],assignments:[],policy,capacities:{secondary:cap(950),extra1:cap(440)},labels:{secondary:'pbs2',extra1:'pbs3'}}),error=>/pbs2: 0 GiB/.test(error.message)&&/95 % belegt/.test(error.message)&&/pbs3:/.test(error.message)&&/Keine neue Zuordnung gespeichert/.test(error.message));
 });
+test('Entferntes Ziel einer festen Zuordnung wird verständlich benannt und niemals still verschoben',()=>{
+ assert.throws(()=>planFiles({files:[file('Film.ts',1)],assignments:[{name:'Film.ts',target:'extra2'}],policy,capacities:{secondary:cap(0),extra1:cap(0)},labels:{extra2:'pbs4'}}),error=>/feste Zuordnung/.test(error.message)&&/pbs4/.test(error.message)&&/wieder aktivieren/.test(error.message));
+});
