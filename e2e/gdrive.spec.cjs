@@ -83,3 +83,13 @@ test('Zielbestand gründlich prüfen zeigt getrenntes Ergebnis und Protokoll ohn
  await page.getByRole('link',{name:/Protokoll$/}).click();await page.locator('#logKind').selectOption('Google Drive');
  await expect(page.locator('#logText')).toContainText('Zielprüfung: success');
 });
+
+test('Konkrete Rclone-Fehler erscheinen mit Datei im zentralen Protokoll, Token bleiben verborgen',async({page,app})=>{
+ await login(page);await page.getByRole('link',{name:/Ziele$/}).click();await page.locator('#driveSettings>summary').click();
+ await page.locator('#drivePanel').getByLabel('Daten',{exact:true}).check();await page.getByRole('button',{name:'Google Drive speichern',exact:true}).click();await expect(page.locator('#driveResult')).toContainText('gespeichert');
+ await page.locator('#driveStart').click();await expect(page.locator('#driveStatus')).toHaveText('Läuft');app.failDrive();
+ await expect(page.locator('#driveMessage')).toContainText('Exit-Code 6');
+ await page.getByRole('link',{name:/Protokoll$/}).click();await page.locator('#logKind').selectOption('Google Drive');
+ await expect(page.locator('#logText')).toContainText('NichtLesbar.txt');await expect(page.locator('#logText')).toContainText('permission denied');
+ await expect(page.locator('#logText')).not.toContainText('e2e-private-token');
+});

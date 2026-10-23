@@ -55,10 +55,13 @@ require('../lib/updates').createUpdates = () => ({
   current: () => null,
   check: async () => ({ status: 'available', message: 'Ein neuer Stand ist verfügbar.', checkedAt: new Date().toISOString(), latest: { version: '9.0.0', commit: 'b'.repeat(40), url: 'https://github.com/Schello805/proxmox-backup-client/commit/' + 'b'.repeat(40) } })
 });
+let activeDriveChild=null;
+process.on('message',message=>{if(message?.type==='drive-fail'&&activeDriveChild){const current=activeDriveChild;current.stderr.emit('data',Buffer.from(JSON.stringify({level:'error',object:'Ordner/NichtLesbar.txt',msg:'Failed to copy: permission denied access_token=e2e-private-token'})+'\n'));current.emit('close',6);}});
 const realDrive = require('../lib/gdrive').createDrive;
 require('../lib/gdrive').createDrive = options => realDrive({ ...options, spawnProcess: (_, args) => {
   const child = new EventEmitter(); child.stdout = new EventEmitter(); child.stderr = new EventEmitter();
   child.kill = signal => setImmediate(() => child.emit('close', null, signal));
+  if(['copy','sync'].includes(args[0])){activeDriveChild=child;child.once('close',()=>{if(activeDriveChild===child)activeDriveChild=null;});}
   setImmediate(() => { if (['copy','sync'].includes(args[0])) child.stderr.emit('data', Buffer.from(JSON.stringify({stats:{bytes:1048576,totalBytes:2097152,speed:524288,eta:2}})+'\n')); else { if(args[0] === 'about') child.stdout.emit('data', Buffer.from(JSON.stringify({total:107374182400,used:21474836480,free:32212254720,other:42949672960,trashed:1073741824}))); if(args[0] === 'listremotes') child.stdout.emit('data', Buffer.from('gdrive: drive\n')); child.emit('close', 0); } });
   return child;
 } });

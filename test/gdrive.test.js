@@ -123,3 +123,21 @@ test('Abbruch während des Zielvergleichs wartet auf Prozessende und prüft kein
  assert.equal(f.state.drive.results[0].status,'success');assert.equal(f.state.drive.results[0].verification.status,'cancelled');
  assert.equal(f.children.length,2);
 });
+
+test('Exit-Code 6 bewahrt konkrete Rclone-Ursache und Datei im zentralen Protokoll ohne Zugangsdaten',async()=>{
+ const f=fixture();f.config.password='private-pbs';f.drive.start();await tick();await tick();await tick();
+ f.children[0].stderr.write(JSON.stringify({level:'error',object:'Daten/Aufnahme.mkv',msg:'Failed to copy: storageQuotaExceeded access_token=private-google private-pbs'})+'\n');
+ f.children[0].emit('close',6);await tick();
+ assert.equal(f.state.drive.status,'failed');assert.match(f.state.drive.message,/Exit-Code 6.*Aufnahme.mkv.*storageQuotaExceeded/);
+ assert.ok(!f.state.drive.message.includes('private-google'));assert.ok(!f.state.drive.message.includes('private-pbs'));
+ const {createLogbook}=require('../lib/logbook');const book=createLogbook({getConfig:()=>f.config,state:{...f.state,jobs:{},history:{}},data:'/tmp/test-drive'});
+ const text=book.read('drive:current');assert.match(text,/Aufnahme.mkv.*storageQuotaExceeded/);assert.ok(!text.includes('private-google'));
+ const history=book.list().find(entry=>entry.id!=='drive:current'&&entry.kind==='Google Drive');assert.ok(history);assert.match(book.read(history.id),/storageQuotaExceeded/);
+});
+
+test('Drive-Protokolle werden nach zehn Läufen begrenzt und mit privaten Dateirechten gespeichert',async()=>{
+ const fs=require('node:fs'),path=require('node:path');const f=fixture();f.config.gdrive.sources=['daten'];let first;
+ for(let index=0;index<12;index++){f.drive.start(true);first ||=f.state.drive.runId;for(let n=0;n<8;n++)await tick();assert.equal(f.state.drive.status,'success');}
+ assert.equal(f.state.drive.history.length,10);assert.equal(fs.existsSync(path.join('/tmp/test-drive/gdrive-logs',first+'.log')),false);
+ const file=path.join('/tmp/test-drive/gdrive-logs',f.state.drive.runId+'.log');assert.equal(fs.statSync(file).mode&0o777,0o600);
+});
