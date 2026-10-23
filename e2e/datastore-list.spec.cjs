@@ -10,5 +10,6 @@ test('Dynamische Liste zeigt alle vier Datastores mit einheitlichen Aktionen und
  await list.locator('[data-datastore="extra1"]').getByRole('button',{name:'Prüfen',exact:true}).click();await expect(list.locator('[data-datastore="extra1"] .badge')).toHaveText('Erreichbar');
  await list.screenshot({path:testInfo.outputPath('four-datastores.png')});
  await list.locator('[data-datastore="extra1"]').getByRole('link',{name:'Bestand',exact:true}).click();await expect(page.locator('#pbsTarget')).toHaveValue('extra1');
+ await expect(page).toHaveURL(/#pbsDialog\/extra1$/);await page.evaluate(()=>{window.dispatchEvent(new PopStateEvent('popstate'));window.dispatchEvent(new HashChangeEvent('hashchange'));});await expect(page.locator('#pbsTarget')).toHaveValue('extra1');await page.reload();await expect(page.locator('#pbsTarget')).toHaveValue('extra1');
  await page.getByRole('link',{name:/Ziele$/}).click();await page.setViewportSize({width:390,height:844});await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });

@@ -13,7 +13,7 @@ import { createAPI } from '/js/api.js';
 import { createViews, dayNames } from '/js/views.js';
 import { createFormState, clearFieldErrors, showFieldErrors, serverField, validateMainForm, validateNotifyForm, validateSourceForm } from '/js/forms.js';
 'use strict';
-let additionalTargetsSnapshot = null, requestedPBSTarget = null;
+let additionalTargetsSnapshot = null;
 let partitionTools, assistant, timeline, operations, controls, restore, drive, dashboard;
 let lastTargets = [], lastConnections = {}, lastCapacities = {}, lastPreferencesSnapshot = null;
 const refreshWaiters = [];
@@ -161,7 +161,7 @@ function navigate() {
   if (page === 'assistant') assistant?.open(id);
   if (page === 'mountTools') document.dispatchEvent(new Event('open-mount-tools'));
   if (page === 'sourcesDialog') renderSources();
-  if (page === 'pbsDialog') openPBS();
+  if (page === 'pbsDialog') openPBS(id);
   if (page === 'logs') document.dispatchEvent(new Event('open-logbook'));
   if (page === 'settings') document.dispatchEvent(new Event('open-system'));
   if (['overview','jobs','sourcesDialog'].includes(page) && names[id]) { if (tab === 'restore') void restore?.open(id); else if (tab === 'log') void openLog(id); else if (tab === 'history') void openHistory(id); else editSource(id, true); }
@@ -397,11 +397,11 @@ async function openHistory(id) {
     }
   } catch (e) { $('#historySummary').textContent = e.message; }
 }
-async function openPBS() {
+async function openPBS(target = 'primary') {
   $('#pbsFilter').replaceChildren(); const all = element('option','Alle Gruppen'); all.value = ''; $('#pbsFilter').append(all);
   for (const [id,name] of Object.entries(names)) { const option = element('option',name); option.value = id; $('#pbsFilter').append(option); }
   $('#pbsTarget').replaceChildren(...backupTargets().map(target => { const option = element('option', target.name); option.value = target.id; return option; }));
-  if(requestedPBSTarget && [...$('#pbsTarget').options].some(item=>item.value===requestedPBSTarget))$('#pbsTarget').value=requestedPBSTarget;requestedPBSTarget=null;
+  if([...$('#pbsTarget').options].some(item=>item.value===target))$('#pbsTarget').value=target;
   await loadPBS();
 }
 async function loadPBS(force = false) {
@@ -412,7 +412,7 @@ async function loadPBS(force = false) {
   finally { $('#refreshPBS').disabled = false; $('#pbsTarget').disabled = false; }
 }
 $('#refreshPBS').addEventListener('click', () => loadPBS(true));
-$('#pbsTarget').addEventListener('change', () => loadPBS());
+$('#pbsTarget').addEventListener('change', () => { history.replaceState(null,'','#pbsDialog/'+$('#pbsTarget').value);void loadPBS(); });
 $('#pbsFilter').addEventListener('change', renderPBS);
 function renderPBS() {
   if (!pbsData) return;
@@ -601,7 +601,7 @@ function renderAdditionalTargets(config) {
    try{const changes=entry.id==='primary'?{repository:savedConfig.repository.slice(0,savedConfig.repository.lastIndexOf(':')+1)+name}:entry.id==='secondary'?{secondaryDatastore:name}:{additionalDatastores:savedConfig.additionalDatastores.map(item=>item.id===entry.id?{...item,datastore:name}:item)};await api('/api/targets',changes);loaded=false;await refresh();notice('Datastore gespeichert.');}catch(error){notice(error.message,true);}finally{save.disabled=false;}
   };
   const check=element('button','Prüfen','row-action');check.type='button';check.onclick=async()=>{check.disabled=true;try{const result=await api('/api/connection',{target:entry.id});await refresh();notice(entry.datastore+': '+result.message,!result.ok);}catch(error){notice(error.message,true);}finally{check.disabled=false;}};
-  const inventory=element('a','Bestand','row-action');inventory.href='#pbsDialog';inventory.onclick=()=>{requestedPBSTarget=entry.id;};
+  const inventory=element('a','Bestand','row-action');inventory.href='#pbsDialog/'+entry.id;
   const remove=element('button','Entfernen','row-action');remove.type='button';const confirmation=element('div',undefined,'datastore-confirm');confirmation.hidden=true;confirmation.append(element('small','Nur App-Ziel entfernen? PBS-Datastore und Sicherungen bleiben erhalten.','hint'));const yes=element('button','Entfernen bestätigen','row-action'),no=element('button','Behalten','row-action');yes.type=no.type='button';no.onclick=()=>{confirmation.hidden=true;};yes.onclick=async()=>{yes.disabled=true;try{await api('/api/targets/remove',{target:entry.id});loaded=false;await refresh();notice('App-Ziel entfernt. PBS-Datastore und Sicherungen bleiben erhalten.');}catch(error){notice(error.message,true);}finally{yes.disabled=false;}};confirmation.append(yes,no);remove.onclick=()=>{confirmation.hidden=!confirmation.hidden;};
   buttons.append(save,check,inventory,remove);actions.append(buttons,confirmation);row.append(cell,server,element('td',String(related.length)),state,actions);body.append(row);
  }
