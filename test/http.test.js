@@ -56,7 +56,7 @@ test('HTTP: Auth, Secret-Schutz, persistente Konfiguration und fehlende Mounts',
  assert.equal(separate.config.secondaryPBS.password,''); assert.equal(separate.config.secondaryPBS.hasPassword,true);
  assert.equal(JSON.stringify(separate).includes('second-private'),false);
  assert.deepEqual(separate.config.schedules,config.schedules); assert.equal(separate.config.timezone,'UTC');
- assert.equal((await post('/api/targets/setup',{datastore:'third'})).status,400);
+ assert.equal((await post('/api/targets/setup',{datastore:'third'})).status,200);
  assert.equal((await post('/api/config',{...config,secondaryDatastore:'',secondaryPBS:null})).status,200);
  assert.equal((await post('/api/preferences',{timezone:'Europe/Vienna',staleAfterDays:21,repository:'ignored',schedules:{}})).status,200);
  let separated=(await (await fetch(url+'/api/status',{headers})).json()).config;

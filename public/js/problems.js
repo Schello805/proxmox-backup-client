@@ -1,4 +1,5 @@
 export function sourceProblem(folder, job = folder.job || {}, health = folder.health || {}, target = {}, connection) {
+  if(folder.partitioned)return null;
   const actual = folder.mount?.source, expected = folder.expectedSource;
   if (actual && expected && actual !== expected && ['cifs','smb3','nfs','nfs4'].includes(folder.mount?.type)) {
     const name = value => value.split('/').filter(Boolean).at(-1);
@@ -17,6 +18,7 @@ export function sourceProblem(folder, job = folder.job || {}, health = folder.he
 
 // One compact, actionable state; unknown/stale checks never count as a current success.
 export function sourceHealth(folder, job = {}, health = {}, target = {}, connection, capacity = {}, now = Date.now()) {
+  if(folder.partitioned)return {label:'Aufgeteilt',tone:'ok',action:'Unterordner verwalten',view:'source',message:'PBS-Aufträge laufen je Unterordner. Neue Ordner unter Quellen zuordnen.'};
   const busy = ['running','queued','cancelling'].includes(job.status);
   const recent = value => Number.isFinite(Date.parse(value)) && now - Date.parse(value) >= -60000 && now - Date.parse(value) <= 20 * 60000;
   const observed = latestConnection(job, connection, capacity, folder.pbsCheckAfter);

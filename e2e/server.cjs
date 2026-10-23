@@ -24,13 +24,14 @@ require('../lib/mount-status').createMountStatus = options => realMountStatus({ 
 const cp = require('node:child_process');
 const realExecFile = cp.execFile;
 cp.execFile = (file, args, options, callback) => {
+  if (file === process.execPath && args[1]?.includes('readdirSync')) return setImmediate(()=>callback(null,JSON.stringify({folders:['Aufnahme A','Aufnahme B','Aufnahme C'],otherEntries:0}),''));
   if (file === 'du') return setImmediate(() => process.env.E2E_SOURCE_SIZE === 'false' ? callback(new Error('Size unavailable')) : callback(null, `${actualMounts.get(args.at(-1))?.bytes ?? 10737418240}\t${args.at(-1)}\n`, ''));
   if (file === 'proxmox-backup-client') return setImmediate(() => callback(null, args[0] === 'version' ? 'test-client' : args[0] === 'status' ? JSON.stringify({total:1099511627776,used:options.env?.PBS_REPOSITORY?.endsWith(':archive-store')?824633720832:549755813888,avail:options.env?.PBS_REPOSITORY?.endsWith(':archive-store')?274877906944:549755813888}) : JSON.stringify([{ 'backup-type': 'host', 'backup-id': options.env?.PBS_REPOSITORY?.endsWith(':archive-store') ? 'daten' : 'software', 'backup-time': 1792454400, files: ['qnap-software.pxar.didx'], size: 1024 }]), ''));
   return realExecFile(file, args, options, callback);
 };
 cp.execFile[require('node:util').promisify.custom] = (...args) => new Promise((resolve, reject) => cp.execFile(...args, (error, stdout, stderr) => error ? reject(error) : resolve({ stdout, stderr })));
 require('../lib/inspect').createInspector = () => async (target, expectedSource) => {
-  const mount = actualMounts.get(target) || { source: '//test-nas/' + target.split('/').pop().toLowerCase(), target, type: 'cifs' };
+  const mount = actualMounts.get(target) || [...actualMounts.values()].filter(item=>target.startsWith(item.target+'/')).sort((a,b)=>b.target.length-a.target.length)[0] || { source: '//test-nas/' + target.split('/').pop().toLowerCase(), target, type: 'cifs' };
   const snapshot = { ...mount };
   if (snapshot.checkDelayMs) await new Promise(resolve => setTimeout(resolve, snapshot.checkDelayMs));
   const error = require('../lib/mounts').mountIssue(snapshot, expectedSource);

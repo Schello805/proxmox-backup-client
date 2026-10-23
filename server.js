@@ -42,7 +42,8 @@ const STATE = path.join(DATA, 'state.json'), state = loadState(STATE);
 const persist = () => saveJSON(STATE, state);
 for (const source of initial.sources) state.watchSince[source.id] ||= new Date().toISOString();
 let backups, pbs, capacity, drive;
-const configs = createConfigService({ initial, state, write: value => saveJSON(CONFIG, value), persist, password: PASS, isBusy: () => backups?.busy || drive?.busy || pbs?.busy || capacity?.busy, onChange: (previous, next) => { drive?.changed(previous, next); for (const target of ['primary','secondary']) if (JSON.stringify(targetConfig(previous,target)) !== JSON.stringify(targetConfig(next,target))) state.pbsCheckAfter[target] = new Date().toISOString(); if (['repository','secondaryDatastore','password','fingerprint','namespace','secondaryPBS'].some(key => JSON.stringify(previous[key]) !== JSON.stringify(next[key]))) pbs.invalidate(); } });
+const { createPartitions } = require('./lib/partitions');
+const configs = createConfigService({ initial, state, write: value => saveJSON(CONFIG, value), persist, password: PASS, isBusy: () => backups?.busy || drive?.busy || pbs?.busy || capacity?.busy, onChange: (previous, next) => { drive?.changed(previous, next); for (const target of [...new Set([...targetsFor(previous),...targetsFor(next)].map(item=>item.id))]) if (JSON.stringify(targetConfig(previous,target)) !== JSON.stringify(targetConfig(next,target))) state.pbsCheckAfter[target] = new Date().toISOString(); if (['additionalDatastores','repository','secondaryDatastore','password','fingerprint','namespace','secondaryPBS'].some(key => JSON.stringify(previous[key]) !== JSON.stringify(next[key]))) pbs.invalidate(); } });
 const getConfig = configs.get;
 const isMaintenance = () => fs.existsSync(path.join(DATA, 'maintenance'));
 const logbook = require('./lib/logbook').createLogbook({getConfig,state,data:DATA,password:PASS,getDiagnostics:()=>diagnostics.current(),getUpdates:()=>updates.current()});
@@ -63,6 +64,7 @@ const driveTimer = setInterval(() => drive.tick(), 10000);
 const scheduler = createScheduler({ getConfig, state, persist, backups, log: history.log, notify: notifier.notify, isMaintenance });
 pbs = createPBS({ getConfig, environment, run, cacheFile: path.join(DATA, 'pbs.json'), save: saveJSON });
 capacity = createCapacity({getConfig,environment,run,save:saveJSON,cacheFile:path.join(DATA,'capacity.json')});
+const partitions = createPartitions({getConfig,inspectPath,run,getSourceSize:source=>source.path?sourceSizes.peek(source):null,apply: input=>configs.apply(input)});
 async function pollCapacity(){ if(backups.busy||drive.busy||pbs.busy||capacity.busy||isMaintenance())return; for(const target of targetsFor(getConfig())){if(backups.busy||isMaintenance())break;if(capacity.due(target.id))await capacity.refresh(target.id);} if(drive.capacityDue())await drive.refreshCapacity(); }
 const capacityTimer=setInterval(()=>void pollCapacity().catch(()=>console.warn('Speicherstand konnte nicht gespeichert werden.')),60000);
 void pollCapacity().catch(()=>console.warn('Speicherstand konnte nicht gespeichert werden.'));
@@ -74,7 +76,7 @@ const auth = createAuth({ getConfig, password: PASS, json });
 function json(res, code, data) { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(data)); }
 async function body(req) {
   let text = '';
-  for await (const chunk of req) { text += chunk; if (Buffer.byteLength(text) > 65536) throw new Error('Anfrage zu groß.'); }
+  for await (const chunk of req) { text += chunk; if (Buffer.byteLength(text) > 1024 * 1024) throw new Error('Anfrage zu groß.'); }
   return JSON.parse(text);
 }
 const server = http.createServer(async (req, res) => {
@@ -88,7 +90,7 @@ const server = http.createServer(async (req, res) => {
       if (req.headers['x-requested-with'] !== 'qnap-dashboard') return json(res, 403, { error: 'Anfrage-Header fehlt.' });
     }
     // Nur die App-Hülle ist öffentlich. Daten und Aktionen benötigen eine Sitzung.
-    const assets = { '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], ...Object.fromEntries(['logbook','dashboard','gdrive','api','views','forms','maintenance','assistant','timeline','problems','operations','controls','restore'].map(name => ['/js/' + name + '.js', ['js/' + name + '.js', 'text/javascript']])) };
+    const assets = { '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], ...Object.fromEntries(['partitions','logbook','dashboard','gdrive','api','views','forms','maintenance','assistant','timeline','problems','operations','controls','restore'].map(name => ['/js/' + name + '.js', ['js/' + name + '.js', 'text/javascript']])) };
     if (req.method === 'GET' && assets[url.pathname]) {
       const [file, type] = assets[url.pathname]; res.writeHead(200, { 'Content-Type': `${type}; charset=utf-8`, 'Cache-Control': 'no-cache' });
       return res.end(fs.readFileSync(path.join(ROOT, 'public', file)));
@@ -161,7 +163,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/targets') {
       const input = await body(req), changes = {};
-      for (const key of ['repository','password','fingerprint','namespace','secondaryDatastore','secondaryPBS','capacityWarnPercent']) if (Object.hasOwn(input, key)) changes[key] = input[key];
+      for (const key of ['repository','password','fingerprint','namespace','secondaryDatastore','secondaryPBS','additionalDatastores','capacityWarnPercent']) if (Object.hasOwn(input, key)) changes[key] = input[key];
       configs.apply({ ...configs.get(), ...changes });
       return json(res, 200, { success: true });
     }
@@ -171,13 +173,24 @@ const server = http.createServer(async (req, res) => {
       if (typeof input.datastore !== 'string' || !/^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,63}$/.test(input.datastore)) throw new Error('Ungültiger Datastore-Name.');
       let target;
       if (current.repository) {
-        if (current.secondaryDatastore) throw new Error('Beide Datastores sind bereits eingerichtet. Ziele unter Einstellungen bearbeiten.');
+        if (current.secondaryDatastore) {
+          if (input.ownServer) throw new Error('Weitere Datastores auf PBS 1 sind möglich. Den eigenen PBS-Zugang unter Datastore 2 bearbeiten.');
+          const entries = current.additionalDatastores || []; let slot=1; while(entries.some(item=>item.id==='extra'+slot)) slot++;
+          target = 'extra'+slot; configs.apply({...current,additionalDatastores:[...entries,{id:target,datastore:input.datastore}]});
+          return json(res,200,{success:true,target});
+        }
         configs.apply({ ...current, secondaryDatastore: input.datastore, secondaryPBS: input.ownServer ? { server: input.server, authId: input.authId, password: input.password, fingerprint: input.fingerprint || '', namespace: input.namespace || '' } : null }); target = 'secondary';
       } else {
         if (typeof input.server !== 'string' || !/^[a-zA-Z0-9.-]+$/.test(input.server) || typeof input.authId !== 'string' || !/^[^\s@]+@[^\s@]+$/.test(input.authId) || typeof input.password !== 'string' || !input.password) throw new Error('PBS-Adresse, Benutzer und Passwort oder Token fehlen.');
         configs.apply({ ...current, repository: `${input.authId}@${input.server}:${input.datastore}`, password: input.password, fingerprint: input.fingerprint || '', namespace: input.namespace || '' }); target = 'primary';
       }
       return json(res, 200, { success: true, target });
+    }
+    const partitionRoute=url.pathname.match(/^\/api\/partitions\/([a-z][a-z0-9_-]{0,39})(\/restore)?$/);
+    if(partitionRoute){
+      const id=partitionRoute[1];
+      if(req.method==='GET'&&!partitionRoute[2]) return json(res,200,await partitions.list(id));
+      if(req.method==='POST'){const input=await body(req);if(input.confirmed!==true)throw new Error('Aufteilung ausdrücklich bestätigen.');return json(res,200,partitionRoute[2]?partitions.restore(id):await partitions.save(id,input.mapping));}
     }
     if (req.method === 'POST' && url.pathname === '/api/sources/probe') {
       const input = await body(req); return json(res, 200, await inspectPath(input.path, input.expectedSource || ''));

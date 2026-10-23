@@ -59,7 +59,7 @@ export function validateSourceForm(source, sources, editing) {
   const errors = {}, other = sources.filter(item => item.id !== editing);
   if (!source.name || source.name.length > 60) errors.name = 'Name mit 1 bis 60 Zeichen angeben.';
   if (!/^[a-z][a-z0-9_-]{0,39}$/.test(source.id) || ['constructor','prototype','__proto__'].includes(source.id) || other.some(item => item.id === source.id)) errors.id = 'Eindeutige Backup-ID aus kleinen Buchstaben, Ziffern, _ und - angeben.';
-  if (!source.path.startsWith('/mnt/Daten/') || source.path.endsWith('/') || source.path.includes('//') || /[\r\n\0:]/.test(source.path) || source.path.split('/').some(part => ['.','..'].includes(part)) || other.some(item => item.path === source.path || item.path.startsWith(source.path + '/') || source.path.startsWith(item.path + '/'))) errors.path = 'Eindeutiger, nicht überlappender Ordner unter /mnt/Daten/ erforderlich.';
+  if (!source.path.startsWith('/mnt/Daten/') || source.path.endsWith('/') || source.path.includes('//') || /[\r\n\0:]/.test(source.path) || source.path.split('/').some(part => ['.','..'].includes(part)) || other.some(item => item.path === source.path || item.path.startsWith(source.path + '/') && !(source.partitioned && item.parentId===source.id) || source.path.startsWith(item.path + '/') && !(item.partitioned && source.parentId===item.id))) errors.path = 'Eindeutiger, nicht überlappender Ordner unter /mnt/Daten/ erforderlich.';
   if (source.expectedSource && !/^(?:\/\/[^/\s]+\/[^\r\n\0]+|(?:[^/:\s]+|\[[a-fA-F0-9:]+\]):\/[^\r\n\0]*)$/.test(source.expectedSource)) errors.expectedSource = 'Freigabe als //server/freigabe (SMB) oder server:/export (NFS) angeben oder leer lassen.';
   return errors;
 }

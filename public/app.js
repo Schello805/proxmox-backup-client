@@ -1,3 +1,4 @@
+import { installPartitions } from '/js/partitions.js';
 import { installLogbook } from '/js/logbook.js';
 import { installDashboard } from '/js/dashboard.js';
 import { installDrive } from '/js/gdrive.js';
@@ -12,7 +13,8 @@ import { createAPI } from '/js/api.js';
 import { createViews, dayNames } from '/js/views.js';
 import { createFormState, clearFieldErrors, showFieldErrors, serverField, validateMainForm, validateNotifyForm, validateSourceForm } from '/js/forms.js';
 'use strict';
-let assistant, timeline, operations, controls, restore, drive, dashboard;
+let additionalTargetsSnapshot = null;
+let partitionTools, assistant, timeline, operations, controls, restore, drive, dashboard;
 let lastTargets = [], lastConnections = {}, lastCapacities = {}, lastPreferencesSnapshot = null;
 const refreshWaiters = [];
 const $ = selector => document.querySelector(selector);
@@ -28,7 +30,8 @@ function notice(message, error = false) {
 }
 const presets = { manual: [], daily: [1,2,3,4,5,6,7], weekdays: [1,2,3,4,5], weekend: [6,7] };
 function fillForm(config) {
-  const mainSnapshot = JSON.stringify([config.repository, config.secondaryDatastore, config.secondaryPBS, config.fingerprint, config.namespace, config.capacityWarnPercent, config.hasPassword]);
+  renderAdditionalTargets(config);
+  const mainSnapshot = JSON.stringify([config.repository, config.secondaryDatastore, config.secondaryPBS, config.additionalDatastores, config.fingerprint, config.namespace, config.capacityWarnPercent, config.hasPassword]);
   if (!formState.dirty('configForm') && mainSnapshot !== lastMainSnapshot) {
   lastMainSnapshot = mainSnapshot;
   const form = $('#configForm');
@@ -86,7 +89,7 @@ async function refresh() {
     sourcePage = Math.max(0, Math.min(sourcePage, Math.ceil(data.folders.length / 6) - 1));
     $('#overviewPager').hidden = true; $('#sourcePage').textContent = `Seite ${sourcePage + 1} / ${Math.ceil(data.folders.length / 6)}`;
     $('#previousSources').disabled = sourcePage === 0; $('#nextSources').disabled = (sourcePage + 1) * 6 >= data.folders.length;
-    for (const folder of data.folders) {
+    for (const folder of data.folders.filter(item=>!item.partitioned)) {
       const row = element('tr'); row.dataset.folder = folder.id; const source = element('td'); const sourceButton = element('button', names[folder.id], 'source-link'); sourceButton.title = 'Details, Zeitplan und Verlauf öffnen'; sourceButton.addEventListener('click', () => openHistory(folder.id)); const path = element('code', folder.path); path.title = folder.path; const target = element('small', folder.targetRepository?.split(':').at(-1) || 'Ziel fehlt', 'source-target'); target.title = folder.targetRepository || 'PBS-Ziel noch nicht konfiguriert'; const heading = element('div', undefined, 'source-heading'); heading.append(sourceButton); source.append(heading, path); row.append(source);
       const mount = element('td'), badge = element('span', folder.ok ? '● Eingebunden' : folder.checking ? '● Prüfung läuft' : ['cifs','smb3','nfs','nfs4'].includes(folder.mount?.type) && folder.mount?.source && folder.expectedSource && folder.mount.source !== folder.expectedSource ? '● Mount geändert' : '● Nicht verfügbar', `badge ${folder.ok ? 'ok' : folder.checking ? 'busy' : 'bad'}`); badge.title = folder.ok ? `${folder.mount.source} → ${folder.mount.target} (${folder.mount.type}) · ${folder.identityConfirmed ? 'Mount-Identität bestätigt' : 'Mount-Quelle noch nicht festgelegt: unter Quellen bestätigen'}` : `${folder.error}${folder.mount?.source ? ' Erkannt: ' + folder.mount.source : ''}`; if (folder.checking) badge.title += ' · Lesbarkeit wird im Hintergrund geprüft'; if (folder.checkedAt) badge.title += ' · Letzte Prüfung: ' + date(folder.checkedAt); mount.append(badge);
       const size = folder.size;
@@ -312,10 +315,10 @@ for (const zone of timezones) { const option = element('option'); option.value =
 document.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click', closeContext));
 
 function resetSource() {
-  sourceEditing = null; clearFieldErrors($('#sourceForm')); $('#sourceForm').reset(); $('#sourceForm').elements.id.readOnly = false; $('#sourceFormTitle').textContent = 'Quelle hinzufügen'; $('#sourceResult').textContent = ''; $('#sourceProblem').hidden = true; fillSourcePlan({ days: [], time: '' });
+  $('#sourceSchedule').hidden=false; sourceEditing = null; clearFieldErrors($('#sourceForm')); $('#sourceForm').reset(); $('#sourceForm').elements.id.readOnly = false; $('#sourceFormTitle').textContent = 'Quelle hinzufügen'; $('#sourceResult').textContent = ''; $('#sourceProblem').hidden = true; fillSourcePlan({ days: [], time: '' });
 }
 function backupTargets() {
-  return [{ id: 'primary', name: savedConfig?.repository?.split(':').at(-1) || 'Datastore 1' }, ...(savedConfig?.secondaryDatastore ? [{ id: 'secondary', name: savedConfig.secondaryDatastore + (savedConfig.secondaryPBS ? ' · ' + savedConfig.secondaryPBS.server : '') }] : [])];
+  return [{ id: 'primary', name: savedConfig?.repository?.split(':').at(-1) || 'Datastore 1' }, ...(savedConfig?.secondaryDatastore ? [{ id: 'secondary', name: savedConfig.secondaryDatastore + (savedConfig.secondaryPBS ? ' · ' + savedConfig.secondaryPBS.server : '') }] : []), ...(savedConfig?.additionalDatastores || []).map(item=>({id:item.id,name:item.datastore}))];
 }
 function renderSources() {
   const selected = $('#sourceForm').elements.target.value || 'primary';
@@ -351,9 +354,10 @@ function renderSources() {
     });
     const mount=element('td');mount.append(element('span',folder.ok?'Eingebunden':folder.checking?'Wird geprüft':'Nicht verfügbar','badge '+(folder.ok?'ok':folder.checking?'busy':'bad')));if(folder.error)mount.append(element('small',folder.error,'row-error'));
     const size=element('td',folder.size?.bytes!=null?new Intl.NumberFormat('de-DE',{maximumFractionDigits:1}).format(folder.size.bytes/1024**3)+' GiB':'Noch nicht ermittelt');
-    const target=element('td');target.append(element('span',backupTargets().find(target=>target.id===(source.target||'primary'))?.name||'PBS fehlt'));if(savedConfig.gdrive.sources.includes(source.id))target.append(element('small','+ Google Drive','hint'));
+    const target=element('td');target.append(element('span',source.partitioned ? 'Aufgeteilt · '+savedConfig.sources.filter(item=>item.parentId===source.id).length+' Ordner' : backupTargets().find(target=>target.id===(source.target||'primary'))?.name||'PBS fehlt'));if(savedConfig.gdrive.sources.includes(source.id))target.append(element('small','+ Google Drive','hint'));
     const plan=element('td',scheduleText(savedConfig.schedules[source.id]));
-    actions.append(edit,pin,remove);row.append(info,mount,size,target,plan,actions);$('#sourceList').append(row);
+    const split=element('button',source.partitioned?'Aufteilung bearbeiten':'Unterordner zuordnen','row-action');split.type='button';split.onclick=()=>partitionTools.open(source.id);
+    actions.append(edit,pin,...(!source.parentId?[split]:[]),remove);row.append(info,mount,size,target,plan,actions);$('#sourceList').append(row);
   }
 }
 $('#sourceSearch').addEventListener('input', () => { delete $('#sourceSearch').dataset.exactId; renderSources(); });
@@ -367,7 +371,7 @@ $('#probeSource').addEventListener('click', async event => {
 $('#sourceForm').addEventListener('submit', async event => {
   event.preventDefault(); const form = event.currentTarget, button = form.querySelector('[type=submit]'); button.disabled = true;
   try {
-    const source = {}; for (const key of ['id','name','path','expectedSource','target']) source[key] = form.elements[key].value.trim();
+    const source = {...savedConfig.sources.find(item=>item.id===sourceEditing)}; for (const key of ['id','name','path','expectedSource','target']) source[key] = form.elements[key].value.trim();
     const errors = validateSourceForm(source, savedConfig.sources, sourceEditing);
     const chosenDays = [...$('#sourceDays').querySelectorAll('button[aria-pressed="true"]')].map(button => Number(button.dataset.day));
     if (!['manual','monthly'].includes(form.elements.planMode.value) && !chosenDays.length) errors.planMode = 'Mindestens einen Wochentag wählen.';
@@ -512,7 +516,7 @@ function editSource(id, inline = false) {
   const source = savedConfig.sources.find(item => item.id === id); if (!source) return;
   renderSources(); sourceEditing = id; const form = $('#sourceForm'); clearFieldErrors(form);
   for (const key of ['id','name','path','expectedSource']) form.elements[key].value = source[key];
-  form.elements.target.value = source.target || 'primary'; form.elements.id.readOnly = true;
+  $('#sourceSchedule').hidden=Boolean(source.partitioned); form.elements.target.value = source.target || 'primary'; form.elements.id.readOnly = true;
   $('#sourceFormTitle').textContent = `Quelle bearbeiten · ${source.name}`; $('#sourceResult').textContent = '';
   fillSourcePlan(savedConfig.schedules[id]); renderSourceProblem(id);
   if (inline) showContext('sourceForm', id); else form.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -553,6 +557,7 @@ function renderSourceProblem(id) {
   if (issue.kind === 'mount') { box.append(element('code', 'Erkannt: ' + (folder.mount?.source || 'kein Netzwerk-Mount')), element('code', 'Erwartet: ' + (folder.expectedSource || 'noch nicht festgelegt'))); }
   else { const button = element('button', issue.action, 'secondary'); button.type = 'button'; button.addEventListener('click', () => openProblem(folder, issue)); box.append(button); }
 }
+partitionTools = installPartitions({api,element,refresh});
 timeline = installTimeline({ element, openSource: id => editSource(id, true) });
 
 for (const details of document.querySelectorAll('#targets>.target-accordion, #overviewPlan')) {
@@ -580,3 +585,16 @@ $('#sourceOverviewDetails').open = true;
 $('#sourceOverviewDetails>summary').addEventListener('click', event => event.preventDefault());
 
 installLogbook({api,element,date,isAuthenticated:()=>authenticated});
+
+function renderAdditionalTargets(config) {
+ const root=$('#additionalTargets'),snapshot=JSON.stringify(config.additionalDatastores||[]);
+ if(snapshot===additionalTargetsSnapshot || root.contains(document.activeElement)&&document.activeElement.tagName==='INPUT')return;additionalTargetsSnapshot=snapshot;root.replaceChildren();
+ if(config.additionalDatastores?.length)root.append(element('h3','Weitere Datastores auf PBS 1'));
+ for(const entry of config.additionalDatastores||[]){
+  const row=element('div',undefined,'actions'),label=element('label','Datastore auf PBS 1'),input=element('input');input.value=entry.datastore;input.setAttribute('aria-label','Datastore '+entry.datastore);label.append(input);
+  const save=element('button','Änderung speichern','secondary');save.type='button';save.onclick=async()=>{try{await api('/api/targets',{additionalDatastores:config.additionalDatastores.map(item=>item.id===entry.id?{...item,datastore:input.value.trim()}:item)});loaded=false;await refresh();notice('Datastore gespeichert.');}catch(error){notice(error.message,true);}};
+  const remove=element('button','Entfernen','secondary');remove.type='button';remove.onclick=async()=>{try{await api('/api/targets/remove',{target:entry.id});loaded=false;await refresh();notice('App-Ziel entfernt. PBS-Datastore und Sicherungen bleiben erhalten.');}catch(error){notice(error.message,true);}};
+  row.append(label,save,remove);root.append(row);
+ }
+ if(config.additionalDatastores?.length)root.append(element('p','Gleicher PBS, Zugang, Fingerprint und Namespace wie Datastore 1. Entfernen löscht nur die App-Zuordnung.','hint'));
+}

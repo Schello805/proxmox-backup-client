@@ -17,6 +17,7 @@ export function installAssistant({ api, getConfig, refresh, openSource }) {
   function field(label, name, value, type = 'text') {
     const wrapper = document.createElement('label'); wrapper.textContent = label;
     const input = document.createElement('input'); input.name = name; input.type = type;
+    if (type === 'checkbox') { wrapper.classList.add('checkbox-label'); input.style.width='auto'; }
     if (type === 'checkbox') input.checked = Boolean(value); else input.value = value;
     input.addEventListener('input', () => { (kind === 'source' ? source : pbs)[name] = type === 'checkbox' ? input.checked : input.value; $('#assistantResult').textContent = ''; for (const update of commandViews) update(); });
     wrapper.append(input); return wrapper;
@@ -51,7 +52,7 @@ export function installAssistant({ api, getConfig, refresh, openSource }) {
         const grid = document.createElement('div'); grid.className = 'assistant-fields';
         grid.append(field('Quellenname', 'name', source.name), field('Backup-ID', 'id', source.id), field('Pfad im LXC', 'path', source.path), field('Netzwerkfreigabe', 'expectedSource', source.expectedSource));
         const label = document.createElement('label'); label.textContent = 'Backup-Ziel'; const select = document.createElement('select'); select.name = 'target';
-        for (const [value, name] of [['primary', config.repository.split(':').at(-1) || 'Datastore 1'], ...(config.secondaryDatastore ? [['secondary', config.secondaryDatastore + (config.secondaryPBS ? ' · ' + config.secondaryPBS.server : '')]] : [])]) { const option = document.createElement('option'); option.value = value; option.textContent = name; select.append(option); }
+        for (const [value, name] of [['primary', config.repository.split(':').at(-1) || 'Datastore 1'], ...(config.secondaryDatastore ? [['secondary', config.secondaryDatastore + (config.secondaryPBS ? ' · ' + config.secondaryPBS.server : '')]] : []), ...(config.additionalDatastores || []).map(item=>[item.id,item.datastore])]) { const option = document.createElement('option'); option.value = value; option.textContent = name; select.append(option); }
         select.value = source.target; select.addEventListener('change', () => source.target = select.value); label.append(select); grid.append(label, field('Bereits im LXC eingebunden', 'inLXC', source.inLXC, 'checkbox'));
         grid.querySelector('[name=name]').addEventListener('input', () => {
           const slug = source.name.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9_-]+/g, '-').slice(0, 32);
@@ -67,7 +68,7 @@ export function installAssistant({ api, getConfig, refresh, openSource }) {
         }
         commands('2 · LXC · Bash', 'Hier müssen die richtige Netzwerkfreigabe und lesbare Dateien erscheinen. Den Dienst nach Mount-Änderungen neu starten; vorher laufende Backups beenden.', `findmnt -T ${quote(source.path)} -o TARGET,SOURCE,FSTYPE &&\nrunuser -u qnap-backup -- ls -- ${quote(source.path)} &&\nDATA_DIR=/var/lib/qnap-backup node /opt/proxmox-backup-client/scripts/check.js --busy &&\nsystemctl restart qnap-backup`);
       } else {
-        text(`${source.name} · ${source.path} → ${source.target === 'secondary' ? config.secondaryDatastore : config.repository.split(':').at(-1)}`, 'assistant-summary');
+        text(`${source.name} · ${source.path} → ${source.target === 'secondary' ? config.secondaryDatastore : source.target.startsWith('extra') ? config.additionalDatastores.find(item=>item.id===source.target)?.datastore : config.repository.split(':').at(-1)}`, 'assistant-summary');
         text(`Erwartet: ${source.expectedSource}. Die App prüft jetzt die tatsächliche Mount-Zuordnung. Startet ohne automatischen Zeitplan.`);
       }
     } else renderPBS(config);
@@ -89,7 +90,7 @@ export function installAssistant({ api, getConfig, refresh, openSource }) {
   function validatePBS() {
     const config = getConfig();
     if (!/^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,63}$/.test(pbs.datastore)) throw new Error('Datastore-Namen aus Buchstaben, Zahlen, Punkt, Bindestrich oder Unterstrich wählen.');
-    if (!storedTarget && ((!pbs.ownServer && pbs.datastore === config.repository.split(':').at(-1)) || config.secondaryDatastore)) throw new Error(config.secondaryDatastore ? 'Beide Datastore-Plätze sind bereits eingerichtet. Vorhandene Ziele unter Backup-Ziele bearbeiten.' : 'Dieser Datastore ist bereits eingerichtet.');
+    if (!storedTarget && !pbs.ownServer && [config.repository.split(':').at(-1),...(!config.secondaryPBS?[config.secondaryDatastore]:[]),...(config.additionalDatastores||[]).map(item=>item.datastore)].includes(pbs.datastore)) throw new Error('Dieser Datastore ist bereits eingerichtet.');
     if (pbs.create && (!/^\/[a-zA-Z0-9_./-]+$/.test(pbs.path) || pbs.path === '/' || pbs.path.split('/').some(part => ['.', '..'].includes(part)))) throw new Error('Den vorhandenen Mountpfad des PBS-Datenträgers angeben, z. B. /mnt/datastore.');
     if (!storedTarget && (!config.repository || pbs.ownServer) && (!/^[a-zA-Z0-9.-]+$/.test(pbs.server) || !/^[^\s@]+@[^\s@]+$/.test(pbs.authId) || !pbs.password)) throw new Error('PBS-Adresse, Benutzer (z. B. backup@pbs) und Passwort oder Token eintragen.');
   }
@@ -101,7 +102,7 @@ export function installAssistant({ api, getConfig, refresh, openSource }) {
       if (!config.repository || pbs.ownServer) grid.append(field('PBS-Adresse', 'server', pbs.server), field('PBS-Benutzer', 'authId', pbs.authId), field('PBS-Passwort / Token', 'password', pbs.password, 'password'), field(pbs.ownServer ? 'PBS-2-Fingerprint' : 'PBS-1-Fingerprint', 'fingerprint', pbs.fingerprint), field('Namespace (optional)', 'namespace', pbs.namespace));
       $('#assistantBody').append(grid);
       if (!config.repository || pbs.ownServer) text('Fingerprint dieses PBS verwenden: auf genau diesem Server „proxmox-backup-manager cert info“ ausführen. Bei vertrauenswürdigem CA-Zertifikat kann das Feld leer bleiben.');
-      if (config.secondaryDatastore) text('Beide Ziele sind belegt. Unter Backup-Ziele kannst du sie bearbeiten oder entfernen.');
+      if (config.secondaryDatastore) text(`${2 + (config.additionalDatastores?.length || 0)} Ziele eingerichtet. Weitere Datastores auf PBS 1 sind möglich.`);
     } else if (step === 1) {
       if (pbs.create) {
         $('#assistantBody').append(field('PBS-Datenträger · Mountpfad', 'path', pbs.path));
@@ -139,7 +140,7 @@ export function installAssistant({ api, getConfig, refresh, openSource }) {
     } catch (e) { $('#assistantResult').textContent = e.message; }
     finally { busy = false; $('#assistantNext').disabled = false; }
   });
-  return { open(nextKind) { const next = nextKind === 'pbs' ? 'pbs' : 'source'; if (next !== kind) { kind = next; step = 0; $('#assistantResult').textContent = ''; } render(); } };
+  return { open(nextKind) { if(storedTarget && nextKind==='pbs'){storedTarget=null;step=0;pbs.datastore='';pbs.create=false;pbs.ownServer=false;} const next = nextKind === 'pbs' ? 'pbs' : 'source'; if (next !== kind) { kind = next; step = 0; $('#assistantResult').textContent = ''; } render(); } };
 }
 
 export function installMountTools({ getConfig, element }) {

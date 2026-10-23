@@ -1,0 +1,35 @@
+'use strict';
+const {test,expect,login}=require('./fixtures.cjs');
+test('Datastore 3 und 4 hinzufügen und Filmordner auf PBS 2 und 3 verteilen',async({page,app},testInfo)=>{
+ await login(page,{sourceDetails:false});
+ const headers={'X-Requested-With':'qnap-dashboard'};
+ const second=await page.request.post('/api/targets/setup',{headers,data:{datastore:'pbs2'}});expect(second.ok()).toBe(true);
+ await page.goto('/#assistant/pbs');const wizard=page.getByRole('region',{name:'Einrichtungsassistent'});
+ await wizard.getByRole('textbox',{name:'Neuer Datastore',exact:true}).fill('pbs3');
+ await wizard.getByRole('button',{name:'Weiter',exact:true}).click();await wizard.getByRole('button',{name:'Weiter',exact:true}).click();
+ await wizard.getByRole('button',{name:'Ziel speichern & prüfen',exact:true}).click();await expect(wizard.locator('#assistantResult')).toContainText('Ziel gespeichert');
+ const fourth=await page.request.post('/api/targets/setup',{headers,data:{datastore:'pbs4'}});expect(fourth.ok()).toBe(true);
+ await page.reload();await page.getByRole('link',{name:/Ziele$/}).click();await page.locator('#pbsSettings>summary').click();
+ await expect(page.locator('#additionalTargets')).toContainText('Weitere Datastores');await expect(page.locator('#additionalTargets input')).toHaveCount(2);
+ await page.getByRole('link',{name:/Quellen$/}).click();
+ await page.locator('#sourceList tr[data-source-id="filme"]').getByRole('button',{name:'Unterordner zuordnen',exact:true}).click();
+ const partition=page.locator('#sourcePartitions');await expect(partition).toContainText('Aufnahme A');
+ await partition.getByLabel('Ziel für alle Unterordner',{exact:true}).selectOption('secondary');await partition.getByRole('button',{name:'Allen zuweisen',exact:true}).click();
+ await partition.getByLabel('Ziel für Aufnahme C',{exact:true}).selectOption('extra1');await partition.getByRole('checkbox').check();
+ await partition.getByRole('button',{name:'Zuordnung speichern',exact:true}).click();await expect(partition).toContainText('Gespeichert: 3 Unterordner-Aufträge');await partition.screenshot({path:testInfo.outputPath('film-partition.png')});
+ const state=await(await page.request.get('/api/status')).json();const children=state.config.sources.filter(item=>item.parentId==='filme');expect(children).toHaveLength(3);expect(children.find(item=>item.path.endsWith('/Aufnahme C')).target).toBe('extra1');
+ const used=await page.request.post('/api/targets/remove',{headers,data:{target:'extra1'}});expect(used.status()).toBe(400);
+ await page.getByRole('link',{name:/Aufträge$/}).click();await expect(page.locator('#folders tr[data-folder="filme"]')).toHaveCount(0);
+ const selected=children.find(item=>item.target==='extra1');await page.locator(`#folders tr[data-folder="${selected.id}"]`).getByRole('button',{name:'Starten',exact:true}).click();
+ await expect(page.locator('#activityTitle')).toContainText('Filme');
+ await app.finish();await page.getByRole('link',{name:/Protokoll$/}).click();await expect(page.locator('#logText')).toContainText('pbs3');
+});
+test('Zusätzliche Datastores lassen sich bearbeiten und unbenutzte App-Ziele entfernen',async({page})=>{
+ await login(page,{sourceDetails:false});const headers={'X-Requested-With':'qnap-dashboard'};
+ for(const datastore of ['pbs2','pbs3','pbs4'])expect((await page.request.post('/api/targets/setup',{headers,data:{datastore}})).ok()).toBe(true);
+ await page.reload();await page.getByRole('link',{name:/Ziele$/}).click();await page.locator('#pbsSettings>summary').click();
+ const extras=page.locator('#additionalTargets');await extras.getByLabel('Datastore pbs4',{exact:true}).fill('archive4');
+ await extras.locator('.actions').nth(1).getByRole('button',{name:'Änderung speichern',exact:true}).click();await expect(page.locator('#notice')).toContainText('Datastore gespeichert');
+ await extras.locator('.actions').first().getByRole('button',{name:'Entfernen',exact:true}).click();await expect(extras.locator('input')).toHaveCount(1);await expect(extras.locator('input')).toHaveValue('archive4');
+ const config=(await(await page.request.get('/api/status')).json()).config;expect(config.additionalDatastores).toEqual([{id:'extra2',datastore:'archive4'}]);
+});

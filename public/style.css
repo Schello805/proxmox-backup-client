@@ -2162,3 +2162,9 @@ aside a.system-link { display:flex; align-items:center; justify-content:center; 
 #jobsTable .plan-link a{color:inherit;text-decoration:none}#jobsTable .plan-link a:hover{text-decoration:underline}#jobsTable #overviewDriveSummary{font:inherit;font-size:11px;width:fit-content}#jobsTable td:last-child .row-action{display:block;width:fit-content;margin-bottom:5px}
 
 .version-update{display:inline-block;margin-left:4px;color:inherit;font-size:10px;text-decoration:none}.version-update[data-status="available"]{color:#f4c66b;font-weight:700}.version-update[data-status="current"]{color:#8ad5b5}.version-update:hover{text-decoration:underline}
+
+.partition-table{max-height:55vh;overflow:auto;margin:16px 0}.partition-table thead{position:sticky;top:0;background:var(--surface,#fff)}.partition-table td:first-child{overflow-wrap:anywhere}.additional-targets:empty{display:none}.additional-targets{margin:16px 22px}.additional-targets label{flex:1;min-width:160px}
+
+.assistant-panel label.checkbox-label{display:flex;flex-direction:row;align-items:center;justify-content:flex-start;gap:8px}.assistant-panel label.checkbox-label input{width:auto;order:-1;margin:0}#sourcePartitions .checkbox-label{display:flex;flex-direction:row;align-items:flex-start;gap:8px}#sourcePartitions .checkbox-label input{width:auto;margin-top:3px}
+
+#sourcePartitions{padding:20px;margin:20px 0}#sourcePartitions select{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:#f9fcfa;max-width:100%}#sourcePartitions .checkbox-label{font-size:12px;font-weight:500}
