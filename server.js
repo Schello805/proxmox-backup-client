@@ -189,7 +189,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { success: true, target });
     }
     const autoPreview=url.pathname.match(/^\/api\/partitions\/([a-z][a-z0-9_-]{0,39})\/preview$/);
-    if(req.method==='POST'&&autoPreview){if(backups.busy||drive.busy||isMaintenance())throw Error('Ein Auftrag läuft.');const input=await body(req),listing=await partitions.list(autoPreview[1]);if(input.mapping)listing.folders=listing.folders.map(item=>({...item,target:input.mapping.find(value=>value.folder===item.name)?.target||''}));return json(res,200,await autoPartitions.plan(autoPreview[1],require('./lib/auto-partitions').validateAutoPartition(input.autoPartition),input.files||[],listing));}
+    if(req.method==='POST'&&autoPreview){if(backups.busy||drive.busy||isMaintenance())throw Error('Ein Auftrag läuft.');const input=await body(req),listing=await partitions.list(autoPreview[1]);if(input.mapping)listing.folders=listing.folders.map(item=>({...item,target:input.mapping.find(value=>value.folder===item.name)?.target||''}));return json(res,200,await autoPartitions.plan(autoPreview[1],require('./lib/auto-partitions').validateAutoPartition(input.autoPartition),input.files||[],listing,{preview:true}));}
     const partitionRoute=url.pathname.match(/^\/api\/partitions\/([a-z][a-z0-9_-]{0,39})(\/restore)?$/);
     if(partitionRoute){
       const id=partitionRoute[1];
