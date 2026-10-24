@@ -2142,6 +2142,7 @@ aside a.system-link { display:flex; align-items:center; justify-content:center; 
 .source-help-heading>label { margin:0; display:block; }
 .source-help-controls { display:grid; gap:5px; }
 .source-help-controls>input,.source-help-controls>select { width:100%; min-width:0; box-sizing:border-box; }
+#probeSource { justify-self:start; margin-bottom:3px; }
 .source-help-button { position:static; flex:0 0 20px; width:20px; height:20px; padding:0; border:1px solid var(--line); border-radius:50%; background:#edf5f1; color:var(--green); font:600 12px/18px sans-serif; cursor:help; }
 .source-help-button:focus-visible { outline:2px solid var(--green); outline-offset:2px; }
 .source-help-tip { position:absolute; top:24px; left:0; z-index:20; width:min(320px, 100%); box-sizing:border-box; padding:12px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--text); box-shadow:0 6px 24px #102e2b26; font-size:12px; line-height:1.5; overflow-wrap:anywhere; }

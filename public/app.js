@@ -317,6 +317,7 @@ for (const zone of timezones) { const option = element('option'); option.value =
 document.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click', closeContext));
 
 installSourceHelp($('#sourceForm'));
+$('#sourceForm').elements.expectedSource.parentElement.prepend($('#probeSource'));
 function resetSource() {
   $('#sourceSchedule').hidden=false; sourceEditing = null; clearFieldErrors($('#sourceForm')); $('#sourceForm').reset(); $('#sourceForm').elements.id.readOnly = false; $('#sourceFormTitle').textContent = 'Quelle hinzufügen'; $('#sourceResult').textContent = ''; $('#sourceProblem').hidden = true; fillSourcePlan($('#sourceForm').elements.target.value === 'gdrive' ? savedConfig.gdrive.schedule : { days: [], time: '' }); renderSourceTargetHint();
 }
