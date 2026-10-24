@@ -1,26 +1,17 @@
-# QNAP · Backup Control
+# Backup Control
 
-Lokale Web-App für **QNAP → Proxmox-Host → Debian-LXC → Proxmox Backup Server**.
+Lokale Web-App für **QNAP → Debian-LXC → Proxmox Backup Server** und **Google Drive über Rclone**. Mit Auftragssteuerung, gemeinsamem Kalender und importierbarer Backup-Strategie.
 
-Mount-Status und Ordnergrößen, manuelle Backups mit Abbruchfunktion, Wochen- und Monatspläne mit Zeitzone und Zeitplanvorschlägen, Gantt-Diagramm, PBS-Speicherstände, Fortschritt, Laufvergleiche, bearbeitbare Warteschlange, Startfenster, Upload-Limit, Einstellungs-Export und optionale ntfy-Zusammenfassungen. Zwei Backup-Ziele auf demselben oder unterschiedlichen PBS; das Ziel ist je Quelle wählbar. Ein Gesundheitsstatus je Quelle führt zur passenden Aktion; die Wiederherstellungsansicht öffnet den PBS-Datastore und zeigt Snapshot und kurze Prüfschritte. Quellen werden unter Quellen verwaltet; Aufträge und deren Zeitpläne stehen auf der eigenen Seite Aufträge. Ein kompakter Assistent führt durch neue Quellen und PBS-Ziele, inklusive Kopierbefehlen.
-
-Backup-Ziele werden über eine gemeinsame Auswahl hinzugefügt. Kennzahlen zeigen eingerichtete Ziele, Quellenzuordnung, automatische PBS-Pläne und die ermittelte Quellgröße mit Messabdeckung.
-
-Das Dashboard hebt den PBS-Sicherungsstand mit überfälligen und noch ungesicherten Quellen hervor. Google Drive zeigt seinen Status im Zielpanel; Fortschritt und Steuerung stehen auf der Auftragsseite. Zielprobleme bleiben auch bei geschlossenen Einstellungen sichtbar. Das Dashboard zeigt außerdem Mounts, Zielzustand, laufende Aufträge und Hinweise; Auftragsliste, Warteschlange, Drive-Aufträge und Gantt stehen auf der separaten Seite Aufträge. Eine gemeinsame Tabelle zeigt PBS- und Drive-Aufträge mit Quelle, Ziel/Betriebsart, Zeitplan, nächstem Start, letztem Erfolg und Status. Drive-Quellen mit gemeinsamem Plan erscheinen als ein gemeinsamer Auftrag. Die Auftragsliste bleibt offen. Unter Quellen stehen alle Datenquellen in einer durchsuchbaren Tabelle mit Statusfilter und feststehendem Tabellenkopf.
-
-Die eigene Seite „Protokoll“ bündelt aktuelle und archivierte PBS-Ausgaben, Drive-Laufergebnisse und Benachrichtigungsfehler mit Bereichs-, Quellen- und Zielfilter. PBS- und Drive-Protokolle werden bis 256 KiB angezeigt. Drive speichert konkrete Rclone-Meldungen einschließlich betroffener Dateien, behält zehn Läufe und blendet Zugangsdaten aus. Ältere, nicht aufgezeichnete Fehlermeldungen können nicht rekonstruiert werden.
-
-Die Navigation steht links: Übersicht, Aufträge, Quellen und Ziele oben; Einstellungen, Anleitung und zuletzt Protokoll unten über dem Controller-Hinweis. Allgemeine Optionen, Systeminformationen, Diagnose und Updates stehen gemeinsam unter Einstellungen; der PBS-Bestand bleibt direkt bei der PBS-Konfiguration erreichbar.
-
-Verwaltung erfolgt über Quellen, Backup-Ziele und Einstellungen. Unter Quellen → Mounts verwalten stehen geprüfte Kopierbefehle für Änderungen an der LXC-Durchreichung; SMB-Storage selbst wird in der Proxmox-Weboberfläche verwaltet. Die App-Anleitung enthält die Übersicht „Verwaltung · Was geht wo?“. Entfernen in der App löscht keine Quelldaten oder Sicherungen.
-
-## Voraussetzungen
-
-- Debian-12-LXC mit Node.js ab 18 und installiertem `proxmox-backup-client`.
-- QNAP-Freigaben am Proxmox-Host per SMB eingebunden und in den LXC unter `/mnt/Daten/` durchgereicht.
-- Der Dienstbenutzer muss die Quelldaten lesen können. Die App erstellt keine Mounts.
+- **Übersicht:** Laufstatus, Fehler, Quellen, Ziele und tatsächliche Sicherungswege.
+- **Aufträge:** PBS und Drive starten/abbrechen; externe Pläne einheitlich dokumentieren und filtern.
+- **Zeitplan:** gemeinsamer Wochenkalender und Agenda; gemessene und geplante Dauer bleiben unterscheidbar.
+- **Strategie:** Backup-Planner-JSON mit Vorschau importieren, Geräte/Standorte/Datenbestände verwalten und ausdrücklich mit App-Aufträgen verbinden.
+- **Quellen / Ziele:** SMB- oder NFS-Bind-Mounts registrieren, PBS-Datastores und Drive konfigurieren. Mount-Änderungen am Host bleiben Teil der Anleitung.
+- **Einstellungen / Protokoll:** Zeitzone, Bandbreite, ntfy, Updates, Diagnose und zentrale Laufprotokolle.
 
 ## Installation
+
+Voraussetzung: Debian-12-LXC, Node.js ab 18, installierter `proxmox-backup-client` und für den Dienstbenutzer lesbare Freigaben unter `/mnt/Daten/`.
 
 Als root im LXC:
 
@@ -33,54 +24,28 @@ nano /etc/qnap-backup.env
 bash deploy/install.sh
 ```
 
-Im Environment `APP_PASSWORD` setzen (mindestens sechs Zeichen) oder für Zugriff ohne Anmeldung leeren. Oberfläche: **http://LXC-IP:3000**. Nur im vertrauenswürdigen Netz betreiben; für weitere Zugriffe HTTPS verwenden.
+Oberfläche: **http://LXC-IP:3000**. `APP_PASSWORD` schützt die App; leer lassen für Zugriff ohne Anmeldung im vertrauenswürdigen Netz. PBS und Google Drive anschließend unter **Ziele** einrichten.
 
-Danach PBS-Zugang unter **Backup-Ziele** speichern und prüfen. Unter **Quellen** die SMB-Zuordnung kontrollieren. Ein erstes Backup starten und im PBS eine Datei testweise wiederherstellen.
-
-## Update und Betrieb
+## Aktualisieren
 
 ```sh
 bash /opt/proxmox-backup-client/deploy/update.sh
-systemctl status qnap-backup
-journalctl -u qnap-backup -n 50
 ```
 
-**Alle sichern** stellt sämtliche eingerichteten Quellen in die Warteschlange; sie werden nacheinander auf ihr jeweiliges Ziel gesichert. Bereits laufende oder wartende Quellen werden übersprungen.
+Vor dem Update laufende Aufträge beenden. Konfiguration und Verlauf liegen unter `/var/lib/qnap-backup/`. Die App löscht keine PBS-Sicherungen; Aufbewahrung und Verify werden im PBS konfiguriert. PBS nutzt `.pxar`-Archive, Drive normale Dateien mit wählbarem Versions- oder Abgleichmodus.
 
-Laufende und wartende Aufträge lassen sich in der Übersicht einzeln oder über **Alle abbrechen** stoppen. Vor einem Update warten, bis kein Auftrag mehr läuft oder wartet. Mount-Zuordnungen werden sofort aktualisiert; Lesbarkeit und Ordnergrößen werden im Hintergrund geprüft.
+## Anleitungen
 
-Konfiguration und Verlauf: `/var/lib/qnap-backup/`. Backups laufen nacheinander als `.pxar`-Archive ohne zusätzliche clientseitige Verschlüsselung; die Übertragung erfolgt per TLS. Aufbewahrung und Verify-Jobs werden im PBS konfiguriert. Die App löscht keine PBS-Sicherungen.
+- [Installation, Betrieb und Fehlerbehebung](docs/OPERATIONS.md)
+- [Google Drive vollständig einrichten](docs/GOOGLE-DRIVE.md)
+- [Planner-Import, Strategie und Kalender](docs/STRATEGY.md)
 
-[Installation, Update, Rückweg und Fehlerbehebung](docs/OPERATIONS.md)
-
-## Google Drive (optional)
-
-[Vollständige Google-Drive-Einrichtung](docs/GOOGLE-DRIVE.md): Google-Client-ID, jede Rclone-Abfrage, Anmeldung ohne Browser und erster Test. Auch direkt in der App unter **Anleitung → Google Drive vollständig einrichten**.
-
-Backup-Ziele und Speicherstände sind aufklappbar; die Google-Kontoquote ergänzt die PBS-Speicherstände. PBS und Google Drive haben getrennte Upload-Limits; aktiviertes ntfy meldet auch Drive-Fehler. Die Übersicht zeigt Drive-Quellen, eigenen Zeitplan, nächsten Termin, letzten Erfolg und Fortschritt; Kopien lassen sich dort starten und abbrechen. Normale Dateien je Quelle in einem eigenen Zielunterordner: Pro Drive-Ziel wählbar: Sicherung mit Versionen (alte Dateien in einem separaten `.versions`-Ordner), Abgleich ohne Löschen und Abgleich mit Löschen (mit Bestätigung). Alle drei übertragen nur neue und geänderte Dateien statt jedes Mal den gesamten Bestand; keine automatische Echtzeitüberwachung. Alte Versionen werden nur im Sicherungsmodus archiviert und nicht automatisch bereinigt; es entstehen keine vollständigen Drive-Snapshots. Die Google-Anmeldung in `rclone.conf` separat schützen und sichern; sie gehört nicht zum Einstellungs-Export.
+Der Planner-Import übernimmt Dokumentation und startet keine Sicherungen. Externe Pläne sind kein Nachweis erfolgreicher Ausführung. Strategie und App-Einstellungen getrennt exportieren; die Rclone-Anmeldung separat sichern.
 
 ## Entwicklung
 
 ```sh
 npm ci
-npm start
-npm test
 npx playwright install chromium
-npm run test:browser
+npm run test:all
 ```
-
-Ohne echte CIFS-Mounts sind Backups gesperrt. Die Browsertests verwenden isolierte Testdaten.
-
-Nach jedem Drive-Upload vergleicht die App Dateinamen und Größen mit dem Ziel. Unter **Ziele → Google Drive → Zielbestand gründlich prüfen** startet ein lesender Vergleich mit verfügbaren Prüfsummen (sonst Größen). Zusätzliche Zieldateien sind nur beim Abgleich ohne Löschen erlaubt. Ergebnisse stehen getrennt vom Upload im Auftragsstatus und im zentralen Protokoll; Fehler lösen bei aktiviertem ntfy eine Meldung aus. Eine laufende Prüfung lässt sich abbrechen. Während des Vergleichs die Quelle möglichst nicht ändern.
-
-Nach einem PBS-Backup bestätigt die App den Snapshot samt erwartetem Archiv aus dem aktuellen Lauf. Dies prüft den Bestand, nicht sämtliche Datenblöcke. **Verify-Jobs und regelmäßige Wiederherstellungstests auf dem PBS bleiben erforderlich.**
-
-Neben der Versionsnummer zeigt die App den Update-Status. GitHub wird beim Öffnen und danach stündlich bei geöffneter App geprüft; ein Klick auf die Anzeige öffnet System & Wartung. Updates bleiben manuell.
-
-SMB/CIFS und NFS (NFSv3/NFSv4) werden als Quellen unterstützt. Nach einem Protokollwechsel unter **Quellen → Bearbeiten → Mount-Quelle ermitteln → Quelle speichern** die neue Zuordnung bestätigen, z. B. `192.168.1.21:/Daten`. Eine alte SMB-Zuordnung wird aus Sicherheitsgründen nicht automatisch ersetzt.
-
-**Mehrere Datastores / Filme aufteilen:** Unter Ziele → Ziel hinzufügen → PBS-Ziel weitere Datastores auf PBS 1 registrieren (bis zu 20 Ziele). Zusätzliche Datastores verwenden dessen Zugang, Fingerprint und Namespace. Im Assistenten bei Bedarf den Befehl zum Anlegen auf dem PBS verwenden; Datenträger vorher bereitstellen.
-
-Unter Quellen → Filme → Dateien & Ordner zuordnen **Automatische Verteilung** einschalten. Mindestens zwei Ziele wählen, die Reihenfolge mit ↑ festlegen und je Ziel die maximale Belegung einstellen (Standard 80 %, einstellbar 1–99 %). Mit „Verteilung mit Speicherstand prüfen“ den Vorschlag prüfen; Rückmeldung und Platzfehler stehen direkt am Button. Offene Ordner verhindern die Dateivorschau nicht: über „Nur offene Einträge“ vor dem Speichern bewusst zuordnen oder auslassen, dann bestätigen und speichern. Vor jedem manuellen oder geplanten Lauf werden neue reguläre Dateien automatisch dem ersten Ziel mit genügend Platz innerhalb seiner Grenze zugeordnet, danach dem nächsten. Bestehende Zuordnungen bleiben fest; Dateien auf der QNAP werden nicht verschoben. Noch nicht hochgeladene und geänderte Dateien reservieren konservativ ihre unkomprimierte Größe plus Metadatenpuffer. Reicht kein Ziel aus oder fehlen aktuelle Speicherstände, stoppt der Auftrag mit Fehler; aktiviertes ntfy meldet ihn. Die tatsächliche Belegung wird vor, nach und während des Uploads alle 30 Sekunden geprüft; die Grenze ist eine App-Schutzfunktion, keine harte PBS-Quote. Andere Schreiber und PBS-Versionen können die Belegung verändern. Neue Ordner/Verknüpfungen ausdrücklich zuordnen oder auslassen; eine `.pxarexclude` sperrt Datei-Sammelaufträge. Die Hauptquelle wird nicht zusätzlich komplett auf PBS gesichert, bleibt aber für eine unabhängige Google-Drive-Kopie verfügbar. Ohne Automatik bleibt die manuelle Dateizuordnung möglich. Datastores können denselben physischen Speicher teilen; ihre Kapazitäten nicht einfach addieren.
-
-Alle eingerichteten PBS-Datastores stehen unter Ziele in einer gemeinsamen dynamischen Liste. Namen, Server, Quellenanzahl und Verbindungsstatus werden je Ziel angezeigt. Speichern, Prüfen, Bestand und Entfernen funktionieren direkt in der jeweiligen Zeile; feste Felder für Datastore 1/2 entfallen.

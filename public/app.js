@@ -1,3 +1,4 @@
+import { installStrategy } from '/js/strategy.js';
 import { installPartitions } from '/js/partitions.js';
 import { installSourceHelp } from '/js/source-help.js';
 import { installLogbook } from '/js/logbook.js';
@@ -15,7 +16,7 @@ import { createViews, dayNames } from '/js/views.js';
 import { createFormState, clearFieldErrors, showFieldErrors, serverField, validateMainForm, validateNotifyForm, validateSourceForm } from '/js/forms.js';
 'use strict';
 let additionalTargetsSnapshot = null;
-let partitionTools, assistant, timeline, operations, controls, restore, drive, dashboard;
+let strategyUI, partitionTools, assistant, timeline, operations, controls, restore, drive, dashboard;
 let lastTargets = [], lastConnections = {}, lastCapacities = {}, lastPreferencesSnapshot = null;
 const refreshWaiters = [];
 const $ = selector => document.querySelector(selector);
@@ -112,7 +113,7 @@ async function refresh() {
     $('#systemInfo').replaceChildren();
     for (const [label, value] of [['Host', data.system.hostname], ['System', data.system.platform], ['Backup Client', data.system.client], ['Zeitpläne', data.system.timezone]]) { const item = element('span'); item.append(element('strong', label), document.createTextNode(value)); $('#systemInfo').append(item); }
     if (data.folders.some(folder => folder.checking)) setTimeout(() => { if (authenticated) void refresh(); }, 1000);
-    fillForm(data.config); drive?.update(data.drive); loaded = true; $('#backupAll').disabled = false; timeline?.update(data.timeline); operations?.update(data); dashboard?.update(data); controls?.update(data); if (document.body.dataset.page === 'sourcesDialog' && !$('#sourceList').contains(document.activeElement)) renderSources(); if (sourceEditing) renderSourceProblem(sourceEditing);
+    fillForm(data.config); drive?.update(data.drive); loaded = true; $('#backupAll').disabled = false; timeline?.update(data.timeline); operations?.update(data); dashboard?.update(data); strategyUI?.update(data); controls?.update(data); if (document.body.dataset.page === 'sourcesDialog' && !$('#sourceList').contains(document.activeElement)) renderSources(); if (sourceEditing) renderSourceProblem(sourceEditing);
     const connectionMessages = (data.targets || []).filter(target => data.connections?.[target.id]).map(target => `${target.name}: ${data.connections[target.id].message} (${date(data.connections[target.id].checkedAt)})`);
     $('#connectionResult').textContent = connectionMessages.join(' · ');
     await refreshActivity();
@@ -152,7 +153,7 @@ function navigate() {
   if (location.hash === '#systemDialog') { history.replaceState(null, '', '#settings'); $('#systemMaintenance').open = true; }
   if (/^#overview\/[a-z][a-z0-9_-]*\/(edit|history|restore|log)$/.test(location.hash)) history.replaceState(null, '', location.hash.replace('#overview/', '#jobs/'));
   const [requested, id, tab] = location.hash.slice(1).split('/');
-  const page = ['overview','settings','targets','guide','sourcesDialog','pbsDialog','mountTools','logs','jobs','assistant'].includes(requested) ? requested : 'overview';
+  const page = ['overview','settings','targets','guide','sourcesDialog','pbsDialog','mountTools','logs','jobs','assistant','strategy','schedule'].includes(requested) ? requested : 'overview';
   document.body.dataset.page = page;
   if (!id || page === 'assistant') window.scrollTo({ top: 0, behavior: 'instant' });
   document.querySelectorAll('.page').forEach(el => el.hidden = el.id !== page);
@@ -160,6 +161,7 @@ function navigate() {
   (page === 'jobs' ? $('#jobsActivitySlot') : $('#overviewActivitySlot')).append($('.activity'));
   if (!savedConfig) return;
   if (page === 'assistant') assistant?.open(id);
+  if (page === 'strategy' || page === 'schedule') strategyUI?.open(page,id,tab);
   if (page === 'mountTools') document.dispatchEvent(new Event('open-mount-tools'));
   if (page === 'sourcesDialog') renderSources();
   if (page === 'pbsDialog') openPBS(id);
@@ -299,7 +301,7 @@ async function refreshActivity() {
       if (warnings) { $('#activityBadge').textContent = `${warnings} Hinweis${warnings > 1 ? 'e' : ''}`; $('#activityBadge').className = 'badge busy'; }
     }
     if (data.maintenance && !data.active) { $('#activityTitle').textContent = 'Wartung / Update'; $('#activityBadge').textContent = 'Pausiert'; $('#activityBadge').className = 'badge busy'; $('#activityDescription').textContent = 'Neue Backups sind während des Updates gesperrt.'; }
-    controls?.activity(data);
+    controls?.activity(data); strategyUI?.activity(data);
     if (['queued','running','cancelling'].includes(data.drive?.status)) {
       $('#runningCount').textContent = (data.active ? 1 : 0) + data.queue.length + 1;
       $('#cancelAll').hidden = false; $('#cancelAll').disabled = false;
@@ -582,6 +584,7 @@ for (const details of document.querySelectorAll('#targets>.target-accordion, #ov
   try { details.open = localStorage.getItem('backup-target-' + details.id) === 'open'; } catch {}
   details.addEventListener('toggle', () => { try { localStorage.setItem('backup-target-' + details.id, details.open ? 'open' : 'closed'); } catch {} });
 }
+strategyUI = installStrategy({api,element,date,scheduleText,notice});
 dashboard = installDashboard({ element, date, openSource: source => { $('#sourceSearch').value = source.name; $('#sourceSearch').dataset.exactId=source.id; location.hash = 'sourcesDialog'; renderSources(); }, resolveProblem: (source, issue) => { if (issue.view === 'source') location.hash = 'sourcesDialog/' + source.id + '/edit'; else if (issue.view === 'log') void openLog(source.id); else if (issue.view === 'backup') location.hash = 'jobs'; else { $('#pbsSettings').open=true;location.hash='targets'; } } });
 drive = installDrive({ api, element, notice, scheduleText, date });
 operations = installOperations({api,element,refresh,date});

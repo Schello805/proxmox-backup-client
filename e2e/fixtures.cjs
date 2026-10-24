@@ -47,6 +47,6 @@ async function login(page, { sourceDetails = true } = {}) {
   await expect(page.locator('#loginDialog')).not.toBeVisible();
   await expect(page.locator('#folders tr')).toHaveCount(6);
   if (sourceDetails) await page.getByRole('link',{name:/Aufträge$/}).click();
-  if (sourceDetails) for (const id of ['sourceOverviewDetails','overviewPlan']) if ((await page.locator('#'+id).getAttribute('open')) === null) await page.locator('#'+id+'>summary').click();
+  if (sourceDetails) for (const id of ['sourceOverviewDetails','overviewPlan']) await page.locator('#'+id).evaluate(node=>{node.open=true;});
 }
 module.exports = { test, expect, login };

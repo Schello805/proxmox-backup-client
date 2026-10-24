@@ -6,6 +6,7 @@ const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { loadConfig, loadState, saveJSON, checkRuntime, acquireLock } = require('./lib/storage');
 const { createConfigService } = require('./lib/config-service');
+const strategy = require('./lib/strategy');
 const { createHistory } = require('./lib/history');
 const { exportConfig, previewRestore, revision } = require('./lib/config-backup');
 const { restoreInfo } = require('./lib/restore');
@@ -40,6 +41,10 @@ process.once('exit', releaseLock);
 const initial = loadConfig(CONFIG, path.join(ROOT, 'config.example.json'), PASS);
 const STATE = path.join(DATA, 'state.json'), state = loadState(STATE);
 const persist = () => saveJSON(STATE, state);
+const STRATEGY = path.join(DATA, 'strategy.json');
+let strategyDocument = fs.existsSync(STRATEGY) ? JSON.parse(fs.readFileSync(STRATEGY, 'utf8')) : strategy.empty();
+const normalizedStrategy = strategy.normalize(strategyDocument).document;
+strategyDocument = {...normalizedStrategy, mapping: strategyDocument.mapping || {datasets:{},targets:{}}};
 for (const source of initial.sources) state.watchSince[source.id] ||= new Date().toISOString();
 let backups, pbs, capacity, drive, autoPartitions;
 const { createPartitions } = require('./lib/partitions');
@@ -92,7 +97,7 @@ const server = http.createServer(async (req, res) => {
       if (req.headers['x-requested-with'] !== 'qnap-dashboard') return json(res, 403, { error: 'Anfrage-Header fehlt.' });
     }
     // Nur die App-Hülle ist öffentlich. Daten und Aktionen benötigen eine Sitzung.
-    const assets = { '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], ...Object.fromEntries(['source-help','partitions','logbook','dashboard','gdrive','api','views','forms','maintenance','assistant','timeline','problems','operations','controls','restore'].map(name => ['/js/' + name + '.js', ['js/' + name + '.js', 'text/javascript']])) };
+    const assets = { '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], '/workspace.css': ['workspace.css', 'text/css'], ...Object.fromEntries(['strategy','source-help','partitions','logbook','dashboard','gdrive','api','views','forms','maintenance','assistant','timeline','problems','operations','controls','restore'].map(name => ['/js/' + name + '.js', ['js/' + name + '.js', 'text/javascript']])) };
     if (req.method === 'GET' && assets[url.pathname]) {
       const [file, type] = assets[url.pathname]; res.writeHead(200, { 'Content-Type': `${type}; charset=utf-8`, 'Cache-Control': 'no-cache' });
       return res.end(fs.readFileSync(path.join(ROOT, 'public', file)));
@@ -101,6 +106,24 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/login') return auth.login(req, res, await body(req));
     if (!url.pathname.startsWith('/api/')) return json(res, 404, { error: 'Nicht gefunden.' });
     if (!auth.authorized(req)) return json(res, 401, { error: 'Bitte anmelden.' });
+    if (req.method === 'GET' && url.pathname === '/api/strategy') return json(res,200,{document:strategyDocument,revision:strategy.revision(strategyDocument),view:strategy.strategyView(strategyDocument,getConfig(),state,drive.snapshot(),new Date(),url.searchParams.get('week'))});
+    if (req.method === 'POST' && url.pathname === '/api/strategy/preview') {
+      const input=await body(req),preview=strategy.normalize(input.document);
+      return json(res,200,{...preview,revision:strategy.revision(strategyDocument),counts:Object.fromEntries(Object.entries(preview.document.data).map(([key,rows])=>[key,rows.length]))});
+    }
+    if (req.method === 'POST' && ['/api/strategy/import','/api/strategy/save'].includes(url.pathname)) {
+      const input=await body(req);
+      if(input.revision!==strategy.revision(strategyDocument))return json(res,409,{error:'Strategie wurde inzwischen geändert. Neu laden und erneut prüfen.'});
+      const next=strategy.normalize(input.document).document;
+      next.mapping=strategy.validateMapping(input.mapping||input.document.mapping||{datasets:{},targets:{}},next,getConfig());
+      if(fs.existsSync(STRATEGY)){
+        const directory=path.join(DATA,'strategy-backups');fs.mkdirSync(directory,{recursive:true,mode:0o700});
+        saveJSON(path.join(directory,Date.now()+'-'+require('node:crypto').randomUUID()+'.json'),strategyDocument);
+        for(const file of fs.readdirSync(directory).filter(file=>/^\d+-[a-f0-9-]+\.json$/.test(file)).sort().reverse().slice(10))fs.unlinkSync(path.join(directory,file));
+      }
+      saveJSON(STRATEGY,next);strategyDocument=next;
+      return json(res,200,{success:true,revision:strategy.revision(next)});
+    }
     if (req.method === 'GET' && url.pathname === '/api/updates') return json(res, 200, { installed: await updates.installed(), result: updates.current() });
     if (req.method === 'POST' && url.pathname === '/api/updates/check') return json(res, 200, await updates.check());
     if (req.method === 'GET' && url.pathname === '/api/diagnostics') return json(res, 200, diagnostics.current());
