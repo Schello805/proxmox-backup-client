@@ -1,4 +1,5 @@
 import { installPartitions } from '/js/partitions.js';
+import { installSourceHelp } from '/js/source-help.js';
 import { installLogbook } from '/js/logbook.js';
 import { installDashboard } from '/js/dashboard.js';
 import { installDrive } from '/js/gdrive.js';
@@ -315,6 +316,7 @@ $('#timezones').replaceChildren();
 for (const zone of timezones) { const option = element('option'); option.value = option.textContent = zone; $('#timezones').append(option); }
 document.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click', closeContext));
 
+installSourceHelp($('#sourceForm'));
 function resetSource() {
   $('#sourceSchedule').hidden=false; sourceEditing = null; clearFieldErrors($('#sourceForm')); $('#sourceForm').reset(); $('#sourceForm').elements.id.readOnly = false; $('#sourceFormTitle').textContent = 'Quelle hinzufügen'; $('#sourceResult').textContent = ''; $('#sourceProblem').hidden = true; fillSourcePlan({ days: [], time: '' });
 }
