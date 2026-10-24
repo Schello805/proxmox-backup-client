@@ -16,7 +16,7 @@ export function installDashboard({ element, date, openSource, resolveProblem }) 
     const driveIds = new Set(snapshot.drive?.settings?.sources || []);
     const driveSources = folders.filter(source => driveIds.has(source.id));
     const targetCount = configuredPBS.length + Number(driveSources.length > 0);
-    const planned = folders.filter(source=>!source.partitioned&&source.selection?.length!==0).filter(source => { const plan = snapshot.config?.schedules?.[source.id]; return plan && (plan.days?.length || plan.monthDay !== undefined); }).length;
+    const planned = folders.filter(source=>source.target!=='gdrive'&&!source.partitioned&&source.selection?.length!==0).filter(source => { const plan = snapshot.config?.schedules?.[source.id]; return plan && (plan.days?.length || plan.monthDay !== undefined); }).length;
     const measured = folders.filter(source=>!source.partitioned&&source.selection?.length!==0).filter(source => Number.isFinite(source.size?.bytes) && source.size.bytes >= 0);
     const bytes = measured.reduce((total,source) => total + source.size.bytes, 0);
     const volume = measured.length ? new Intl.NumberFormat('de-DE',{maximumFractionDigits:1}).format(bytes / 1024 ** 3) + ' GiB' : 'Unbekannt';
@@ -27,7 +27,7 @@ export function installDashboard({ element, date, openSource, resolveProblem }) 
         item.append(element('strong',String(value)),element('span',label),element('small',detail,'hint')); root.append(item);
       }
     }
-    metrics('targetMetrics', [[targetCount,'Konfigurierte Ziele',configuredPBS.length+' PBS-Datastores · '+Number(driveSources.length>0)+' Google Drive'],[folders.filter(source=>!source.partitioned&&source.selection?.length!==0).filter(source=>configuredPBS.some(target=>target.id===(source.target||'primary'))).length,'Quellen mit PBS-Ziel','Zugeordnet · kein Nachweis einer Sicherung'],[driveSources.length,'Quellen für Drive ausgewählt','Ausgewählte Quellen']]);
+    metrics('targetMetrics', [[targetCount,'Konfigurierte Ziele',configuredPBS.length+' PBS-Datastores · '+Number(driveSources.length>0)+' Google Drive'],[folders.filter(source=>source.target!=='gdrive'&&!source.partitioned&&source.selection?.length!==0).filter(source=>configuredPBS.some(target=>target.id===(source.target||'primary'))).length,'Quellen mit PBS-Ziel','Zugeordnet · kein Nachweis einer Sicherung'],[driveSources.length,'Quellen für Drive ausgewählt','Ausgewählte Quellen']]);
     const sourceMetrics = [[folders.length,'Quellen insgesamt','Registrierte Ordner'],[folders.filter(source=>source.ok).length,'Mounts verfügbar','Aktuell bestätigte Einbindungen'],[planned,'Automatisch geplant','PBS · täglich, wöchentlich oder monatlich'],[volume,'Ermittelte Quellgröße',measured.length+' von '+folders.filter(source=>!source.partitioned&&source.selection?.length!==0).length+' Quellen gemessen']];
     metrics('sourceMetrics',sourceMetrics);
     metrics('dashboardMetrics',[sourceMetrics[3]]);
@@ -55,7 +55,7 @@ export function installDashboard({ element, date, openSource, resolveProblem }) 
       item.title = observation?.checkedAt ? 'Letzte Beobachtung: '+date(observation.checkedAt) : 'Noch keine bestätigte Verbindung';targets.append(item);
     }
     for (const target of snapshot.targets) {
-      const related=folders.filter(source=>!source.partitioned&&source.selection?.length!==0).filter(source=>(source.target||'primary')===target.id);
+      const related=folders.filter(source=>source.target!=='gdrive'&&!source.partitioned&&source.selection?.length!==0).filter(source=>(source.target||'primary')===target.id);
       const latest=related.map(source=>source.job).filter(Boolean).sort((a,b)=>Date.parse(b.lastSuccess||0)-Date.parse(a.lastSuccess||0))[0]||{};
       const active=related.find(source=>['running','queued','cancelling'].includes(source.job?.status));
       const changed=related.map(source=>source.pbsCheckAfter).filter(Boolean).sort().at(-1);
@@ -68,7 +68,7 @@ export function installDashboard({ element, date, openSource, resolveProblem }) 
       const age=Date.now()-Date.parse(observation?.checkedAt);
       if(observation?.ok && age>=-60000 && age<=20*60000) reachable++;
     }
-    const backedUpFolders=folders.filter(source=>!source.partitioned&&source.selection?.length!==0);
+    const backedUpFolders=folders.filter(source=>source.target!=='gdrive'&&!source.partitioned&&source.selection?.length!==0);
     const succeeded=backedUpFolders.filter(source=>Number.isFinite(Date.parse(source.job?.lastSuccess)) && !source.health?.missed && !source.health?.stale && !['failed','interrupted','cancelled'].includes(source.job?.status));
     const overdue=backedUpFolders.filter(source=>source.health?.missed || source.health?.stale);
     const never=backedUpFolders.filter(source=>!source.job?.lastSuccess);
@@ -79,7 +79,7 @@ export function installDashboard({ element, date, openSource, resolveProblem }) 
     $('#protectionSummary').classList.toggle('needs-attention',succeeded.length<backedUpFolders.length);
     const alerts=$('#targetAlerts');alerts.replaceChildren();
     for(const target of snapshot.targets) {
-      const related=folders.filter(source=>!source.partitioned&&source.selection?.length!==0).filter(source=>(source.target||'primary')===target.id);
+      const related=folders.filter(source=>source.target!=='gdrive'&&!source.partitioned&&source.selection?.length!==0).filter(source=>(source.target||'primary')===target.id);
       const changed=related.map(source=>source.pbsCheckAfter).filter(Boolean).sort().at(-1);
       const latest=related.map(source=>source.job||{}).sort((a,b)=>Date.parse(b.lastSuccess||0)-Date.parse(a.lastSuccess||0))[0];
       if(latestConnection(latest,snapshot.connections?.[target.id],snapshot.capacities?.[target.id],changed)?.ok===false) {

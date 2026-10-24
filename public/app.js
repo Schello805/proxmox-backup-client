@@ -90,7 +90,7 @@ async function refresh() {
     sourcePage = Math.max(0, Math.min(sourcePage, Math.ceil(data.folders.length / 6) - 1));
     $('#overviewPager').hidden = true; $('#sourcePage').textContent = `Seite ${sourcePage + 1} / ${Math.ceil(data.folders.length / 6)}`;
     $('#previousSources').disabled = sourcePage === 0; $('#nextSources').disabled = (sourcePage + 1) * 6 >= data.folders.length;
-    for (const folder of data.folders.filter(item=>!item.partitioned)) {
+    for (const folder of data.folders.filter(item=>!item.partitioned&&item.target!=='gdrive')) {
       const row = element('tr'); row.dataset.folder = folder.id; const source = element('td'); const sourceButton = element('button', names[folder.id], 'source-link'); sourceButton.title = 'Details, Zeitplan und Verlauf öffnen'; sourceButton.addEventListener('click', () => openHistory(folder.id)); const path = element('code', folder.path); path.title = folder.path; const target = element('small', folder.targetRepository?.split(':').at(-1) || 'Ziel fehlt', 'source-target'); target.title = folder.targetRepository || 'PBS-Ziel noch nicht konfiguriert'; const heading = element('div', undefined, 'source-heading'); heading.append(sourceButton); source.append(heading, path);if(folder.selection)source.append(element('small',folder.selection.length+' ausgewählte Dateien','hint')); row.append(source);
       const mount = element('td'), badge = element('span', folder.ok ? '● Eingebunden' : folder.checking ? '● Prüfung läuft' : ['cifs','smb3','nfs','nfs4'].includes(folder.mount?.type) && folder.mount?.source && folder.expectedSource && folder.mount.source !== folder.expectedSource ? '● Mount geändert' : '● Nicht verfügbar', `badge ${folder.ok ? 'ok' : folder.checking ? 'busy' : 'bad'}`); badge.title = folder.ok ? `${folder.mount.source} → ${folder.mount.target} (${folder.mount.type}) · ${folder.identityConfirmed ? 'Mount-Identität bestätigt' : 'Mount-Quelle noch nicht festgelegt: unter Quellen bestätigen'}` : `${folder.error}${folder.mount?.source ? ' Erkannt: ' + folder.mount.source : ''}`; if (folder.checking) badge.title += ' · Lesbarkeit wird im Hintergrund geprüft'; if (folder.checkedAt) badge.title += ' · Letzte Prüfung: ' + date(folder.checkedAt); mount.append(badge);
       const size = folder.size;
@@ -318,15 +318,16 @@ document.querySelectorAll('[data-close]').forEach(button => button.addEventListe
 
 installSourceHelp($('#sourceForm'));
 function resetSource() {
-  $('#sourceSchedule').hidden=false; sourceEditing = null; clearFieldErrors($('#sourceForm')); $('#sourceForm').reset(); $('#sourceForm').elements.id.readOnly = false; $('#sourceFormTitle').textContent = 'Quelle hinzufügen'; $('#sourceResult').textContent = ''; $('#sourceProblem').hidden = true; fillSourcePlan({ days: [], time: '' });
+  $('#sourceSchedule').hidden=false; sourceEditing = null; clearFieldErrors($('#sourceForm')); $('#sourceForm').reset(); $('#sourceForm').elements.id.readOnly = false; $('#sourceFormTitle').textContent = 'Quelle hinzufügen'; $('#sourceResult').textContent = ''; $('#sourceProblem').hidden = true; fillSourcePlan($('#sourceForm').elements.target.value === 'gdrive' ? savedConfig.gdrive.schedule : { days: [], time: '' }); renderSourceTargetHint();
 }
 function backupTargets() {
   return [{ id: 'primary', name: savedConfig?.repository?.split(':').at(-1) || 'Datastore 1' }, ...(savedConfig?.secondaryDatastore ? [{ id: 'secondary', name: savedConfig.secondaryDatastore + (savedConfig.secondaryPBS ? ' · ' + savedConfig.secondaryPBS.server : '') }] : []), ...(savedConfig?.additionalDatastores || []).map(item=>({id:item.id,name:item.datastore}))];
 }
 function renderSources() {
   const selected = $('#sourceForm').elements.target.value || 'primary';
-  $('#sourceForm').elements.target.replaceChildren(...backupTargets().map(target => { const option = element('option', target.name); option.value = target.id; return option; }));
+  $('#sourceForm').elements.target.replaceChildren(...[...backupTargets().filter(target => target.id !== 'primary' || savedConfig.repository), ...(savedConfig.gdrive?.remote ? [{id:'gdrive',name:'Google Drive · '+savedConfig.gdrive.remote}] : [])].map(target => { const option = element('option', target.name); option.value = target.id; return option; }));
   $('#sourceForm').elements.target.value = selected;
+  if (!$('#sourceForm').elements.target.value) $('#sourceForm').elements.target.selectedIndex = 0;
   renderDiscovered();
   $('#sourceList').replaceChildren();
   const query = $('#sourceSearch').value.trim().toLocaleLowerCase('de'), filter = $('#sourceStatusFilter').value;
@@ -358,12 +359,23 @@ function renderSources() {
     });
     const mount=element('td');mount.append(element('span',folder.ok?'Eingebunden':folder.checking?'Wird geprüft':'Nicht verfügbar','badge '+(folder.ok?'ok':folder.checking?'busy':'bad')));if(folder.error)mount.append(element('small',folder.error,'row-error'));
     const size=element('td',folder.size?.bytes!=null?new Intl.NumberFormat('de-DE',{maximumFractionDigits:1}).format(folder.size.bytes/1024**3)+' GiB':'Noch nicht ermittelt');
-    const target=element('td');target.append(element('span',source.partitioned ? 'Aufgeteilt · '+savedConfig.sources.filter(item=>item.parentId===source.id).length+' Aufträge' : backupTargets().find(target=>target.id===(source.target||'primary'))?.name||'PBS fehlt'));if(savedConfig.gdrive.sources.includes(source.id))target.append(element('small','+ Google Drive','hint'));
-    const plan=element('td',scheduleText(savedConfig.schedules[source.id]));
+    const target=element('td');target.append(element('span',source.partitioned ? 'Aufgeteilt · '+savedConfig.sources.filter(item=>item.parentId===source.id).length+' Aufträge' : source.target === 'gdrive' ? 'Google Drive' : backupTargets().find(target=>target.id===(source.target||'primary'))?.name||'PBS fehlt'));if(source.target !== 'gdrive' && savedConfig.gdrive.sources.includes(source.id))target.append(element('small','+ Google Drive','hint'));
+    const plan=element('td',scheduleText(source.target === 'gdrive' ? savedConfig.gdrive.schedule : savedConfig.schedules[source.id]));
     const split=element('button',source.partitioned?'Aufteilung bearbeiten':'Dateien & Ordner zuordnen','row-action');split.type='button';split.onclick=()=>partitionTools.open(source.id);
-    actions.append(edit,pin,...(!source.parentId?[split]:[]),remove);row.append(info,mount,size,target,plan,actions);$('#sourceList').append(row);
+    actions.append(edit,pin,...(!source.parentId&&source.target!=='gdrive'?[split]:[]),remove);row.append(info,mount,size,target,plan,actions);$('#sourceList').append(row);
   }
 }
+function renderSourceTargetHint() {
+  let hint = $('#sourceTargetHint');
+  if (!hint) { hint = element('p', '', 'hint'); hint.id = 'sourceTargetHint'; $('#sourceSchedule').before(hint); }
+  hint.hidden = $('#sourceForm').elements.target.value !== 'gdrive';
+  hint.textContent = 'Google Drive: Modus und Zielordner aus „Ziele“ werden verwendet. Der folgende Zeitplan gilt gemeinsam für alle Google-Drive-Quellen. Es wird kein PBS-Auftrag für diese Quelle erstellt.';
+}
+$('#sourceForm').elements.target.addEventListener('change', () => {
+  const source = savedConfig.sources.find(item => item.id === sourceEditing);
+  fillSourcePlan($('#sourceForm').elements.target.value === 'gdrive' ? savedConfig.gdrive.schedule : savedConfig.schedules[source?.id] || {days:[],time:''});
+  renderSourceTargetHint();
+});
 $('#sourceSearch').addEventListener('input', () => { delete $('#sourceSearch').dataset.exactId; renderSources(); });
 $('#sourceStatusFilter').addEventListener('change', renderSources);
 $('#resetSource').addEventListener('click', resetSource);
@@ -523,7 +535,7 @@ function editSource(id, inline = false) {
   for (const key of ['id','name','path','expectedSource']) form.elements[key].value = source[key];
   $('#sourceSchedule').hidden=Boolean(source.partitioned); form.elements.target.value = source.target || 'primary'; form.elements.id.readOnly = true;
   $('#sourceFormTitle').textContent = `Quelle bearbeiten · ${source.name}`; $('#sourceResult').textContent = '';
-  fillSourcePlan(savedConfig.schedules[id]); renderSourceProblem(id);
+  fillSourcePlan(source.target === 'gdrive' ? savedConfig.gdrive.schedule : savedConfig.schedules[id]); renderSourceTargetHint(); renderSourceProblem(id);
   if (inline) showContext('sourceForm', id); else form.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 fillSourcePlan({ days: [], time: '' });

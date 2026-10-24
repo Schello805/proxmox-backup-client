@@ -57,9 +57,9 @@ test('ntfy: fehlendes Topic markieren, speichern und Testmeldung senden', async 
 test('Quellen hinzufügen, SMB ermitteln, bearbeiten und abmelden', async ({ page }) => {
   await login(page); await page.getByRole('link', { name: 'Quellen', exact: true }).click();
   const dialog = page.getByRole('region', { name: 'Backup-Quellen' });
-  await dialog.getByLabel('Name', { exact: true }).fill('Fotos'); await dialog.getByLabel('Backup-ID').fill('fotos');
-  await dialog.getByLabel('Pfad im LXC').fill('/mnt/Daten/Fotos'); await dialog.getByRole('button', { name: 'Mount-Quelle ermitteln' }).click();
-  await expect(dialog.getByLabel('Erwartete Netzwerkfreigabe')).toHaveValue('//test-nas/fotos');
+  await dialog.getByLabel('Name', { exact: true }).fill('Fotos'); await dialog.getByLabel('Backup-ID', { exact: true }).fill('fotos');
+  await dialog.getByLabel('Pfad im LXC', { exact: true }).fill('/mnt/Daten/Fotos'); await dialog.getByRole('button', { name: 'Mount-Quelle ermitteln' }).click();
+  await expect(dialog.getByLabel('Erwartete Netzwerkfreigabe', { exact: true })).toHaveValue('//test-nas/fotos');
   await dialog.getByRole('button', { name: 'Quelle speichern' }).click();
   let row = dialog.locator('.source-editor-row').filter({ has: page.getByText('Fotos', { exact: true }) }); await expect(row).toBeVisible();
   await row.getByRole('button', { name: 'Bearbeiten' }).click(); await dialog.getByLabel('Name', { exact: true }).fill('Fotos privat');
@@ -175,8 +175,8 @@ test('Aktualisieren erkennt geänderte und neue SMB-Mounts ohne automatische Fre
   await page.getByRole('button', { name: 'Neue Netzwerkfreigaben (1)', exact: true }).click();
   const dialog = page.getByRole('region', { name: 'Backup-Quellen' });
   await dialog.getByRole('button', { name: 'FotosNeu als Quelle vorbereiten' }).click();
-  await expect(dialog.getByLabel('Pfad im LXC')).toHaveValue('/mnt/Daten/FotosNeu');
-  await expect(dialog.getByLabel('Erwartete Netzwerkfreigabe')).toHaveValue('//test-nas/fotos-neu');
+  await expect(dialog.getByLabel('Pfad im LXC', { exact: true })).toHaveValue('/mnt/Daten/FotosNeu');
+  await expect(dialog.getByLabel('Erwartete Netzwerkfreigabe', { exact: true })).toHaveValue('//test-nas/fotos-neu');
   await dialog.getByRole('button', { name: 'Quelle speichern', exact: true }).click();
   await expect(dialog.locator('#sourceResult')).toContainText('Quelle und Sicherungsplan gespeichert');
   await expect(dialog.locator('#discoveredSources')).not.toBeVisible();

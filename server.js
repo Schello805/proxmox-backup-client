@@ -202,7 +202,9 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/sources') {
       const input = await body(req); const current = configs.get();
       if (input.schedule && !input.sources?.some(source => source.id === input.schedule.id)) throw new Error('Zeitplan gehört zu keiner Quelle.');
-      configs.apply({ ...current, sources: input.sources, gdrive: { ...current.gdrive, sources: current.gdrive.sources.filter(id => input.sources?.some(source => source.id === id)) }, schedules: input.schedule ? { ...current.schedules, [input.schedule.id]: input.schedule.value } : current.schedules }); return json(res, 200, { success: true });
+      const driveSources = [...new Set([...current.gdrive.sources.filter(id => input.sources?.some(source => source.id === id)), ...(input.sources || []).filter(source => source.target === 'gdrive').map(source => source.id)])];
+      const driveSchedule = input.schedule && input.sources.find(source => source.id === input.schedule.id)?.target === 'gdrive';
+      configs.apply({ ...current, sources: input.sources, gdrive: { ...current.gdrive, sources: driveSources, ...(driveSchedule ? {schedule:input.schedule.value} : {}) }, schedules: input.schedule ? { ...current.schedules, [input.schedule.id]: driveSchedule ? '' : input.schedule.value } : current.schedules }); return json(res, 200, { success: true });
     }
     if (req.method === 'GET' && url.pathname === '/api/pbs') return json(res, 200, pbs.current(url.searchParams.get('target') || 'primary'));
     if (req.method === 'POST' && url.pathname === '/api/pbs/refresh') return json(res, 200, await pbs.refresh(url.searchParams.get('target') || 'primary'));
