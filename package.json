@@ -1,6 +1,6 @@
 {
   "name": "qnap-pbs-dashboard",
-  "version": "2.32.0",
+  "version": "2.32.1",
   "private": true,
   "description": "Status und Backup-Steuerung für QNAP → Debian LXC → PBS",
   "engines": {

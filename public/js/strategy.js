@@ -13,7 +13,7 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
  const duration=seconds=>seconds==null?'Dauer unbekannt':seconds<60?Math.round(seconds)+' s':seconds<3600?Math.ceil(seconds/60)+' min':Math.floor(seconds/3600)+' h '+Math.round(seconds%3600/60)+' min';
  function feedback(text,error=false){$('#strategyFeedback').textContent=text;$('#strategyFeedback').classList.toggle('row-error',error);}
  function metric(root,items){root.replaceChildren();for(const [value,title,hint]of items){const card=n('article',undefined,'inventory-metric');card.append(n('strong',String(value)),n('span',title),n('small',hint,'hint'));root.append(card);}}
- function goTab(tab){activeTab=tab;for(const key of ['paths','mapping','inventory'])$('#strategy'+key[0].toUpperCase()+key.slice(1)+'Panel').hidden=key!==tab;document.querySelectorAll('[data-strategy-tab]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.strategyTab===tab)));}
+ function goTab(tab){activeTab=tab;for(const key of ['paths','plans','mapping','inventory'])$('#strategy'+key[0].toUpperCase()+key.slice(1)+'Panel').hidden=key!==tab;document.querySelectorAll('[data-strategy-tab]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.strategyTab===tab)));}
  function renderLivePaths(){
   if(!snapshot)return;
   const root=$('#liveProtectionPaths');root.replaceChildren();
@@ -69,12 +69,12 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
   return loading;
  }
  async function save(document,mapping,revision=stored.revision){
-  await api('/api/strategy/save',{document,mapping,revision});await load(true);feedback('Strategie gespeichert. App-Aufträge und Zeitpläne bleiben unverändert.');
+  await api('/api/strategy/save',{document,mapping,revision});await load(true);feedback('Backup-Planung gespeichert. App-Aufträge und Zeitpläne bleiben unverändert.');
  }
  function renderPaths(){
   const root=$('#strategyPaths');root.replaceChildren();
   const d=stored.document.data,view=stored.view;
-  if(!d.datasets.length){const empty=n('div',undefined,'workspace-empty');empty.append(n('h3','Deine Sicherungsstrategie an einem Ort'),n('p','Importiere deinen Backup Planner oder lege Geräte, Datenbestände und externe Pläne an. Bestehende App-Aufträge findest du bereits unter Aufträge und im Zeitplan.'),button('Planner-Datei auswählen',()=>{$('#strategyImport').hidden=false;$('#plannerFile').focus();},'primary'));root.append(empty);return;}
+  if(!d.datasets.length){const empty=n('div',undefined,'workspace-empty');empty.append(n('h3','Deine Backup-Planung beginnt hier'),n('p','Alles lässt sich direkt hier anlegen und bearbeiten: zuerst ein Quellgerät, ein Ziel und einen Datenbestand, danach den Backup-Plan. Geräte sind Planung; eingebundene Ordner verwaltest du unter Quellen.'),button('Geräte und Daten anlegen',()=>{goTab('inventory');$('#inventoryKind').value='sources';renderInventory();editEntity('sources');},'primary'),button('Vorhandenen Planner importieren',()=>{$('#strategyImport').hidden=false;$('#plannerFile').focus();},'secondary'));root.append(empty);return;}
   for(const dataset of d.datasets){
    const card=n('section',undefined,'dataset-paths'),heading=n('div',undefined,'panel-title');heading.append(n('h3',dataset.name),badge(dataset.priority==='high'?'Hohe Priorität':dataset.priority==='low'?'Niedrige Priorität':'Normale Priorität'));card.append(heading);
    const plans=d.plans.filter(plan=>plan.dataset_ids.includes(dataset.id));
@@ -84,7 +84,7 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
     if(via)row.append(n('span','→','path-arrow'),n('span',via.name,'path-chip'));
     row.append(n('span','→','path-arrow'),button(target.name,()=>editPlan(plan.id),'path-chip'),badge(labels[plan.protection_type]));
     const external=view.external.find(item=>item.planId===plan.id),linked=external.bindings.length;
-    const note=button(linked?'Mit '+linked+' App-Auftrag verbunden':'Extern verwaltet · Laufstatus unbekannt',()=>editPlan(plan.id),'row-action');row.append(note);card.append(row);
+    const note=button(linked?'Mit '+linked+' App-Auftrag verbunden':'Theoretischer Plan · kein Laufnachweis',()=>editPlan(plan.id),'row-action');row.append(note);card.append(row);
    }
    if(!plans.length)card.append(n('p','Noch kein Sicherungsweg geplant.','strategy-warning'));
    const mapped=stored.document.mapping.datasets[dataset.id];card.append(n('p',mapped?'App-Quelle: '+(snapshot.config.sources.find(item=>item.id===mapped)?.name||'Zuordnung nicht mehr vorhanden'):'Noch keiner eingebundenen App-Quelle zugeordnet.','hint'));root.append(card);
@@ -101,45 +101,47 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
    actions.append(button('Bearbeiten',()=>editEntity(kind,item.id),'row-action'),button('Entfernen',()=>confirmDelete(kind,item.id),'row-action'));row.append(name,relation,actions);body.append(row);
   }table.append(body);const wrap=n('div',undefined,'strategy-table');wrap.append(table);root.append(wrap);
  }
- function renderExternalJobs(){
-  const root=$('#externalJobRows');root.replaceChildren();
+ function renderPlanList(){
+  const root=$('#planningPlanList');root.replaceChildren();
+  const query=$('#planningSearch').value.trim().toLocaleLowerCase('de');
+  const table=n('table'),head=n('thead'),heading=n('tr');
+  for(const title of ['Name / Datenbestände','Quelle','Ziel','Schutzart','Zeitplan','Aktionen'])heading.append(n('th',title));head.append(heading);table.append(head);const body=n('tbody');
   for(const job of stored.view.external){
-   const row=n('tr');row.dataset.externalJob=job.planId;
-   const source=n('td');source.append(n('strong',job.source),n('small',job.datasetNames.join(', '),'hint'));
-   const target=n('td');target.append(n('strong',job.target),n('small',labels[job.protection],'job-mode'));
-   const plan=n('td');plan.append(n('span',scheduleText(job.schedule)),n('small','Extern geplant','hint'));
-   const next=n('td',job.nextAt?date(job.nextAt):'Nur manuell');
-   const last=n('td','Kein App-Nachweis'),status=n('td');status.append(badge(job.bindings.length?'Verknüpfter Plan':'Extern · ungeprüft','external'),n('small',job.bindings.length?'App-Aufträge separat unten/oben sichtbar.':'Ausführung erfolgt außerhalb dieser App.','hint'));
-   const actions=n('td');actions.append(button('Plan bearbeiten',()=>{location.hash='strategy/plan/'+job.planId;},'row-action'));
-   row.append(source,target,plan,next,last,status,actions);root.append(row);
+   if(query&&![job.name,job.source,job.target,...job.datasetNames].join(' ').toLocaleLowerCase('de').includes(query))continue;
+   const row=n('tr');row.dataset.planId=job.planId;
+   const name=n('td');const title=n('strong',job.name);title.style.borderLeft='3px solid '+(stored.document.data.plans.find(plan=>plan.id===job.planId)?.color||'#8051b8');title.style.paddingLeft='8px';name.append(title,n('small',job.datasetNames.join(', '),'hint'));
+   const source=n('td',job.source),target=n('td',job.target),kind=n('td');kind.append(badge(labels[job.protection],'external'));
+   const plan=n('td',scheduleText(job.schedule)),actions=n('td');
+   actions.append(button('Bearbeiten',()=>editPlan(job.planId),'row-action'),button('Entfernen',()=>confirmDelete('plans',job.planId),'row-action'));
+   row.append(name,source,target,kind,plan,actions);body.append(row);
   }
-  filterJobs();
+  table.append(body);root.append(table);if(!body.children.length)root.append(n('p',query?'Keine passenden Pläne.':'Noch keine Pläne. Über „Neuer Backup-Plan“ einen Sicherungsweg anlegen.','workspace-empty'));
  }
  function filterJobs(){
   if(!snapshot)return;
   const query=$('#jobSearch').value.toLocaleLowerCase('de'),management=$('#jobManagement').value,filter=$('#jobState').value;
-  const rows=[...$('#folders').children,...$('#externalJobRows').children,...$('#driveJobRows').children];
+  const rows=[...$('#folders').children,...$('#driveJobRows').children];
   let total=0;
   for(const row of rows){
-   const external=Boolean(row.dataset.externalJob),drive=row.id==='driveOverview',id=row.dataset.folder;
+   const drive=row.id==='driveOverview',id=row.dataset.folder;
    if(drive&&!snapshot.config.gdrive.sources.length){row.hidden=true;continue;}
    total++;
-   const status=external?'unverified':drive?snapshot.drive.status:snapshot.folders.find(folder=>folder.id===id)?.job.status;
-   row.hidden=Boolean(query&&!row.textContent.toLocaleLowerCase('de').includes(query)||management==='app'&&external||management==='external'&&!external||filter==='busy'&&!['queued','running','cancelling'].includes(status)||filter==='failed'&&!['failed','interrupted'].includes(status)||filter==='unverified'&&!external);
+   const status=drive?snapshot.drive.status:snapshot.folders.find(folder=>folder.id===id)?.job.status;
+   row.hidden=Boolean(query&&!row.textContent.toLocaleLowerCase('de').includes(query)||management==='pbs'&&drive||management==='gdrive'&&!drive||filter==='busy'&&!['queued','running','cancelling'].includes(status)||filter==='failed'&&!['failed','interrupted'].includes(status));
   }
   $('#jobCount').textContent=String(total);$('#jobEmpty').hidden=total>0;
-  metric($('#jobMetrics'),[[total,'Aufträge insgesamt','App-Aufträge und externe Pläne'],[rows.filter(row=>!row.dataset.externalJob).length-Number(!snapshot.config.gdrive.sources.length),'Von dieser App','PBS und Google Drive'],[$('#externalJobRows').children.length,'Extern verwaltet','Planung · kein automatischer Laufnachweis']]);
+  metric($('#jobMetrics'),[[total,'Eingerichtete Aufträge','Tatsächlicher Betrieb · PBS und Google Drive'],[snapshot.folders.filter(folder=>busy(folder.job||{})).length+Number(busy(snapshot.drive)),'Aktiv / wartend','Aktueller Laufstatus'],[snapshot.folders.filter(folder=>bad(folder.job||{})).length+Number(bad(snapshot.drive)),'Fehler / unterbrochen','Protokoll für Details öffnen']]);
  }
  function renderCalendar(){
   if(!stored)return;
-  const view=stored.view,filter=$('#calendarFilter').value,all=[...view.jobs,...view.external],jobs=all.filter(job=>(filter!=='app'||job.engine!=='external')&&(filter!=='external'||job.engine==='external')&&(job.engine!=='external'||!job.fullyLinked||filter==='external'));
+  const view=stored.view,filter=$('#calendarFilter').value;$('#schedule').classList.toggle('show-planning',filter!=='app');const all=[...view.jobs,...view.external],jobs=all.filter(job=>(filter!=='app'||job.engine!=='external')&&(filter!=='external'||job.engine==='external')&&(job.engine!=='external'||!job.fullyLinked||filter==='external'));
   const index=new Map(jobs.map(job=>[job.id,job]));
   const root=$('#unifiedCalendar');root.replaceChildren();const format=t=>new Intl.DateTimeFormat('de-DE',{timeZone:view.timezone,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(t));
   $('#calendarDates').textContent=format(view.days[0].start).split(',')[0]+' – '+format(view.days.at(-1).start).split(',')[0];
-  $('#calendarSummary').textContent=view.timezone+' · '+jobs.filter(job=>job.engine!=='external').length+' App-Aufträge · '+jobs.filter(job=>job.engine==='external').length+' externe Pläne · manuelle Aufträge haben keinen Termin';
+  $('#calendarSummary').textContent=view.timezone+' · '+jobs.filter(job=>job.engine!=='external').length+' App-Aufträge · '+jobs.filter(job=>job.engine==='external').length+' theoretische Pläne · manuelle Aufträge haben keinen Termin';
   if(calendarMode==='agenda'){
    const events=view.events.filter(event=>index.has(event.jobId)).sort((a,b)=>a.start-b.start);
-   for(const event of events){const job=index.get(event.jobId),row=button('',()=>openJob(job),'agenda-row');row.append(n('strong',format(event.start)),n('span',job.name+' · '+job.source+' → '+job.target),badge(job.engine==='external'?'Extern geplant':job.durationKind==='measured'?'Dauer gemessen':'Dauer unbekannt'),n('small',duration(job.seconds),'hint'));root.append(row);}
+   for(const event of events){const job=index.get(event.jobId),row=button('',()=>openJob(job),'agenda-row');row.append(n('strong',format(event.start)),n('span',job.name+' · '+job.source+' → '+job.target),badge(job.engine==='external'?'Theoretischer Plan':job.durationKind==='measured'?'Dauer gemessen':'Dauer unbekannt'),n('small',duration(job.seconds),'hint'));root.append(row);}
    if(!events.length)root.append(n('p','Keine Termine in diesem Zeitraum. Unter Aufträge einen Zeitplan einrichten.','workspace-empty'));return;
   }
   const grid=n('div',undefined,'week-calendar'),header=n('div',undefined,'week-header');header.append(n('span','Tag / Stunde'));for(let hour=0;hour<24;hour++)header.append(n('span',String(hour).padStart(2,'0')));grid.append(header);
@@ -164,7 +166,7 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
   if(!stored)return;
   const d=stored.document.data;
   metric($('#strategyMetrics'),[[d.plans.length,'Dokumentierte Pläne','Keine Aussage über Ausführung'],[stored.view.linkedJobs,'Verknüpfte App-Aufträge','Zuordnung zu Quelle und Ziel'],[d.datasets.length,'Datenbestände',d.sources.length+' Quellgeräte'],[d.locations.length,'Standorte','Gemeinsame Ausfallbereiche beachten']]);
-  renderPaths();renderInventory();renderExternalJobs();renderCalendar();
+  renderPaths();renderInventory();renderPlanList();renderCalendar();filterJobs();
   // Preserve unsaved mapping selections during background refreshes.
   if(!$('#strategyMapping').dataset.dirty)mappingEditor($('#strategyMapping'),stored.document,stored.document.mapping);
  }
@@ -178,12 +180,13 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
  function errorBox(form){const result=n('p','','hint');result.setAttribute('role','status');form.append(result);return result;}
  function editPlan(identifier){
   if(!stored)return;
-  const previous=stored.document.data.plans.find(plan=>plan.id===identifier),root=editor(previous?'Externen Plan bearbeiten':'Externen Plan anlegen'),form=n('form'),grid=n('div',undefined,'editor-grid');
-  root.append(n('p','Dieser Plan dokumentiert eine externe Sicherung. Speichern startet keinen Auftrag und ändert keine App-Zeitpläne.','hint'),form);form.append(grid);
+  const previous=stored.document.data.plans.find(plan=>plan.id===identifier),root=editor(previous?'Backup-Plan bearbeiten':'Backup-Plan anlegen'),form=n('form'),grid=n('div',undefined,'editor-grid');
+  root.append(n('p','Hier bearbeitest du die Theorie: Quelle, Ziel, Schutzart und gewünschter Zeitplan. Speichern startet keine Sicherung und ändert keine App-Aufträge.','hint'),form);form.append(grid);
   const p=previous||{name:'',source_id:stored.document.data.sources[0]?.id,target_id:stored.document.data.targets[0]?.id,protection_type:'backup',schedule_type:'manual',weekdays:[],day_of_month:1,start_time:'02:00',duration_minutes:0,dataset_ids:[],notes:''};
   field(grid,'Name','name',p.name).required=true;
   const source=field(grid,'Ursprüngliches Quellgerät','source_id',p.source_id,stored.document.data.sources);
   field(grid,'Ziel','target_id',p.target_id,stored.document.data.targets);
+  field(grid,'Software (optional)','software_id',p.software_id||'',[{id:'',name:'Nicht festgelegt'},...stored.document.data.software]);
   field(grid,'Über vorhandene Kopie (optional)','source_target_id',p.source_target_id||'',[{id:'',name:'Direkt von der Quelle'},...stored.document.data.targets]);
   field(grid,'Schutzart','protection_type',p.protection_type,[{id:'backup',name:'Sicherung mit Versionen'},{id:'synchronization',name:'Synchronisierung'},{id:'archive',name:'Archiv'}]);
   field(grid,'Frequenz','schedule_type',p.schedule_type,[{id:'manual',name:'Nur manuell'},{id:'daily',name:'Täglich'},{id:'weekly',name:'Wöchentlich'},{id:'monthly',name:'Monatlich'}]);
@@ -200,13 +203,13 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
   const advanced=n('details');advanced.className='advanced';advanced.append(n('summary','Aufbewahrung & Verantwortung · Dokumentation'));const extra=n('div',undefined,'editor-grid');advanced.append(extra);form.append(advanced);
   const retention=field(extra,'Aufbewahrung (leer = nicht dokumentiert)','retention_value',p.retention_value??'');retention.type='number';retention.min='0';retention.max='1000000';
   field(extra,'Einheit','retention_unit',p.retention_unit||'days',[{id:'days',name:'Tage'},{id:'weeks',name:'Wochen'},{id:'months',name:'Monate'},{id:'years',name:'Jahre'}]);
-  const versions=field(extra,'Versionen (0 = nicht dokumentiert)','version_count',p.version_count||0);versions.type='number';versions.min='0';versions.max='100000';field(extra,'Verantwortlich','owner',p.owner||'');
+  const versions=field(extra,'Versionen (0 = nicht dokumentiert)','version_count',p.version_count||0);versions.type='number';versions.min='0';versions.max='100000';field(extra,'Verantwortlich','owner',p.owner||'');field(extra,'Farbe im Plan','color',p.color||'#3978ed').type='color';
   for(const [key,title]of [['encrypted','Verschlüsselung dokumentiert'],['immutable','Unveränderlichkeit dokumentiert']]){const label=n('label',title,'checkbox-label'),input=n('input');input.type='checkbox';input.name=key;input.checked=Boolean(p[key]);label.prepend(input);extra.append(label);}
   advanced.append(n('p','Diese Angaben beschreiben die externe Konfiguration. Die App stellt keine Aufbewahrung, Verschlüsselung oder Unveränderlichkeit am Ziel ein.','hint'));
   const submit=n('button','Plan speichern','primary');submit.type='submit';form.append(submit);if(previous)form.append(button('Plan entfernen',()=>confirmDelete('plans',identifier),'secondary'));
   const result=errorBox(form);
   form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;try{
-   const values=Object.fromEntries(new FormData(form));const next={...p,...values,id:previous?.id||newId(),active:1,day_of_month:values.day_of_month==='last'?'last':Number(values.day_of_month),weekdays:dayInputs.filter(input=>input.checked).map(input=>Number(input.value)),duration_minutes:Number(values.duration_minutes),dataset_ids:[...datasetBox.querySelectorAll('input:checked')].map(input=>input.value),software_id:p.software_id||null,retention_value:values.retention_value===''?null:Number(values.retention_value),version_count:Number(values.version_count),encrypted:form.elements.encrypted.checked?1:0,immutable:form.elements.immutable.checked?1:0};
+   const values=Object.fromEntries(new FormData(form));const next={...p,...values,id:previous?.id||newId(),active:1,day_of_month:values.day_of_month==='last'?'last':Number(values.day_of_month),weekdays:dayInputs.filter(input=>input.checked).map(input=>Number(input.value)),duration_minutes:Number(values.duration_minutes),dataset_ids:[...datasetBox.querySelectorAll('input:checked')].map(input=>input.value),software_id:values.software_id||null,retention_value:values.retention_value===''?null:Number(values.retention_value),version_count:Number(values.version_count),encrypted:form.elements.encrypted.checked?1:0,immutable:form.elements.immutable.checked?1:0};
    if(!next.source_id||!next.target_id)throw Error('Zuerst unter Geräte & Standorte ein Quellgerät und ein Ziel anlegen.');if(!next.dataset_ids.length)throw Error('Mindestens einen Datenbestand auswählen.');
    const doc=structuredClone(stored.document);doc.data.plans=previous?doc.data.plans.map(plan=>plan.id===identifier?next:plan):[...doc.data.plans,next];await save(doc,doc.mapping);root.hidden=true;
   }catch(error){result.textContent=error.message;}finally{submit.disabled=false;}};
@@ -218,10 +221,10 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
   if(['sources','targets'].includes(kind))field(form,'Standort','location_id',item.location_id||'',[{id:'',name:'Nicht festgelegt'},...stored.document.data.locations]);
   if(kind==='locations'){field(form,'Übergeordneter Standort','parent_id',item.parent_id||'',[{id:'',name:'Keiner'},...stored.document.data.locations.filter(row=>row.id!==identifier)]);field(form,'Typ','type',item.type||'site',[{id:'country',name:'Land'},{id:'site',name:'Standort'},{id:'building',name:'Gebäude'},{id:'room',name:'Raum'},{id:'cloud',name:'Cloud'}]);}
   if(kind==='sources')field(form,'Gerätetyp','device_type',item.device_type||'nas',[{id:'nas',name:'NAS'},{id:'server',name:'Server'},{id:'computer',name:'Computer'},{id:'other',name:'Andere'}]);
-  if(kind==='targets'){field(form,'Speichertyp','storage_type',item.storage_type||'server',[{id:'server',name:'Server'},{id:'nas',name:'NAS'},{id:'cloud',name:'Cloud'},{id:'external-disk',name:'Externe Festplatte'},{id:'other',name:'Andere'}]);field(form,'Anbieter / Gerät','provider',item.provider||'');}
+  if(kind==='targets'){field(form,'Speichertyp','storage_type',item.storage_type||'server',[{id:'server',name:'Server'},{id:'nas',name:'NAS'},{id:'cloud',name:'Cloud'},{id:'external-disk',name:'Externe Festplatte'},{id:'other',name:'Andere'}]);field(form,'Anbieter / Gerät','provider',item.provider||'');field(form,'Zielfarbe','color',item.color||'#3978ed').type='color';for(const [key,title]of [['immutable_capable','Unveränderliche Sicherung möglich'],['encrypted_default','Verschlüsselung vorgesehen']]){const label=n('label',title,'checkbox-label'),input=n('input');input.type='checkbox';input.name=key;input.checked=Boolean(item[key]);label.prepend(input);form.append(label);}}
   if(kind==='datasets'){field(form,'Ursprüngliches Quellgerät','source_id',item.source_id||'',stored.document.data.sources);field(form,'Priorität','priority',item.priority||'normal',[{id:'high',name:'Hoch'},{id:'normal',name:'Normal'},{id:'low',name:'Niedrig'}]);}
   field(form,'Notizen','notes',item.notes);const submit=n('button','Eintrag speichern','primary');submit.type='submit';form.append(submit);const result=errorBox(form);
-  form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;try{const next={...item,...Object.fromEntries(new FormData(form))};const doc=structuredClone(stored.document);doc.data[kind]=previous?doc.data[kind].map(row=>row.id===identifier?next:row):[...doc.data[kind],next];await save(doc,doc.mapping);root.hidden=true;}catch(error){result.textContent=error.message;}finally{submit.disabled=false;}};
+  form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;try{const next={...item,...Object.fromEntries(new FormData(form))};if(kind==='targets')for(const key of ['immutable_capable','encrypted_default'])next[key]=form.elements[key].checked?1:0;const doc=structuredClone(stored.document);doc.data[kind]=previous?doc.data[kind].map(row=>row.id===identifier?next:row):[...doc.data[kind],next];await save(doc,doc.mapping);root.hidden=true;}catch(error){result.textContent=error.message;}finally{submit.disabled=false;}};
   root.scrollIntoView({block:'start',behavior:'smooth'});
  }
  function confirmDelete(kind,identifier){
@@ -241,7 +244,7 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
  $('#strategyMappingSave').onclick=async()=>{try{await save(stored.document,readMapping($('#strategyMapping')));delete $('#strategyMapping').dataset.dirty;mappingEditor($('#strategyMapping'),stored.document,stored.document.mapping);}catch(error){feedback(error.message,true);}};
  $('#strategyExport').onclick=()=>{if(!stored)return;const blob=new Blob([JSON.stringify(stored.document,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=link('','');a.href=url;a.download='backup-strategy-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
  document.querySelectorAll('[data-strategy-tab]').forEach(b=>b.onclick=()=>goTab(b.dataset.strategyTab));
- $('#inventoryKind').onchange=renderInventory;$('#inventoryAdd').onclick=()=>editEntity($('#inventoryKind').value);$('#externalPlanAdd').onclick=()=>editPlan();$('#jobsAddExternal').onclick=()=>{location.hash='strategy/new';};
+ $('#planningSearch').oninput=()=>{if(stored)renderPlanList();};$('#planningPlanAdd').onclick=()=>editPlan();$('#inventoryKind').onchange=renderInventory;$('#inventoryAdd').onclick=()=>editEntity($('#inventoryKind').value);$('#externalPlanAdd').onclick=()=>editPlan();
  for(const id of ['jobSearch','jobManagement','jobState'])$('#'+id).addEventListener(id==='jobSearch'?'input':'change',filterJobs);
  $('#calendarFilter').onchange=renderCalendar;
  function calendar(mode){calendarMode=mode;$('#calendarWeek').setAttribute('aria-pressed',String(mode==='week'));$('#calendarAgenda').setAttribute('aria-pressed',String(mode==='agenda'));renderCalendar();}

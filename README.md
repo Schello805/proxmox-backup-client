@@ -1,11 +1,11 @@
 # Backup Control
 
-Lokale Web-App für **QNAP → Debian-LXC → Proxmox Backup Server** und **Google Drive über Rclone**. Mit Auftragssteuerung, gemeinsamem Kalender und importierbarer Backup-Strategie.
+Lokale Web-App für **QNAP → Debian-LXC → Proxmox Backup Server** und **Google Drive über Rclone**. Betrieb und theoretische Backup-Planung sind getrennt. Die Planung lässt sich vollständig hier bearbeiten, auch ohne die frühere Planner-App.
 
 - **Übersicht:** Laufstatus, Fehler, Quellen, Ziele und tatsächliche Sicherungswege.
-- **Aufträge:** PBS und Drive starten/abbrechen; externe Pläne einheitlich dokumentieren und filtern.
-- **Zeitplan:** gemeinsamer Wochenkalender und Agenda; gemessene und geplante Dauer bleiben unterscheidbar.
-- **Strategie:** Backup-Planner-JSON mit Vorschau importieren, Geräte/Standorte/Datenbestände verwalten und ausdrücklich mit App-Aufträgen verbinden.
+- **Aufträge:** tatsächlich eingerichtete PBS- und Drive-Aufträge starten, abbrechen und filtern.
+- **Zeitplan:** Betrieb als Wochenkalender und Agenda; theoretische Pläne optional zum Vergleich einblenden.
+- **Backup-Planung:** Backup-Planner-JSON mit Vorschau importieren, Geräte/Standorte/Datenbestände verwalten und ausdrücklich mit App-Aufträgen verbinden.
 - **Quellen / Ziele:** SMB- oder NFS-Bind-Mounts registrieren, PBS-Datastores und Drive konfigurieren. Mount-Änderungen am Host bleiben Teil der Anleitung.
 - **Einstellungen / Protokoll:** Zeitzone, Bandbreite, ntfy, Updates, Diagnose und zentrale Laufprotokolle.
 
