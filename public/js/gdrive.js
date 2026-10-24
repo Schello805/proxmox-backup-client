@@ -12,7 +12,7 @@ export function installDrive({ api, element, notice, scheduleText, date }) {
     currentJob = job;
     const labels = { idle: 'Noch kein Lauf', queued: 'Wartet', running: 'Läuft', cancelling: 'Abbruch läuft', cancelled: 'Abgebrochen', failed: 'Fehlgeschlagen', success: 'Erfolgreich', interrupted: 'Unterbrochen' };
     $('#driveStatus').textContent = labels[job.status] || job.status;
-    $('#driveMessage').textContent = job.message || 'Quellen auswählen, speichern und Verbindung prüfen.';
+    $('#driveMessage').textContent = job.message || 'Daten auswählen, speichern und Verbindung prüfen.';
     $('#driveLast').textContent = job.lastSuccess ? 'Letzter Erfolg: ' + date(job.lastSuccess) : 'Noch kein erfolgreicher Lauf';
     const v = job.verification; const verificationText = !v ? 'Zielbestand: noch nicht geprüft' : v.status === 'running' ? 'Zielbestand wird geprüft …' : `${v.status === 'success' ? 'Zielvergleich erfolgreich' : v.status === 'cancelled' ? 'Zielprüfung abgebrochen' : 'Zielprüfung fehlgeschlagen'} · ${v.method === 'hash' ? 'Prüfsummen soweit verfügbar' : 'Dateien und Größen'}${v.checkedAt ? ' · ' + date(v.checkedAt) : ''}`;
     $('#driveVerification').textContent = verificationText;
@@ -23,10 +23,10 @@ export function installDrive({ api, element, notice, scheduleText, date }) {
     const busy = ['running','queued','cancelling'].includes(job.status);
     $('#driveStart').disabled = busy || pendingAction || !job.settings?.sources.length; $('#driveCancel').hidden = !busy; $('#driveCancel').disabled = job.status === 'cancelling';
     const connectionFailed = job.connection?.ok === false && Date.parse(job.connection.checkedAt) > (Date.parse(job.lastSuccess) || 0);
-    const configured = Boolean(job.settings?.sources.length), status = !configured ? 'Keine Quellen' : connectionFailed && !busy ? 'Zugang prüfen' : job.status === 'idle' ? job.connection?.ok ? 'Bereit' : 'Ungeprüft' : labels[job.status] || job.status;
+    const configured = Boolean(job.settings?.sources.length), status = !configured ? 'Keine Daten' : connectionFailed && !busy ? 'Zugang prüfen' : job.status === 'idle' ? job.connection?.ok ? 'Bereit' : 'Ungeprüft' : labels[job.status] || job.status;
     const badge = $('#overviewDriveStatus'); badge.textContent = status; badge.className = 'badge ' + (['failed','interrupted'].includes(job.status) || connectionFailed && !busy ? 'bad' : busy ? 'busy' : job.connection?.ok || job.status === 'success' ? 'ok' : '');
     $('#dashboardDriveStatus').textContent=badge.textContent;$('#dashboardDriveStatus').className=badge.className;
-    $('#dashboardDriveSummary').textContent=job.settings?.sources.length?`${job.settings.sources.length} Quellen · ${modeLabel}`:'Keine Quellen ausgewählt';
+    $('#dashboardDriveSummary').textContent=job.settings?.sources.length?`${job.settings.sources.length} Daten · ${modeLabel}`:'Keine Daten ausgewählt';
     $('#driveOverview').hidden=!configured;const count=document.querySelectorAll('#folders tr[data-folder]').length+Number(configured);$('#jobCount').textContent=String(count);$('#jobEmpty').hidden=count>0;$('#jobsTimezone').textContent=job.timezone||'';
     $('#driveOverview').classList.toggle('is-configured', configured);
     const selected = (job.sources || []).map(source => source.name).join(', ');

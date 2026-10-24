@@ -6,7 +6,7 @@ Lokale Web-App für **QNAP → Debian-LXC → Proxmox Backup Server** und **Goog
 - **Aufträge:** eingerichtete App-Aufträge und externe Sicherungen gemeinsam sehen; PBS und Drive starten/abbrechen.
 - **Zeitplan:** alle eingerichteten Backups als Woche/Agenda; geplante Wege optional vergleichen, Zeitfenster und erwartete Netzlast prüfen.
 - **Backup-Planung:** Planner-Import und vollständige Bearbeitung; je Weg geplant, App-Umsetzung oder externe Umsetzung dokumentieren.
-- **Quellen / Ziele:** SMB- oder NFS-Bind-Mounts registrieren, PBS-Datastores und Drive konfigurieren. Mount-Änderungen am Host bleiben Teil der Anleitung.
+- **Daten / Ziele:** Gerät → Datenbestand → Zielgerät → Datastore/Ordner abbilden. Geräte direkt unter Daten verwalten; Mount-Änderungen am Host bleiben Teil der Anleitung.
 - **Einstellungen / Protokoll:** Zeitzone, Bandbreite, ntfy, Updates, Diagnose und zentrale Laufprotokolle.
 
 ## Installation

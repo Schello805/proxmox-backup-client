@@ -11,7 +11,7 @@ test('Datastore 3 und 4 hinzufügen und Filmordner auf PBS 2 und 3 verteilen',as
  const fourth=await page.request.post('/api/targets/setup',{headers,data:{datastore:'pbs4'}});expect(fourth.ok()).toBe(true);
  await page.reload();await page.getByRole('link',{name:/Ziele$/}).click();await page.locator('#pbsSettings>summary').click();
  await expect(page.locator('#additionalTargets')).toContainText('Datastores · 4');await expect(page.locator('#additionalTargets input')).toHaveCount(4);
- await page.getByRole('link',{name:/Quellen$/}).click();
+ await page.locator('#manageSources').click();
  await page.locator('#sourceList tr[data-source-id="filme"]').getByRole('button',{name:'Dateien & Ordner zuordnen',exact:true}).click();
  const partition=page.locator('#sourcePartitions');await expect(partition).toContainText('Aufnahme A');
  await partition.getByLabel('Ziel für alle Einträge',{exact:true}).selectOption('secondary');await partition.getByRole('button',{name:'Allen zuweisen',exact:true}).click();
@@ -37,7 +37,7 @@ test('Root-Dateien nach Größe auf PBS 2 und 3 verteilen, Auswahl prüfen und a
  await app.setPartitionEntries('/mnt/Daten/Filme',{folders:['@Recently-Snapshot','images'],files:Array.from({length:1415},(_,index)=>({name:`Aufnahme ${String(index+1).padStart(4,'0')}.ts`,kind:'file',bytes:(index+1)*1048576})),otherEntries:1415});
  await login(page,{sourceDetails:false});const headers={'X-Requested-With':'qnap-dashboard'};
  for(const datastore of ['pbs2','pbs3'])expect((await page.request.post('/api/targets/setup',{headers,data:{datastore}})).ok()).toBe(true);
- await page.reload();await page.getByRole('link',{name:/Quellen$/}).click();await page.locator('#sourceList tr[data-source-id="filme"]').getByRole('button',{name:'Dateien & Ordner zuordnen',exact:true}).click();const partition=page.locator('#sourcePartitions');
+ await page.reload();await page.locator('#manageSources').click();await page.locator('#sourceList tr[data-source-id="filme"]').getByRole('button',{name:'Dateien & Ordner zuordnen',exact:true}).click();const partition=page.locator('#sourcePartitions');
  await expect(partition).toContainText('Quelle: /mnt/Daten/Filme');await expect(partition).toContainText('//test-nas/filme');await expect(partition).toContainText('1415 Dateien');await expect(partition.locator('tbody tr')).toHaveCount(100);
  await partition.getByLabel('Erstes Ziel für Dateiverteilung',{exact:true}).selectOption('secondary');await partition.getByLabel('Zweites Ziel für Dateiverteilung',{exact:true}).selectOption('extra1');await partition.getByRole('button',{name:'Dateien nach Größe verteilen',exact:true}).click();
  await partition.getByLabel('Ziel für @Recently-Snapshot',{exact:true}).selectOption('skip');await partition.getByLabel('Ziel für images',{exact:true}).selectOption('skip');await partition.getByRole('button',{name:'Zuordnung speichern',exact:true}).click();await expect(partition).toContainText('Bitte die Aufteilung bestätigen');

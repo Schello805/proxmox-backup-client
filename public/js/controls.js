@@ -55,13 +55,13 @@ export function installControls({ api, element, refresh, refreshActivity, notice
     try {
       const file = $('#restoreFile').files[0]; if (!file) throw Error('Zuerst eine Einstellungsdatei auswählen.'); if (file.size > 60000) throw Error('Einstellungsdatei ist zu groß (max. 60 KB).');
       restoreFile = JSON.parse(await file.text()); const result = await api('/api/config/restore/preview', { backup: restoreFile }); restorePreview = result;
-      $('#restorePreview').append(element('p', `${result.sources} Quellen · ${result.timezone} · ${result.includesSecrets ? 'Datei enthält Zugangsdaten' : 'Datei ohne Zugangsdaten'}`), element('p', result.changes.length ? 'Wird geändert: ' + result.changes.join(', ') : 'Keine Änderungen an den Einstellungen.'), ...result.warnings.map(warning => element('p', warning, 'hint')));
+      $('#restorePreview').append(element('p', `${result.sources} Daten · ${result.timezone} · ${result.includesSecrets ? 'Datei enthält Zugangsdaten' : 'Datei ohne Zugangsdaten'}`), element('p', result.changes.length ? 'Wird geändert: ' + result.changes.join(', ') : 'Keine Änderungen an den Einstellungen.'), ...result.warnings.map(warning => element('p', warning, 'hint')));
       $('#restoreResult').textContent = 'Vorschau geprüft. Erst „Wiederherstellen“ übernimmt die Einstellungen. App-Anmeldung und Backup-Verlauf bleiben erhalten.'; $('#applyRestore').hidden = false;
     } catch(e) { $('#restoreResult').textContent = e instanceof SyntaxError ? 'Datei enthält kein gültiges JSON.' : e.message; } finally { button.disabled = false; }
   });
   $('#applyRestore').addEventListener('click', async event => {
     if (!restorePreview) return; const button = event.currentTarget; button.disabled = true;
-    try { const result = await api('/api/config/restore/apply', { backup: restoreFile, revision: restorePreview.revision }); resetPreview(); policyDirty = false; onRestored(); await refresh(); $('#restoreResult').textContent = `Wiederhergestellt. Vorheriger Stand gesichert: ${result.backupFile}. Quellen und PBS-Zugänge prüfen.`; }
+    try { const result = await api('/api/config/restore/apply', { backup: restoreFile, revision: restorePreview.revision }); resetPreview(); policyDirty = false; onRestored(); await refresh(); $('#restoreResult').textContent = `Wiederhergestellt. Vorheriger Stand gesichert: ${result.backupFile}. Daten und PBS-Zugänge prüfen.`; }
     catch(e) { $('#restoreResult').textContent = e.message; } finally { button.disabled = false; }
   });
   const bytes = value => value == null ? '—' : new Intl.NumberFormat('de-DE', { maximumFractionDigits: 2 }).format(value / 1024**3) + ' GiB';

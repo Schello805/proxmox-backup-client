@@ -2,11 +2,11 @@
 const { test, expect, login } = require('./fixtures.cjs');
 const { spawnSync } = require('node:child_process');
 
-test('Quellen-Assistent: Kopierbefehle, freier Mount-Slot, Identitätsprüfung und Übernahme', async ({ page, app, context }, testInfo) => {
+test('Daten-Assistent: Kopierbefehle, freier Mount-Slot, Identitätsprüfung und Übernahme', async ({ page, app, context }, testInfo) => {
   await login(page); await context.grantPermissions(['clipboard-read','clipboard-write']);
   await page.getByRole('link', {name:/Übersicht/}).click();await page.getByRole('link', { name: '+ Hinzufügen', exact: true }).click();
   const wizard = page.getByRole('region', { name: 'Einrichtungsassistent' });
-  await wizard.getByRole('textbox', { name: 'Quellenname', exact: true }).fill('Fotos');
+  await wizard.getByRole('textbox', { name: 'Datenname', exact: true }).fill('Fotos');
   await wizard.getByRole('textbox', { name: 'Backup-ID', exact: true }).fill('fotos');
   await wizard.getByRole('textbox', { name: 'Pfad im LXC', exact: true }).fill('/mnt/Daten/Fotos');
   await wizard.getByRole('textbox', { name: 'Netzwerkfreigabe', exact: true }).fill('//test-nas/fotos');
@@ -72,7 +72,7 @@ test('PBS-Assistent: eigener Server mit getrenntem Zugang, Backup und dauerhaft 
   const data = await (await page.request.get('/api/status')).json(); expect(data.targets[1].repository).toBe('archive@pbs@pbs2.local:test-store'); expect(data.config.secondaryPBS.hasPassword).toBe(true); expect(data.config.secondaryPBS.fingerprint).toBe(secondFingerprint); expect(data.config.fingerprint).toBe(''); expect(JSON.stringify(data)).not.toContain('e2e-second-secret');
   await page.getByRole('link', { name: /Aufträge$/ }).click();
   await page.locator('tr[data-folder="software"]').getByRole('button', { name: 'Zeitplan Software bearbeiten' }).click();
-  const detail = page.locator('#sourceDetail'); await detail.getByRole('combobox', { name: 'Backup-Ziel', exact: true }).selectOption('secondary'); await detail.getByRole('button', { name: 'Quelle speichern', exact: true }).click(); await expect(detail.locator('#sourceResult')).toContainText('gespeichert');
+  const detail = page.locator('#sourceDetail'); await detail.getByRole('combobox', { name: 'Backup-Ziel', exact: true }).selectOption('secondary'); await detail.getByRole('button', { name: 'Daten speichern', exact: true }).click(); await expect(detail.locator('#sourceResult')).toContainText('gespeichert');
   await detail.getByRole('button', { name: 'Schließen', exact: true }).click();
   await page.locator('tr[data-folder="software"]').getByRole('button', { name: 'Starten', exact: true }).click(); await page.getByRole('link', { name: /Protokoll$/ }).click();
   await expect(page.locator('#logText')).toContainText('archive@pbs@pbs2.local:test-store'); await expect(page.locator('#logText')).toContainText('E2E namespace: archive'); await expect(page.locator('#logText')).toContainText('E2E credential match: true');
@@ -113,13 +113,13 @@ test('PBS-Assistent: erste Verbindung und fehlgeschlagene Prüfung ohne doppelte
   expect(after.repository).toBe('backup@pbs@pbs.local:fresh'); expect(after.hasPassword).toBe(true); expect(after.schedules).toEqual(initial.schedules);
 });
 
-test('Mobiler Quellen-Assistent: vorhandene LXC-Freigabe überspringt Host-Einrichtung', async ({ page }) => {
+test('Mobiler Daten-Assistent: vorhandene LXC-Freigabe überspringt Host-Einrichtung', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 }); await login(page); await page.goto('/#assistant/source');
-  const wizard = page.locator('#assistant'); await wizard.getByRole('textbox', { name: 'Quellenname', exact: true }).fill('Fotos');
+  const wizard = page.locator('#assistant'); await wizard.getByRole('textbox', { name: 'Datenname', exact: true }).fill('Fotos');
   await expect(wizard.getByRole('textbox', { name: 'Backup-ID', exact: true })).toHaveValue('fotos');
   await wizard.getByRole('checkbox', { name: 'Bereits im LXC eingebunden', exact: true }).check();
   await wizard.getByRole('button', { name: 'Weiter', exact: true }).click();
   await expect(wizard.locator('.command-card')).toHaveCount(1); await expect(wizard.getByRole('textbox', { name: 'Host-Mountpfad', exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await wizard.getByRole('button', { name: 'Zurück', exact: true }).click(); await expect(wizard.getByRole('textbox', { name: 'Quellenname', exact: true })).toHaveValue('Fotos');
+  await wizard.getByRole('button', { name: 'Zurück', exact: true }).click(); await expect(wizard.getByRole('textbox', { name: 'Datenname', exact: true })).toHaveValue('Fotos');
 });

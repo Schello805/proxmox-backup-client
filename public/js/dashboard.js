@@ -27,12 +27,12 @@ export function installDashboard({ element, date, openSource, resolveProblem }) 
         item.append(element('strong',String(value)),element('span',label),element('small',detail,'hint')); root.append(item);
       }
     }
-    metrics('targetMetrics', [[targetCount,'Konfigurierte Ziele',configuredPBS.length+' PBS-Datastores · '+Number(driveSources.length>0)+' Google Drive'],[folders.filter(source=>source.target!=='gdrive'&&!source.partitioned&&source.selection?.length!==0).filter(source=>configuredPBS.some(target=>target.id===(source.target||'primary'))).length,'Quellen mit PBS-Ziel','Zugeordnet · kein Nachweis einer Sicherung'],[driveSources.length,'Quellen für Drive ausgewählt','Ausgewählte Quellen']]);
-    const sourceMetrics = [[folders.length,'Quellen insgesamt','Registrierte Ordner'],[folders.filter(source=>source.ok).length,'Mounts verfügbar','Aktuell bestätigte Einbindungen'],[planned,'Automatisch geplant','PBS · täglich, wöchentlich oder monatlich'],[volume,'Ermittelte Quellgröße',measured.length+' von '+folders.filter(source=>!source.partitioned&&source.selection?.length!==0).length+' Quellen gemessen']];
+    metrics('targetMetrics', [[targetCount,'Konfigurierte Ziele',configuredPBS.length+' PBS-Datastores · '+Number(driveSources.length>0)+' Google Drive'],[folders.filter(source=>source.target!=='gdrive'&&!source.partitioned&&source.selection?.length!==0).filter(source=>configuredPBS.some(target=>target.id===(source.target||'primary'))).length,'Daten mit PBS-Ziel','Zugeordnet · kein Nachweis einer Sicherung'],[driveSources.length,'Daten für Drive ausgewählt','Ausgewählte Daten']]);
+    const sourceMetrics = [[folders.length,'Daten insgesamt','Registrierte Ordner'],[folders.filter(source=>source.ok).length,'Mounts verfügbar','Aktuell bestätigte Einbindungen'],[planned,'Automatisch geplant','PBS · täglich, wöchentlich oder monatlich'],[volume,'Ermittelte Quellgröße',measured.length+' von '+folders.filter(source=>!source.partitioned&&source.selection?.length!==0).length+' Daten gemessen']];
     metrics('sourceMetrics',sourceMetrics);
     metrics('dashboardMetrics',[sourceMetrics[3]]);
     $('#pbsSettings > summary').textContent = 'Proxmox Backup Server · '+configuredPBS.length+(configuredPBS.length===1?' Datastore eingerichtet':' Datastores eingerichtet');
-    $('#driveSettings > summary').textContent = 'Google Drive · '+driveSources.length+(driveSources.length===1?' Quelle':' Quellen');
+    $('#driveSettings > summary').textContent = 'Google Drive · '+driveSources.length+(driveSources.length===1?' Quelle':' Daten');
     const available = folders.filter(source => source.ok).length, checking = folders.filter(source => source.checking).length;
     $('#dashboardMountSummary').textContent = `${available} von ${folders.length} verfügbar${checking ? ' · ' + checking + ' werden geprüft' : ''}`;
     const sorted = [...folders].sort((a,b) => Number(a.ok) - Number(b.ok));
@@ -43,7 +43,7 @@ export function installDashboard({ element, date, openSource, resolveProblem }) 
       button.title = `${source.path}${source.mount?.source ? ' · '+source.mount.source : ''}${source.checkedAt ? ' · Stand '+date(source.checkedAt) : ''}`;
       button.addEventListener('click',()=>openSource(source)); mounts.append(button);
     }
-    $('#dashboardMoreSources').textContent = folders.length > 6 ? `Alle ${folders.length} Quellen ansehen →` : 'Quellen verwalten →';
+    $('#dashboardMoreSources').textContent = folders.length > 6 ? `Alle ${folders.length} Daten ansehen →` : 'Daten verwalten →';
     let reachable=0, configuredTargets=0;
     function card(name, description, observation, configured, action, override) {
       const age=Date.now()-Date.parse(observation?.checkedAt), recent=Number.isFinite(age)&&age>=-60000&&age<=20*60000;
@@ -59,7 +59,7 @@ export function installDashboard({ element, date, openSource, resolveProblem }) 
       const latest=related.map(source=>source.job).filter(Boolean).sort((a,b)=>Date.parse(b.lastSuccess||0)-Date.parse(a.lastSuccess||0))[0]||{};
       const active=related.find(source=>['running','queued','cancelling'].includes(source.job?.status));
       const changed=related.map(source=>source.pbsCheckAfter).filter(Boolean).sort().at(-1);
-      card('PBS · '+target.name,`${related.length} Quellen · ${target.repository || 'Zugang fehlt'}`,latestConnection(latest,snapshot.connections?.[target.id],snapshot.capacities?.[target.id],changed),Boolean(target.repository&&target.hasPassword),()=>openTarget('pbsSettings'),active?{label:active.job.status==='queued'?'Sicherung wartet':active.job.status==='cancelling'?'Abbruch läuft':'Sicherung läuft',tone:'busy'}:null);
+      card('PBS · '+target.name,`${related.length} Daten · ${target.repository || 'Zugang fehlt'}`,latestConnection(latest,snapshot.connections?.[target.id],snapshot.capacities?.[target.id],changed),Boolean(target.repository&&target.hasPassword),()=>openTarget('pbsSettings'),active?{label:active.job.status==='queued'?'Sicherung wartet':active.job.status==='cancelling'?'Abbruch läuft':'Sicherung läuft',tone:'busy'}:null);
     }
     const drive=snapshot.drive||{}, busy=['queued','running','cancelling'].includes(drive.status);
     if(drive.settings?.sources.length) {
@@ -73,8 +73,8 @@ export function installDashboard({ element, date, openSource, resolveProblem }) 
     const overdue=backedUpFolders.filter(source=>source.health?.missed || source.health?.stale);
     const never=backedUpFolders.filter(source=>!source.job?.lastSuccess);
     $('#plannedCount').textContent=`${planned} / ${backedUpFolders.length}`;
-    $('#plannedDescription').textContent=`${backedUpFolders.length-planned} Quellen nur manuell`;
-    $('#protectionTitle').textContent=`${succeeded.length} von ${backedUpFolders.length} Quellen mit aktuellem PBS-Erfolg`;
+    $('#plannedDescription').textContent=`${backedUpFolders.length-planned} Daten nur manuell`;
+    $('#protectionTitle').textContent=`${succeeded.length} von ${backedUpFolders.length} Daten mit aktuellem PBS-Erfolg`;
     $('#protectionDescription').textContent=[overdue.length?`${overdue.length} überfällig`:null,never.length?`${never.length} noch ohne erfolgreichen PBS-Lauf`:null,'Erfolg laut App-Verlauf · Wiederherstellung separat prüfen'].filter(Boolean).join(' · ');
     $('#protectionSummary').classList.toggle('needs-attention',succeeded.length<backedUpFolders.length);
     const alerts=$('#targetAlerts');alerts.replaceChildren();

@@ -5,12 +5,12 @@ const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 test('Quelle mit Drive-Auswahl abmelden, letzte Quelle entfernen und neu hinzufügen',async({page})=>{
  await login(page,{sourceDetails:false});
  let response=await page.request.post('/api/gdrive',{headers:{'X-Requested-With':'qnap-dashboard'},data:{remote:'gdrive',folder:'QNAP-Backup',sources:['daten'],schedule:''}});expect(response.ok()).toBe(true);
- await page.reload();await page.getByRole('link',{name:'Quellen',exact:true}).click();
+ await page.reload();await page.locator('#manageSources').click();
  await page.locator('#sourceList tr[data-source-id="daten"]').getByRole('button',{name:'Abmelden',exact:true}).click();await expect(page.locator('#sourceList tr')).toHaveCount(5);
  response=await page.request.get('/api/status');expect((await response.json()).config.gdrive.sources).toEqual([]);
  for(const id of ['software','filme','serien','hoerspiele','musik']){await page.locator(`#sourceList tr[data-source-id="${id}"]`).getByRole('button',{name:'Abmelden',exact:true}).click();await expect(page.locator(`#sourceList tr[data-source-id="${id}"]`)).toHaveCount(0);}
- await expect(page.locator('#sourceListCount')).toHaveText('0 von 0 Quellen');
- const form=page.locator('#sourceForm');await form.getByLabel('Name',{exact:true}).fill('Daten');await form.getByLabel('Backup-ID',{exact:true}).fill('daten');await form.getByLabel('Pfad im LXC',{exact:true}).fill('/mnt/Daten/Daten');await form.getByLabel('Erwartete Netzwerkfreigabe',{exact:true}).fill('//test-nas/daten');await form.getByRole('button',{name:'Quelle speichern',exact:true}).click();await expect(page.locator('#sourceList tr')).toHaveCount(1);
+ await expect(page.locator('#sourceListCount')).toHaveText('0 von 0 Datenbeständen');
+ const form=page.locator('#sourceForm');await form.getByLabel('Name',{exact:true}).fill('Daten');await form.getByLabel('Backup-ID',{exact:true}).fill('daten');await form.getByLabel('Pfad im LXC',{exact:true}).fill('/mnt/Daten/Daten');await form.getByLabel('Erwartete Netzwerkfreigabe',{exact:true}).fill('//test-nas/daten');await form.getByRole('button',{name:'Daten speichern',exact:true}).click();await expect(page.locator('#sourceList tr')).toHaveCount(1);
 });
 test('Ziel entfernen verlangt Bestätigung und entfernt nur App-Konfiguration; Drive deaktivieren',async({page})=>{
  await login(page,{sourceDetails:false});await page.getByRole('link',{name:/Ziele$/}).click();await page.locator('#pbsSettings>summary').click();const row=page.locator('[data-datastore="primary"]');await row.getByRole('button',{name:'Entfernen',exact:true}).click();await expect(row.locator('.datastore-confirm')).toBeVisible();await row.getByRole('button',{name:'Entfernen bestätigen',exact:true}).click();await expect(page.locator('#notice')).toContainText('App-Ziel entfernt');
@@ -18,13 +18,13 @@ test('Ziel entfernen verlangt Bestätigung und entfernt nur App-Konfiguration; D
  await page.locator('#driveSettings>summary').click();await page.locator('#drivePanel').getByLabel('Daten',{exact:true}).check();await page.getByRole('button',{name:'Google Drive speichern',exact:true}).click();await expect(page.locator('#driveResult')).toContainText('gespeichert');await page.locator('#driveDisable').click();await expect(page.locator('#driveResult')).toContainText('deaktiviert');await expect(page.locator('#drivePanel').getByLabel('Daten',{exact:true})).not.toBeChecked();
 });
 test('Mount-Verwaltung erzeugt begrenzte und syntaktisch gültige Host-Befehle',async({page},testInfo)=>{
- await login(page,{sourceDetails:false});await page.getByRole('link',{name:'Quellen',exact:true}).click();await page.getByRole('link',{name:'Mounts verwalten',exact:true}).click();await page.locator('#mountSource').selectOption('daten');await expect(page.locator('#mountPath')).toHaveValue('/mnt/Daten/Daten');
+ await login(page,{sourceDetails:false});await page.locator('#manageSources').click();await page.getByRole('link',{name:'Mounts verwalten',exact:true}).click();await page.locator('#mountSource').selectOption('daten');await expect(page.locator('#mountPath')).toHaveValue('/mnt/Daten/Daten');
  for(const action of ['inspect','replace','remove']){await page.locator('#mountAction').selectOption(action);const command=await page.locator('#mountCommand').textContent();expect(spawnSync('bash',['-n'],{input:command,encoding:'utf8'}).status).toBe(0);if(action!=='inspect')expect(command).toContain('status: stopped');if(action==='remove')expect(command).toContain('pct set "$ct" --delete "$slot"');}
  await page.locator('#mountCT').fill('119; rm');await expect(page.locator('#copyMountCommand')).toBeDisabled();await expect(page.locator('#mountCommand')).toHaveText('');await page.locator('#mountCT').fill('119');await page.screenshot({path:testInfo.outputPath('mount-management.png')});
 });
 
 test('Mount-Befehle verwenden den vorhandenen Slot und verweigern falsche Freigaben oder laufende LXC',async({page})=>{
- await login(page,{sourceDetails:false});await page.getByRole('link',{name:'Quellen',exact:true}).click();await page.getByRole('link',{name:'Mounts verwalten',exact:true}).click();await page.locator('#mountSource').selectOption('daten');await page.locator('#mountAction').selectOption('replace');
+ await login(page,{sourceDetails:false});await page.locator('#manageSources').click();await page.getByRole('link',{name:'Mounts verwalten',exact:true}).click();await page.locator('#mountSource').selectOption('daten');await page.locator('#mountAction').selectOption('replace');
  const command=await page.locator('#mountCommand').textContent(),dir=fs.mkdtempSync(path.join(os.tmpdir(),'mount-command-')),log=path.join(dir,'calls');
  try{
   fs.writeFileSync(path.join(dir,'pct'),`#!/bin/sh

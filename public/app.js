@@ -93,7 +93,7 @@ async function refresh() {
     $('#previousSources').disabled = sourcePage === 0; $('#nextSources').disabled = (sourcePage + 1) * 6 >= data.folders.length;
     for (const folder of data.folders.filter(item=>!item.partitioned&&item.target!=='gdrive')) {
       const row = element('tr'); row.dataset.folder = folder.id; const source = element('td'); const sourceButton = element('button', names[folder.id], 'source-link'); sourceButton.title = 'Details, Zeitplan und Verlauf öffnen'; sourceButton.addEventListener('click', () => openHistory(folder.id)); const path = element('code', folder.path); path.title = folder.path; const target = element('small', folder.targetRepository?.split(':').at(-1) || 'Ziel fehlt', 'source-target'); target.title = folder.targetRepository || 'PBS-Ziel noch nicht konfiguriert'; const heading = element('div', undefined, 'source-heading'); heading.append(sourceButton); source.append(heading, path);if(folder.selection)source.append(element('small',folder.selection.length+' ausgewählte Dateien','hint')); row.append(source);
-      const mount = element('td'), badge = element('span', folder.ok ? '● Eingebunden' : folder.checking ? '● Prüfung läuft' : ['cifs','smb3','nfs','nfs4'].includes(folder.mount?.type) && folder.mount?.source && folder.expectedSource && folder.mount.source !== folder.expectedSource ? '● Mount geändert' : '● Nicht verfügbar', `badge ${folder.ok ? 'ok' : folder.checking ? 'busy' : 'bad'}`); badge.title = folder.ok ? `${folder.mount.source} → ${folder.mount.target} (${folder.mount.type}) · ${folder.identityConfirmed ? 'Mount-Identität bestätigt' : 'Mount-Quelle noch nicht festgelegt: unter Quellen bestätigen'}` : `${folder.error}${folder.mount?.source ? ' Erkannt: ' + folder.mount.source : ''}`; if (folder.checking) badge.title += ' · Lesbarkeit wird im Hintergrund geprüft'; if (folder.checkedAt) badge.title += ' · Letzte Prüfung: ' + date(folder.checkedAt); mount.append(badge);
+      const mount = element('td'), badge = element('span', folder.ok ? '● Eingebunden' : folder.checking ? '● Prüfung läuft' : ['cifs','smb3','nfs','nfs4'].includes(folder.mount?.type) && folder.mount?.source && folder.expectedSource && folder.mount.source !== folder.expectedSource ? '● Mount geändert' : '● Nicht verfügbar', `badge ${folder.ok ? 'ok' : folder.checking ? 'busy' : 'bad'}`); badge.title = folder.ok ? `${folder.mount.source} → ${folder.mount.target} (${folder.mount.type}) · ${folder.identityConfirmed ? 'Mount-Identität bestätigt' : 'Mount-Quelle noch nicht festgelegt: unter Daten bestätigen'}` : `${folder.error}${folder.mount?.source ? ' Erkannt: ' + folder.mount.source : ''}`; if (folder.checking) badge.title += ' · Lesbarkeit wird im Hintergrund geprüft'; if (folder.checkedAt) badge.title += ' · Letzte Prüfung: ' + date(folder.checkedAt); mount.append(badge);
       const size = folder.size;
       const sizeLabel = size?.bytes != null ? new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 }).format(size.bytes / 1024 ** 3) + ' GiB' : ({ scanning: 'Größe wird ermittelt …', pending: 'Größe vorgemerkt …', error: 'Größe nicht verfügbar' }[size?.status] || (folder.mount?.source && !folder.ok ? 'Erkannt: ' + folder.mount.source : 'Größe: —'));
       const sizeInfo = element('small', sizeLabel, 'source-size');
@@ -305,7 +305,7 @@ async function refreshActivity() {
     if (['queued','running','cancelling'].includes(data.drive?.status)) {
       $('#runningCount').textContent = (data.active ? 1 : 0) + data.queue.length + 1;
       $('#cancelAll').hidden = false; $('#cancelAll').disabled = false;
-      if (!data.active) { drive?.renderActivity($('#queueInfo'),data.drive); $('.activity').classList.toggle('running',data.drive.status!=='queued'); $('#activityTitle').textContent = 'Google Drive · ' + (data.drive.source || 'Ausgewählte Quellen'); $('#activityDescription').textContent = data.drive.message; $('#activityBadge').textContent = data.drive.status === 'queued' ? 'Drive wartet' : data.drive.status === 'cancelling' ? 'Abbruch läuft' : 'Drive läuft'; $('#activityBadge').className = 'badge busy'; }
+      if (!data.active) { drive?.renderActivity($('#queueInfo'),data.drive); $('.activity').classList.toggle('running',data.drive.status!=='queued'); $('#activityTitle').textContent = 'Google Drive · ' + (data.drive.source || 'Ausgewählte Daten'); $('#activityDescription').textContent = data.drive.message; $('#activityBadge').textContent = data.drive.status === 'queued' ? 'Drive wartet' : data.drive.status === 'cancelling' ? 'Abbruch läuft' : 'Drive läuft'; $('#activityBadge').className = 'badge busy'; }
     }
     $('#activityTitle').title = $('#activityTitle').textContent; $('#activityDescription').title = $('#activityDescription').textContent;
     if (data.notification && !$('#notifyDetails').open) $('#notificationResult').textContent = `${data.notification.message} (${date(data.notification.at)})`;
@@ -321,7 +321,7 @@ document.querySelectorAll('[data-close]').forEach(button => button.addEventListe
 installSourceHelp($('#sourceForm'));
 $('#sourceForm').elements.expectedSource.parentElement.prepend($('#probeSource'));
 function resetSource() {
-  $('#sourceSchedule').hidden=false; sourceEditing = null; clearFieldErrors($('#sourceForm')); $('#sourceForm').reset(); $('#sourceForm').elements.id.readOnly = false; $('#sourceFormTitle').textContent = 'Quelle hinzufügen'; $('#sourceResult').textContent = ''; $('#sourceProblem').hidden = true; fillSourcePlan($('#sourceForm').elements.target.value === 'gdrive' ? savedConfig.gdrive.schedule : { days: [], time: '' }); renderSourceTargetHint();
+  $('#sourceSchedule').hidden=false; sourceEditing = null; clearFieldErrors($('#sourceForm')); $('#sourceForm').reset(); $('#sourceForm').elements.id.readOnly = false; $('#sourceFormTitle').textContent = 'Daten hinzufügen'; $('#sourceResult').textContent = ''; $('#sourceProblem').hidden = true; fillSourcePlan($('#sourceForm').elements.target.value === 'gdrive' ? savedConfig.gdrive.schedule : { days: [], time: '' }); renderSourceTargetHint();
 }
 function backupTargets() {
   return [{ id: 'primary', name: savedConfig?.repository?.split(':').at(-1) || 'Datastore 1' }, ...(savedConfig?.secondaryDatastore ? [{ id: 'secondary', name: savedConfig.secondaryDatastore + (savedConfig.secondaryPBS ? ' · ' + savedConfig.secondaryPBS.server : '') }] : []), ...(savedConfig?.additionalDatastores || []).map(item=>({id:item.id,name:item.datastore}))];
@@ -338,7 +338,7 @@ function renderSources() {
     const folder=folderData.find(item=>item.id===source.id);
     return (!$('#sourceSearch').dataset.exactId || source.id === $('#sourceSearch').dataset.exactId) && [source.name,source.path,source.expectedSource,folder?.mount?.source,strategyUI?.sourceAliases(source.id)].join(' ').toLocaleLowerCase('de').includes(query) && (filter==='all'||filter==='external'&&strategyUI?.sourceStates(source.id).includes('external')||filter==='planned'&&strategyUI?.sourceStates(source.id).includes('planned')||filter==='available'&&folder?.ok||filter==='unavailable'&&!folder?.ok&&!folder?.checking);
   });
-  $('#sourceListCount').textContent = `${sources.length} von ${savedConfig.sources.length} Quellen`;
+  $('#sourceListCount').textContent = `${sources.length} von ${savedConfig.sources.length} Daten`;
   for (const source of sources) {
     const row = element('tr', undefined, 'source-editor-row'), info = element('td'); row.dataset.sourceId=source.id;
     const folder=folderData.find(item=>item.id===source.id)||{};
@@ -373,7 +373,7 @@ function renderSourceTargetHint() {
   let hint = $('#sourceTargetHint');
   if (!hint) { hint = element('p', '', 'hint'); hint.id = 'sourceTargetHint'; $('#sourceSchedule').before(hint); }
   hint.hidden = $('#sourceForm').elements.target.value !== 'gdrive';
-  hint.textContent = 'Google Drive: Modus und Zielordner aus „Ziele“ werden verwendet. Der folgende Zeitplan gilt gemeinsam für alle Google-Drive-Quellen. Es wird kein PBS-Auftrag für diese Quelle erstellt.';
+  hint.textContent = 'Google Drive: Modus und Zielordner aus „Ziele“ werden verwendet. Der folgende Zeitplan gilt gemeinsam für alle Google-Drive-Daten. Es wird kein PBS-Auftrag für diese Quelle erstellt.';
 }
 $('#sourceForm').elements.target.addEventListener('change', () => {
   const source = savedConfig.sources.find(item => item.id === sourceEditing);
@@ -385,7 +385,7 @@ $('#sourceStatusFilter').addEventListener('change', renderSources);
 $('#resetSource').addEventListener('click', resetSource);
 $('#probeSource').addEventListener('click', async event => {
   const button = event.currentTarget; button.disabled = true;
-  try { const check = await api('/api/sources/probe', { path: $('#sourceForm').elements.path.value }); if (!check.ok) throw new Error(check.error); $('#sourceForm').elements.expectedSource.value = check.mount.source; $('#sourceResult').textContent = `Erkannt: ${check.mount.source} · zum Bestätigen Quelle speichern.`; }
+  try { const check = await api('/api/sources/probe', { path: $('#sourceForm').elements.path.value }); if (!check.ok) throw new Error(check.error); $('#sourceForm').elements.expectedSource.value = check.mount.source; $('#sourceResult').textContent = `Erkannt: ${check.mount.source} · zum Bestätigen Daten speichern.`; }
   catch (e) { $('#sourceResult').textContent = e.message; } finally { button.disabled = false; }
 });
 $('#sourceForm').addEventListener('submit', async event => {
@@ -396,11 +396,11 @@ $('#sourceForm').addEventListener('submit', async event => {
     const chosenDays = [...$('#sourceDays').querySelectorAll('button[aria-pressed="true"]')].map(button => Number(button.dataset.day));
     if (!['manual','monthly'].includes(form.elements.planMode.value) && !chosenDays.length) errors.planMode = 'Mindestens einen Wochentag wählen.';
     if (form.elements.planMode.value !== 'manual' && !/^([01]\d|2[0-3]):[0-5]\d$/.test(form.elements.planTime.value)) errors.planTime = 'Eine gültige Uhrzeit wählen.'; showFieldErrors(form, errors);
-    if (Object.keys(errors).length) throw new Error('Bitte die markierten Quellenfelder korrigieren.');
+    if (Object.keys(errors).length) throw new Error('Bitte die markierten Datenfelder korrigieren.');
     const sources = sourceEditing ? savedConfig.sources.map(item => item.id === sourceEditing ? source : item) : [...savedConfig.sources, source];
     const monthly = form.elements.planMode.value === 'monthly';
     const schedule = { days: ['manual','monthly'].includes(form.elements.planMode.value) ? [] : chosenDays, time: form.elements.planMode.value === 'manual' ? '' : form.elements.planTime.value, ...(monthly ? { monthDay: form.elements.monthDay.value === 'last' ? 'last' : Number(form.elements.monthDay.value) } : {}) };
-    await api('/api/sources', { sources, schedule: { id: source.id, value: schedule } }); loaded = false; await refresh(); renderSources(); if (detailId) editSource(source.id, true); else resetSource(); $('#sourceResult').textContent = 'Quelle und Sicherungsplan gespeichert.';
+    await api('/api/sources', { sources, schedule: { id: source.id, value: schedule } }); loaded = false; await refresh(); renderSources(); if (detailId) editSource(source.id, true); else resetSource(); $('#sourceResult').textContent = 'Daten und Sicherungsplan gespeichert.';
   } catch (e) { const field = serverField(e); if (field) showFieldErrors(form, { [field]: e.message }); $('#sourceResult').textContent = e.message; } finally { button.disabled = false; }
 });
 async function openHistory(id) {
@@ -506,7 +506,7 @@ function renderDiscovered() {
       const prefix = id.slice(0, 34); let suffix = 2;
       while (savedConfig.sources.some(source => source.id === id)) id = prefix + '-' + suffix++;
       form.elements.id.value = id; form.elements.name.value = candidate.name.slice(0, 60); form.elements.path.value = candidate.path; form.elements.expectedSource.value = candidate.expectedSource;
-      $('#sourceResult').textContent = 'Erkannte Freigabe prüfen, Backup-Ziel wählen und mit „Quelle speichern“ hinzufügen.';
+      $('#sourceResult').textContent = 'Erkannte Freigabe prüfen, Backup-Ziel wählen und mit „Daten speichern“ hinzufügen.';
       form.elements.name.focus();
     });
     row.append(info, button); $('#discoveredList').append(row);
@@ -538,7 +538,7 @@ function editSource(id, inline = false) {
   renderSources(); sourceEditing = id; const form = $('#sourceForm'); clearFieldErrors(form);
   for (const key of ['id','name','path','expectedSource']) form.elements[key].value = source[key];
   $('#sourceSchedule').hidden=Boolean(source.partitioned); form.elements.target.value = source.target || 'primary'; form.elements.id.readOnly = true;
-  $('#sourceFormTitle').textContent = `Quelle bearbeiten · ${source.name}`; $('#sourceResult').textContent = '';
+  $('#sourceFormTitle').textContent = `Daten bearbeiten · ${source.name}`; $('#sourceResult').textContent = '';
   fillSourcePlan(source.target === 'gdrive' ? savedConfig.gdrive.schedule : savedConfig.schedules[id]); renderSourceTargetHint(); renderSourceProblem(id);
   if (inline) showContext('sourceForm', id); else form.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
@@ -608,7 +608,7 @@ function renderAdditionalTargets(config) {
  const stores=[...(config.repository?[{id:'primary',datastore:config.repository.split(':').at(-1),repository:config.repository,namespace:config.namespace}]:[]),...(config.secondaryDatastore?[{id:'secondary',datastore:config.secondaryDatastore,repository:config.secondaryPBS?config.secondaryPBS.authId+'@'+config.secondaryPBS.server+':'+config.secondaryDatastore:config.repository.slice(0,config.repository.lastIndexOf(':')+1)+config.secondaryDatastore,namespace:config.secondaryPBS?.namespace??config.namespace}]:[]),...(config.additionalDatastores||[]).map(item=>({...item,repository:config.repository.slice(0,config.repository.lastIndexOf(':')+1)+item.datastore,namespace:config.namespace}))];
  const heading=element('div',undefined,'panel-title'),add=element('a','+ Datastore hinzufügen','secondary');add.href='#assistant/pbs';heading.append(element('h3','Datastores · '+stores.length),add);root.append(heading);
  if(!stores.length){root.append(element('p','Noch kein Datastore eingerichtet. Über den Assistenten hinzufügen.','hint'));return;}
- const table=element('table'),head=element('thead'),columns=element('tr');for(const name of ['Datastore','PBS / Namespace','Quellen','Status','Aktionen'])columns.append(element('th',name));head.append(columns);table.append(head);const body=element('tbody');
+ const table=element('table'),head=element('thead'),columns=element('tr');for(const name of ['Datastore','PBS / Namespace','Daten','Status','Aktionen'])columns.append(element('th',name));head.append(columns);table.append(head);const body=element('tbody');
  for(const entry of stores){
   const row=element('tr');row.dataset.datastore=entry.id;
   const cell=element('td'),input=element('input');input.value=entry.datastore;input.setAttribute('aria-label','Datastore '+entry.datastore);cell.append(input);

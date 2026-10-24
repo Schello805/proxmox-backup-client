@@ -21,7 +21,7 @@ test('Passwortschutz lässt sich deaktivieren und wieder einschalten', async ({ 
   await expect(page.locator('#loginDialog')).toBeVisible();
 });
 
-test('Zeitzonen-Dropdown und Wochenplan an der Quelle speichern; Polling bewahrt Entwürfe', async ({ page }) => {
+test('Zeitzonen-Dropdown und Wochenplan an der Daten speichern; Polling bewahrt Entwürfe', async ({ page }) => {
   await login(page); await page.clock.install(); await page.getByRole('link', { name: /^⚙.*Einstellungen$/ }).click();
   const zone = page.getByRole('combobox', { name: 'Zeitzone', exact: true });
   await expect(zone).toHaveJSProperty('tagName', 'SELECT'); await zone.selectOption('UTC');
@@ -31,10 +31,10 @@ test('Zeitzonen-Dropdown und Wochenplan an der Quelle speichern; Polling bewahrt
   const detail = page.locator('#sourceDetail');
   await detail.getByRole('combobox', { name: 'Frequenz', exact: true }).selectOption('custom');
   await detail.getByRole('button', { name: 'Sicherung Fr', exact: true }).click();
-  await detail.getByLabel('Uhrzeit', { exact: true }).fill(''); await detail.getByRole('button', { name: 'Quelle speichern', exact: true }).click();
+  await detail.getByLabel('Uhrzeit', { exact: true }).fill(''); await detail.getByRole('button', { name: 'Daten speichern', exact: true }).click();
   await expect(detail.getByLabel('Uhrzeit', { exact: true })).toHaveAttribute('aria-invalid', 'true');
   await detail.getByLabel('Uhrzeit', { exact: true }).fill('03:15'); await page.clock.fastForward(16_000); await expect(detail.getByLabel('Uhrzeit', { exact: true })).toHaveValue('03:15');
-  await detail.getByRole('button', { name: 'Quelle speichern', exact: true }).click(); await expect(detail.locator('#sourceResult')).toContainText('gespeichert');
+  await detail.getByRole('button', { name: 'Daten speichern', exact: true }).click(); await expect(detail.locator('#sourceResult')).toContainText('gespeichert');
   await page.reload(); await expect(detail.getByLabel('Uhrzeit', { exact: true })).toHaveValue('03:15');
   await expect(detail.getByRole('button', { name: 'Sicherung Mo', exact: true })).toHaveAttribute('aria-pressed','true');
   await expect(detail.getByRole('button', { name: 'Sicherung Mi', exact: true })).toHaveAttribute('aria-pressed','true');
@@ -54,16 +54,16 @@ test('ntfy: fehlendes Topic markieren, speichern und Testmeldung senden', async 
   await expect(page.getByLabel('Fehlermeldungen aktivieren')).toBeChecked(); await expect(page.getByRole('textbox', { name: /^Topic/ })).toHaveValue('e2e-backup');
 });
 
-test('Quellen hinzufügen, SMB ermitteln, bearbeiten und abmelden', async ({ page }) => {
-  await login(page); await page.getByRole('link', { name: 'Quellen', exact: true }).click();
-  const dialog = page.getByRole('region', { name: 'Backup-Quellen' });
+test('Daten hinzufügen, SMB ermitteln, bearbeiten und abmelden', async ({ page }) => {
+  await login(page); await page.locator('#manageSources').click();
+  const dialog = page.getByRole('region', { name: 'Daten', exact: true });
   await dialog.getByLabel('Name', { exact: true }).fill('Fotos'); await dialog.getByLabel('Backup-ID', { exact: true }).fill('fotos');
   await dialog.getByLabel('Pfad im LXC', { exact: true }).fill('/mnt/Daten/Fotos'); await dialog.getByRole('button', { name: 'Mount-Quelle ermitteln' }).click();
   await expect(dialog.getByLabel('Erwartete Netzwerkfreigabe', { exact: true })).toHaveValue('//test-nas/fotos');
-  await dialog.getByRole('button', { name: 'Quelle speichern' }).click();
+  await dialog.getByRole('button', { name: 'Daten speichern' }).click();
   let row = dialog.locator('.source-editor-row').filter({ has: page.getByText('Fotos', { exact: true }) }); await expect(row).toBeVisible();
   await row.getByRole('button', { name: 'Bearbeiten' }).click(); await dialog.getByLabel('Name', { exact: true }).fill('Fotos privat');
-  await dialog.getByRole('button', { name: 'Quelle speichern' }).click();
+  await dialog.getByRole('button', { name: 'Daten speichern' }).click();
   row = dialog.locator('.source-editor-row').filter({ has: page.getByText('Fotos privat', { exact: true }) }); await expect(row).toBeVisible();
   await row.getByRole('button', { name: 'Abmelden' }).click(); await expect(row).toHaveCount(0);
   await expect(dialog.locator('.source-editor-row')).toHaveCount(6);
@@ -136,11 +136,11 @@ test('Zweiten Datastore einrichten, Quelle zuweisen und getrennten PBS-Bestand p
   await page.getByRole('button', { name: 'Verbindung prüfen', exact: true }).click();
   await expect(page.locator('#connectionResult')).toContainText('archive-store: PBS erreichbar');
   await expect(page.locator('#connectionResult')).toContainText('test-store: PBS erreichbar');
-  await page.getByRole('link', { name: /Aufträge$/ }).click(); await page.getByRole('link', { name: 'Quellen', exact: true }).click();
-  const dialog = page.getByRole('region', { name: 'Backup-Quellen' });
+  await page.getByRole('link', { name: /Aufträge$/ }).click(); await page.locator('#manageSources').click();
+  const dialog = page.getByRole('region', { name: 'Daten', exact: true });
   await dialog.locator('.source-editor-row').filter({ has: page.getByText('Software', { exact: true }) }).getByRole('button', { name: 'Bearbeiten' }).click();
   await dialog.getByRole('combobox', { name: 'Backup-Ziel', exact: true }).selectOption('secondary');
-  await dialog.getByRole('button', { name: 'Quelle speichern' }).click(); await expect(dialog.locator('#sourceResult')).toContainText('Quelle und Sicherungsplan gespeichert');
+  await dialog.getByRole('button', { name: 'Daten speichern' }).click(); await expect(dialog.locator('#sourceResult')).toContainText('Daten und Sicherungsplan gespeichert');
   await dialog.getByRole('button', { name: 'Schließen', exact: true }).click();
   const row = page.locator('tr[data-folder="software"]'); await expect(row.locator('.source-target')).toHaveText('archive-store');
   await row.getByRole('button', { name: 'Starten', exact: true }).click(); await page.getByRole('link', { name: /Protokoll$/ }).click();
@@ -173,12 +173,12 @@ test('Aktualisieren erkennt geänderte und neue SMB-Mounts ohne automatische Fre
   await page.getByRole('link',{name:/Übersicht/}).click();await expect(page.getByRole('button', { name: 'Neue Netzwerkfreigaben (1)', exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('mount-refresh.png') });
   await page.getByRole('button', { name: 'Neue Netzwerkfreigaben (1)', exact: true }).click();
-  const dialog = page.getByRole('region', { name: 'Backup-Quellen' });
+  const dialog = page.getByRole('region', { name: 'Daten', exact: true });
   await dialog.getByRole('button', { name: 'FotosNeu als Quelle vorbereiten' }).click();
   await expect(dialog.getByLabel('Pfad im LXC', { exact: true })).toHaveValue('/mnt/Daten/FotosNeu');
   await expect(dialog.getByLabel('Erwartete Netzwerkfreigabe', { exact: true })).toHaveValue('//test-nas/fotos-neu');
-  await dialog.getByRole('button', { name: 'Quelle speichern', exact: true }).click();
-  await expect(dialog.locator('#sourceResult')).toContainText('Quelle und Sicherungsplan gespeichert');
+  await dialog.getByRole('button', { name: 'Daten speichern', exact: true }).click();
+  await expect(dialog.locator('#sourceResult')).toContainText('Daten und Sicherungsplan gespeichert');
   await expect(dialog.locator('#discoveredSources')).not.toBeVisible();
   await dialog.locator('.source-editor-row').filter({ has: page.getByText('Daten', { exact: true }) }).getByRole('button', { name: 'Mount bestätigen' }).click();
   await expect(dialog.locator('#sourceResult')).toContainText('//test-nas/CorrectData');
@@ -207,9 +207,9 @@ test('Aktualisieren erzwingt neue Größen und verschiebt Messungen während lau
 
 test('Navigation als Seiten und Drilldown: Quelle und Wochenplan direkt in der Übersicht', async ({ page }, testInfo) => {
   await login(page);
-  await page.getByRole('link', { name: 'Quellen', exact: true }).click();
+  await page.locator('#manageSources').click();
   await expect(page).toHaveURL(/#sourcesDialog$/);
-  await expect(page.getByRole('region', { name: 'Backup-Quellen' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Daten', exact: true })).toBeVisible();
   await expect(page.locator('dialog:not(#loginDialog)')).toHaveCount(0);
   await page.goBack(); await expect(page.locator('#jobs')).toBeVisible();
   await page.locator('tr[data-folder="software"]').getByRole('button', { name: 'Zeitplan Software bearbeiten' }).click();
@@ -220,7 +220,7 @@ test('Navigation als Seiten und Drilldown: Quelle und Wochenplan direkt in der �
   await detail.getByRole('combobox', { name: 'Frequenz', exact: true }).selectOption('weekly');
   await detail.getByLabel('Uhrzeit', { exact: true }).fill('04:25');
   for (const day of ['Mo','Mi','Fr']) { const button = detail.getByRole('button', { name: 'Sicherung ' + day, exact: true }); if (await button.getAttribute('aria-pressed') !== 'true') await button.click(); }
-  await detail.getByRole('button', { name: 'Quelle speichern', exact: true }).click();
+  await detail.getByRole('button', { name: 'Daten speichern', exact: true }).click();
   await expect(detail.locator('#sourceResult')).toContainText('Sicherungsplan gespeichert');
   await expect(page.locator('tr[data-folder="software"]')).toContainText('Software neu');
   await expect(page.locator('tr[data-folder="software"]')).toContainText('04:25');

@@ -5,7 +5,7 @@ export function installAssistant({ api, getConfig, refresh, openSource }) {
   const $ = selector => root.querySelector(selector);
   const quote = value => "'" + String(value).replaceAll("'", "'\\''") + "'";
   root.innerHTML = `<div class="page-heading"><div><span class="eyebrow">SCHRITT FÜR SCHRITT</span><h1>Hinzufügen</h1><p>Vorbereiten, prüfen, übernehmen.</p></div><a href="#overview" class="secondary">Zur Übersicht</a></div>
-  <nav class="assistant-choices" aria-label="Einrichtung auswählen"><a href="#assistant/source">Neue Quelle</a><a href="#assistant/pbs">PBS-Ziel</a></nav>
+  <nav class="assistant-choices" aria-label="Einrichtung auswählen"><a href="#assistant/source">Neuer Datenbestand</a><a href="#assistant/pbs">PBS-Ziel</a></nav>
   <form id="assistantForm" class="panel assistant-panel" novalidate>
     <ol id="assistantSteps" class="assistant-steps"></ol><div id="assistantBody"></div>
     <p id="assistantResult" role="status"></p><div class="actions"><button type="button" id="assistantBack" class="secondary">Zurück</button><button type="submit" id="assistantNext" class="primary">Weiter</button></div>
@@ -50,7 +50,7 @@ export function installAssistant({ api, getConfig, refresh, openSource }) {
     if (kind === 'source') {
       if (step === 0) {
         const grid = document.createElement('div'); grid.className = 'assistant-fields';
-        grid.append(field('Quellenname', 'name', source.name), field('Backup-ID', 'id', source.id), field('Pfad im LXC', 'path', source.path), field('Netzwerkfreigabe', 'expectedSource', source.expectedSource));
+        grid.append(field('Datenname', 'name', source.name), field('Backup-ID', 'id', source.id), field('Pfad im LXC', 'path', source.path), field('Netzwerkfreigabe', 'expectedSource', source.expectedSource));
         const label = document.createElement('label'); label.textContent = 'Backup-Ziel'; const select = document.createElement('select'); select.name = 'target';
         for (const [value, name] of [['primary', config.repository.split(':').at(-1) || 'Datastore 1'], ...(config.secondaryDatastore ? [['secondary', config.secondaryDatastore + (config.secondaryPBS ? ' · ' + config.secondaryPBS.server : '')]] : []), ...(config.additionalDatastores || []).map(item=>[item.id,item.datastore])]) { const option = document.createElement('option'); option.value = value; option.textContent = name; select.append(option); }
         select.value = source.target; select.addEventListener('change', () => source.target = select.value); label.append(select); grid.append(label, field('Bereits im LXC eingebunden', 'inLXC', source.inLXC, 'checkbox'));
@@ -76,7 +76,7 @@ export function installAssistant({ api, getConfig, refresh, openSource }) {
   }
   function validateSource() {
     const config = getConfig();
-    if (!source.name.trim() || source.name.length > 60 || /[\r\n\0]/.test(source.name)) throw new Error('Kurzen Quellennamen eintragen.');
+    if (!source.name.trim() || source.name.length > 60 || /[\r\n\0]/.test(source.name)) throw new Error('Kurzen Datennamen eintragen.');
     if (!/^[a-z][a-z0-9_-]{0,39}$/.test(source.id) || config.sources.some(item => item.id === source.id)) throw new Error('Eine freie Backup-ID aus kleinen Buchstaben, Ziffern und Bindestrichen wählen.');
     if (!/^\/mnt\/Daten\/[a-zA-Z0-9_./ -]+$/.test(source.path) || source.path.endsWith('/') || source.path.split('/').slice(1).some(part => ['', '.', '..'].includes(part)) || source.path.includes('//')) throw new Error('Einen Pfad unter /mnt/Daten/ angeben.');
     if (config.sources.some(item => item.path === source.path || item.path.startsWith(source.path + '/') || source.path.startsWith(item.path + '/'))) throw new Error('Dieser Pfad ist bereits enthalten oder überlappt mit einer Quelle.');
@@ -111,7 +111,7 @@ export function installAssistant({ api, getConfig, refresh, openSource }) {
       commands('2 · PBS · Shell', 'Datastore kontrollieren. Der verwendete PBS-Benutzer braucht Backup-Rechte und Leserechte für die Bestandsabfrage. Bei selbst signiertem Zertifikat den Fingerprint mit den Einstellungen vergleichen.', 'proxmox-backup-manager datastore list\nproxmox-backup-manager cert info');
     } else {
       text(`Datastore: ${pbs.datastore}${pbs.ownServer || !config.repository ? ' · PBS: ' + pbs.server : ''}`, 'assistant-summary');
-      text('Speichert das Ziel und prüft den Zugriff. Danach kannst du es direkt an einer Quelle auswählen. Bestehende Quellen behalten ihr Ziel.');
+      text('Speichert das Ziel und prüft den Zugriff. Danach kannst du es direkt an einer Quelle auswählen. Bestehende Daten behalten ihr Ziel.');
     }
   }
   async function savePBS() {
@@ -120,7 +120,7 @@ export function installAssistant({ api, getConfig, refresh, openSource }) {
       const result = await api('/api/targets/setup', pbs); storedTarget = result.target; pbs.password = '';
       await refresh();
     }
-    try { const result = await api('/api/connection', { target: storedTarget }); if (!result.ok) throw new Error(result.message); $('#assistantResult').textContent = `Ziel gespeichert · ${result.message}. Unter Quellen das Backup-Ziel auswählen.`; $('#assistantNext').textContent = 'Verbindung erneut prüfen'; }
+    try { const result = await api('/api/connection', { target: storedTarget }); if (!result.ok) throw new Error(result.message); $('#assistantResult').textContent = `Ziel gespeichert · ${result.message}. Unter Daten das Backup-Ziel auswählen.`; $('#assistantNext').textContent = 'Verbindung erneut prüfen'; }
     catch (e) { $('#assistantResult').textContent = `Ziel gespeichert, Prüfung fehlgeschlagen: ${e.message}. Zugang und PBS-Rechte unter Backup-Ziele prüfen.`; $('#assistantNext').textContent = 'Verbindung erneut prüfen'; }
   }
   $('#assistantBack').addEventListener('click', () => { step--; $('#assistantResult').textContent = ''; render(); });
@@ -145,7 +145,7 @@ export function installAssistant({ api, getConfig, refresh, openSource }) {
 
 export function installMountTools({ getConfig, element }) {
   const root=document.querySelector('#mountTools');
-  root.innerHTML='<div class="page-heading"><div><div class="eyebrow">PROXMOX-HOST → LXC</div><h1>Mounts verwalten</h1><p>Prüfen, Zuordnung ändern oder Durchreichung entfernen.</p></div><a href="#sourcesDialog" class="secondary">Zu den Quellen</a></div><section class="panel form-panel"><p class="hint">SMB- oder NFS-Verbindungen am Host in der Proxmox-Weboberfläche unter Rechenzentrum → Storage anlegen, bearbeiten oder entfernen. Hier erzeugst du Befehle für die LXC-Durchreichung. Der vorausgefüllte Hostpfad ist ein Vorschlag: im Proxmox-Webinterface prüfen. Zum Hinzufügen den Quellen-Assistenten verwenden.</p><a href="#assistant/source">Neue Freigabe hinzufügen →</a><div class="settings-grid"><label>Registrierte Quelle<select id="mountSource"></select></label><label>LXC-ID<input id="mountCT" value="119" inputmode="numeric"></label><label>Pfad im LXC<input id="mountPath"></label><label>Erwartete Netzwerkfreigabe<input id="mountExpected" placeholder="//192.168.1.21/Daten"></label><label>Host-Mountpfad<input id="mountHost" placeholder="/mnt/pve/QNAP4bay-Daten"></label><label>Aktion<select id="mountAction"><option value="inspect">Prüfen</option><option value="replace">Durchreichung ändern</option><option value="remove">Durchreichung entfernen</option></select></label></div><p class="hint">1. Alle Sicherungen beenden. Bei Änderungen LXC im Proxmox-Webinterface herunterfahren. 2. Befehl als root am Proxmox-Host ausführen. 3. LXC starten, in der App aktualisieren und Mount-Zuordnung prüfen. Quelldaten bleiben erhalten.</p><p id="mountCommandHint" role="status"></p><div class="command-card"><div class="panel-title"><strong>Proxmox-Host · Bash</strong><button id="copyMountCommand" type="button" class="secondary">Befehl kopieren</button></div><pre id="mountCommand" tabindex="0"></pre></div><p class="hint">Entfernen löst nur den Bind-Mount im LXC. Anschließend die Quelle in der App abmelden oder neu zuordnen. Den Host-Storage nur entfernen, wenn keine anderen Container ihn verwenden.</p><p id="mountCopyResult" role="status"></p></section>';
+  root.innerHTML='<div class="page-heading"><div><div class="eyebrow">PROXMOX-HOST → LXC</div><h1>Mounts verwalten</h1><p>Prüfen, Zuordnung ändern oder Durchreichung entfernen.</p></div><a href="#sourcesDialog" class="secondary">Zu den Daten</a></div><section class="panel form-panel"><p class="hint">SMB- oder NFS-Verbindungen am Host in der Proxmox-Weboberfläche unter Rechenzentrum → Storage anlegen, bearbeiten oder entfernen. Hier erzeugst du Befehle für die LXC-Durchreichung. Der vorausgefüllte Hostpfad ist ein Vorschlag: im Proxmox-Webinterface prüfen. Zum Hinzufügen den Daten-Assistenten verwenden.</p><a href="#assistant/source">Neue Freigabe hinzufügen →</a><div class="settings-grid"><label>Registrierte Quelle<select id="mountSource"></select></label><label>LXC-ID<input id="mountCT" value="119" inputmode="numeric"></label><label>Pfad im LXC<input id="mountPath"></label><label>Erwartete Netzwerkfreigabe<input id="mountExpected" placeholder="//192.168.1.21/Daten"></label><label>Host-Mountpfad<input id="mountHost" placeholder="/mnt/pve/QNAP4bay-Daten"></label><label>Aktion<select id="mountAction"><option value="inspect">Prüfen</option><option value="replace">Durchreichung ändern</option><option value="remove">Durchreichung entfernen</option></select></label></div><p class="hint">1. Alle Sicherungen beenden. Bei Änderungen LXC im Proxmox-Webinterface herunterfahren. 2. Befehl als root am Proxmox-Host ausführen. 3. LXC starten, in der App aktualisieren und Mount-Zuordnung prüfen. Quelldaten bleiben erhalten.</p><p id="mountCommandHint" role="status"></p><div class="command-card"><div class="panel-title"><strong>Proxmox-Host · Bash</strong><button id="copyMountCommand" type="button" class="secondary">Befehl kopieren</button></div><pre id="mountCommand" tabindex="0"></pre></div><p class="hint">Entfernen löst nur den Bind-Mount im LXC. Anschließend die Quelle in der App abmelden oder neu zuordnen. Den Host-Storage nur entfernen, wenn keine anderen Container ihn verwenden.</p><p id="mountCopyResult" role="status"></p></section>';
   const $=selector=>root.querySelector(selector),quote=value=>"'"+value.replaceAll("'","'\\''")+"'";
   let command='', inventory='';
   function generate(){

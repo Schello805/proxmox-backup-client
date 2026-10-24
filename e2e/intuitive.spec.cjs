@@ -1,7 +1,7 @@
 'use strict';
 const { test, expect, login } = require('./fixtures.cjs');
 
-test('Backup-Ziele, Allgemeines und Quellenpläne bleiben bei Änderungen voneinander getrennt', async ({ page }) => {
+test('Backup-Ziele, Allgemeines und Datenpläne bleiben bei Änderungen voneinander getrennt', async ({ page }) => {
   await login(page); await page.getByRole('link', { name: /Ziele$/ }).click(); if ((await page.locator('#pbsSettings').getAttribute('open')) === null) await page.locator('#pbsSettings>summary').click();
   await expect(page.locator('#configForm')).toBeVisible(); await expect(page.locator('#targets').getByRole('combobox', { name: 'Zeitzone', exact: true })).toHaveCount(0);
   await page.getByRole('textbox', { name: 'PBS-Adresse', exact: true }).fill('pbs-neu.local');
@@ -10,7 +10,7 @@ test('Backup-Ziele, Allgemeines und Quellenpläne bleiben bei Änderungen vonein
   await expect(page.locator('#settings').getByRole('combobox', { name: 'Frequenz', exact: true })).toHaveCount(0);
   await page.getByRole('combobox', { name: 'Zeitzone', exact: true }).selectOption('UTC'); await page.getByRole('button', { name: 'Einstellungen speichern', exact: true }).click(); await expect(page.locator('#preferencesResult')).toContainText('gespeichert');
   await page.getByRole('link', { name: /Aufträge$/ }).click(); await page.locator('tr[data-folder="software"]').getByRole('button', { name: 'Zeitplan Software bearbeiten' }).click();
-  const detail=page.locator('#sourceDetail'); await detail.getByRole('combobox',{name:'Frequenz',exact:true}).selectOption('weekdays'); await detail.getByLabel('Uhrzeit',{exact:true}).fill('03:45'); await detail.getByRole('button',{name:'Quelle speichern',exact:true}).click(); await expect(detail.locator('#sourceResult')).toContainText('gespeichert');
+  const detail=page.locator('#sourceDetail'); await detail.getByRole('combobox',{name:'Frequenz',exact:true}).selectOption('weekdays'); await detail.getByLabel('Uhrzeit',{exact:true}).fill('03:45'); await detail.getByRole('button',{name:'Daten speichern',exact:true}).click(); await expect(detail.locator('#sourceResult')).toContainText('gespeichert');
   await page.getByRole('link',{name:/Ziele$/}).click(); if ((await page.locator('#pbsSettings').getAttribute('open')) === null) await page.locator('#pbsSettings>summary').click(); await expect(page.getByRole('textbox',{name:'PBS-Adresse',exact:true})).toHaveValue('pbs-neu.local');
   await page.getByRole('button',{name:'Backup-Ziele speichern',exact:true}).click(); await expect(page.locator('#settingsResult')).toContainText('Gespeichert');
   const config=(await (await page.request.get('/api/status')).json()).config; expect(config.timezone).toBe('UTC'); expect(config.schedules.software).toEqual({days:[1,2,3,4,5],time:'03:45'}); expect(config.repository).toBe('test@pbs@pbs-neu.local:test-store');

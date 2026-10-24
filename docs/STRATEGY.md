@@ -25,13 +25,13 @@ Das Umstellen eines Planes startet keine Sicherung und verändert keine bestehen
 
 - **Extern umgesetzt:** Ausführendes System, Quelle, Ziel und tatsächlich dort eingerichteten Tages-, Wochen- oder Monatsplan eintragen. Die App führt diesen Auftrag nicht aus und verändert das fremde System nicht.
 - **Durch diese App umgesetzt:** Im selben Formular die ausgewählten Datenbestände und das Ziel ausdrücklich mit vorhandenen App-Quellen und App-Zielen verbinden. Nur passende, vollständig abgedeckte Aufträge werden akzeptiert. Deren echte Zeitpläne lassen sich über die angezeigten Links bearbeiten.
-- **Noch nicht eingerichtet:** Als geplant speichern. Über den Quellen-Assistenten einen lesbaren LXC-Ordner registrieren und unter Ziele den Zugang einrichten; danach den Weg mit seinem eingerichteten App-Auftrag verbinden. Alternativ die Sicherung im zuständigen System einrichten und anschließend als extern umgesetzt dokumentieren.
+- **Noch nicht eingerichtet:** Als geplant speichern. Über den Daten-Assistenten einen lesbaren LXC-Ordner registrieren und unter Ziele den Zugang einrichten; danach den Weg mit seinem eingerichteten App-Auftrag verbinden. Alternativ die Sicherung im zuständigen System einrichten und anschließend als extern umgesetzt dokumentieren.
 
 Fehlt eine App-Verknüpfung nach einer Konfigurationsänderung, zeigt die Planung dies ausdrücklich. Teilzuordnungen und fehlende Zugangsdaten gelten nicht als vollständige App-Umsetzung. Die App markiert sie nicht allein anhand eines früheren Namens als erfolgreich.
 
 ## Gemeinsame Ansichten
 
-- **Quellen:** App-Ordner und nicht zugeordnete dokumentierte Datenbestände. Eine explizite Zuordnung vermeidet doppelte Einträge. Externe/geplante Datenbestände bekommen keine erfundene Mount-Prüfung und keine Start-Schaltfläche.
+- **Daten:** App-Ordner und nicht zugeordnete dokumentierte Datenbestände. Eine explizite Zuordnung vermeidet doppelte Einträge. Externe/geplante Datenbestände bekommen keine erfundene Mount-Prüfung und keine Start-Schaltfläche.
 - **Ziele:** Gemeinsamer Zielkatalog aus eingerichteten App-Zielen und dokumentierten Speicherzielen mit Umsetzungsstand.
 - **Aufträge:** Alle eingerichteten Sicherungen, durch diese App oder extern. Filter für PBS, Drive, externe Umsetzung sowie Status. Nur App-Aufträge lassen sich hier starten/abbrechen.
 - **Zeitplan:** Standardmäßig alle eingerichteten Sicherungen. Noch geplante Wege sind separat oder zum Vergleich zuschaltbar. App-Umsetzungen verwenden die wirklichen App-Termine und werden nicht als zweiter Plan doppelt angezeigt.
@@ -59,3 +59,15 @@ Die Angaben beschreiben gewünschte oder dokumentierte Einstellungen. Sie stelle
 **Planung exportieren** lädt die JSON-Datei ohne Backup-Zugangsdaten herunter. Der Import liest auch die eigenen Exporte einschließlich Zuordnungen und Umsetzungsständen. App-Zuordnungen werden erneut gegen die vorhandenen Aufträge validiert.
 
 Die Planung liegt in `strategy.json` im Datenverzeichnis. Beim Speichern bleiben zehn vorherige Fassungen unter `strategy-backups/` erhalten. Diese Dateien lassen sich über denselben Import wiederherstellen. Eine veraltete Vorschau wird vor dem Überschreiben abgewiesen. Planung und App-Einstellungen sind weiterhin getrennt zu exportieren; die Rclone-Anmeldung separat sichern.
+
+## Geräte, Daten und Speicherziele
+
+Ein **Gerät** stellt Daten oder Speicher bereit, z. B. QNAP4bay oder PBS. Ein **Datenbestand** ist z. B. Software oder Musik. Ein **Ziel** ist der konkrete Speicherort, z. B. Datastore pbs2 auf dem PBS.
+
+Unter **Daten → Geräte verwalten** Geräte anlegen, bearbeiten oder entfernen. Die Tabellenzeilen unter **Daten** werden nach dem zugeordneten Gerät gruppiert und lassen sich nach Gerät filtern. Bei registrierten App-Daten über **Gerät zuordnen** den tatsächlichen Speicherort festlegen. Teilaufträge übernehmen das Gerät ihres übergeordneten Datenbestands, solange ihnen kein eigenes Gerät zugeordnet ist.
+
+Unter **Ziele → Gemeinsamer Zielkatalog → Gerät zuordnen** das Zielgerät festlegen. Mehrere PBS-Datastores können dasselbe PBS-Gerät verwenden. Geräte werden auch in den Aufträgen und den tatsächlichen Sicherungswegen angezeigt. Namen und Zuordnungen verändern keine Mounts, Backup-Zugänge oder Sicherungspläne.
+
+Die Gerätezuordnung wird ausdrücklich gespeichert. Der ursprüngliche Speicherort eines importierten Datenbestands wird nicht automatisch zum tatsächlichen Speicherort einer aktuell eingebundenen Kopie erklärt. Ohne Zuordnung bleibt das Gerät offen gekennzeichnet. Auch gleichlautende Namen führen nicht zu einer automatischen Zusammenführung.
+
+Ein Gerät kann sowohl Daten als auch Speicherziele bereitstellen. Verwendete Geräte können erst nach ihren Zuordnungen entfernt werden. Die Zuordnungen gehören zum Planungs-Export und bleiben beim Einlesen eigener Exporte erhalten.

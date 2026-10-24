@@ -15,7 +15,7 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
  const duration=seconds=>seconds==null?'Dauer unbekannt':seconds<60?Math.round(seconds)+' s':seconds<3600?Math.ceil(seconds/60)+' min':Math.floor(seconds/3600)+' h '+Math.round(seconds%3600/60)+' min';
  function feedback(text,error=false){$('#strategyFeedback').textContent=text;$('#strategyFeedback').classList.toggle('row-error',error);}
  function metric(root,items){root.replaceChildren();for(const [value,title,hint]of items){const card=n('article',undefined,'inventory-metric');card.append(n('strong',String(value)),n('span',title),n('small',hint,'hint'));root.append(card);}}
- const execution=installExecutionViews({n,badge,button,link,date,scheduleText,metric,getStored:()=>stored,getSnapshot:()=>snapshot});
+ const execution=installExecutionViews({n,badge,button,link,date,scheduleText,metric,getStored:()=>stored,getSnapshot:()=>snapshot,save});
  function goTab(tab){activeTab=tab;for(const key of ['paths','plans','mapping','inventory'])$('#strategy'+key[0].toUpperCase()+key.slice(1)+'Panel').hidden=key!==tab;document.querySelectorAll('[data-strategy-tab]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.strategyTab===tab)));}
  function renderLivePaths(){
   if(!snapshot)return;
@@ -23,12 +23,12 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
   const parents=snapshot.folders.filter(source=>!source.parentId);
   const order=[...parents].sort((a,b)=>Number(bad(b.job||{}))-Number(bad(a.job||{})));
   for(const source of order.slice(0,6)){
-   const row=n('div',undefined,'protection-path'),origin=n('div',undefined,'path-origin');origin.append(link(source.name,'#sourcesDialog/'+source.id+'/edit'),n('small',source.path,'hint'));row.append(origin,n('span','→','path-arrow'));
+   const row=n('div',undefined,'protection-path'),origin=n('div',undefined,'path-origin');if(execution.sourceDeviceName(source.id))origin.append(n('small',execution.sourceDeviceName(source.id),'path-device'));origin.append(link(source.name,'#sourcesDialog/'+source.id+'/edit'),n('small',source.path,'hint'));row.append(origin,n('span','→','path-arrow'));
    const destinations=n('div',undefined,'path-destinations');
    const sources=source.partitioned?snapshot.folders.filter(item=>item.parentId===source.id):[source];
    for(const item of sources.filter(item=>item.target!=='gdrive')){
     const target=snapshot.targets.find(target=>target.id===(item.target||'primary')),job=item.job||{};
-    const chip=link((target?.name||'PBS fehlt')+' · '+(labels[job.status]||'Noch kein Lauf'),'#jobs/'+item.id+'/edit','path-chip '+(bad(job)?'path-bad':busy(job)?'path-busy':job.status==='success'?'path-ok':''));
+    const chip=link((execution.targetDeviceName(item.target||'primary')?execution.targetDeviceName(item.target||'primary')+' / ':'')+(target?.name||'PBS fehlt')+' · '+(labels[job.status]||'Noch kein Lauf'),'#jobs/'+item.id+'/edit','path-chip '+(bad(job)?'path-bad':busy(job)?'path-busy':job.status==='success'?'path-ok':''));
     chip.title=(target?.repository||'Kein PBS eingerichtet')+' · '+(job.lastSuccess?'Letzter Erfolg: '+date(job.lastSuccess):'Noch kein bestätigter App-Erfolg');destinations.append(chip);
    }
    if(snapshot.config.gdrive.sources.includes(source.id)){
@@ -39,8 +39,8 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
    if(!destinations.childElementCount)destinations.append(link('Ziel zuordnen','#sourcesDialog/'+source.id+'/edit','path-chip'));
    row.append(destinations);root.append(row);
   }
-  if(!parents.length)root.append(n('p','Noch keine Quellen. Über „Hinzufügen“ einen eingebundenen Ordner registrieren.','hint'));
-  if(parents.length>6)root.append(link('Alle '+parents.length+' Quellen öffnen →','#sourcesDialog'));
+  if(!parents.length)root.append(n('p','Noch keine Daten. Über „Hinzufügen“ einen eingebundenen Ordner registrieren.','hint'));
+  if(parents.length>6)root.append(link('Alle '+parents.length+' Daten öffnen →','#sourcesDialog'));
  }
  function mappingEditor(root,document,mapping={datasets:{},targets:{}}){
   root.replaceChildren();
@@ -77,7 +77,7 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
  function renderPaths(){
   const root=$('#strategyPaths');root.replaceChildren();
   const d=stored.document.data,view=stored.view;
-  if(!d.datasets.length){const empty=n('div',undefined,'workspace-empty');empty.append(n('h3','Deine Backup-Planung beginnt hier'),n('p','Alles lässt sich direkt hier anlegen und bearbeiten: zuerst ein Quellgerät, ein Ziel und einen Datenbestand, danach den Backup-Plan. Geräte sind Planung; eingebundene Ordner verwaltest du unter Quellen.'),button('Geräte und Daten anlegen',()=>{goTab('inventory');$('#inventoryKind').value='sources';renderInventory();editEntity('sources');},'primary'),button('Vorhandenen Planner importieren',()=>{$('#strategyImport').hidden=false;$('#plannerFile').focus();},'secondary'));root.append(empty);return;}
+  if(!d.datasets.length){const empty=n('div',undefined,'workspace-empty');empty.append(n('h3','Deine Backup-Planung beginnt hier'),n('p','Alles lässt sich direkt hier anlegen und bearbeiten: zuerst ein Quellgerät, ein Ziel und einen Datenbestand, danach den Backup-Plan. Geräte sind Planung; eingebundene Ordner verwaltest du unter Daten.'),button('Geräte und Daten anlegen',()=>{goTab('inventory');$('#inventoryKind').value='sources';renderInventory();editEntity('sources');},'primary'),button('Vorhandenen Planner importieren',()=>{$('#strategyImport').hidden=false;$('#plannerFile').focus();},'secondary'));root.append(empty);return;}
   for(const dataset of d.datasets){
    const card=n('section',undefined,'dataset-paths'),heading=n('div',undefined,'panel-title');heading.append(n('h3',dataset.name),badge(dataset.priority==='high'?'Hohe Priorität':dataset.priority==='low'?'Niedrige Priorität':'Normale Priorität'));card.append(heading);
    const plans=d.plans.filter(plan=>plan.dataset_ids.includes(dataset.id));
@@ -85,6 +85,7 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
     const origin=d.sources.find(item=>item.id===plan.source_id),via=d.targets.find(item=>item.id===plan.source_target_id),target=d.targets.find(item=>item.id===plan.target_id),row=n('div',undefined,'strategy-path');
     row.append(n('span',origin.name,'path-chip'));
     if(via)row.append(n('span','→','path-arrow'),n('span',via.name,'path-chip'));
+    if(target.device_id){const device=d.sources.find(item=>item.id===target.device_id);if(device)row.append(n('span','→','path-arrow'),n('span',device.name,'path-chip'));}
     row.append(n('span','→','path-arrow'),button(target.name,()=>editPlan(plan.id),'path-chip'),badge(labels[plan.protection_type]));
     const external=view.external.find(item=>item.planId===plan.id),linked=external.bindings.length;
     row.append(badge(external.implementation==='app'&&!external.executionReady?'App-Zuordnung fehlt':implementationLabel[external.implementation],external.implementation==='external'?'external-ready':external.implementation==='app'&&external.executionReady?'ok':'external'));
@@ -170,7 +171,7 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
   if(!stored)return;
   const d=stored.document.data;
   metric($('#strategyMetrics'),[[d.plans.filter(plan=>plan.implementation==='planned').length,'Noch geplant','Noch nicht als eingerichtet bestätigt'],[stored.view.external.filter(plan=>plan.executionReady).length,'Umsetzung dokumentiert','App-verknüpft oder extern eingerichtet'],[d.datasets.length,'Datenbestände',d.sources.length+' Quellgeräte'],[d.locations.length,'Standorte','Gemeinsame Ausfallbereiche beachten']]);
-  renderPaths();renderInventory();renderPlanList();renderCalendar();execution.render();filterJobs();
+  renderLivePaths();renderPaths();renderInventory();renderPlanList();renderCalendar();execution.render();filterJobs();
   // Preserve unsaved mapping selections during background refreshes.
   if(!$('#strategyMapping').dataset.dirty)mappingEditor($('#strategyMapping'),stored.document,stored.document.mapping);
  }
@@ -192,7 +193,7 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
   const implementation=field(grid,'Umsetzung','implementation',p.implementation||'planned',[{id:'planned',name:'Geplant · noch nicht eingerichtet'},{id:'external',name:'Extern umgesetzt'},{id:'app',name:'Durch diese App umgesetzt'}]);
   const executor=field(grid,'Ausführendes System','executor',p.executor||'');executor.placeholder='z. B. Proxmox pve · Datacenter → Backup';
   const source=field(grid,'Ursprüngliches Quellgerät','source_id',p.source_id,stored.document.data.sources);
-  field(grid,'Ziel','target_id',p.target_id,stored.document.data.targets);
+  field(grid,'Ziel','target_id',p.target_id,stored.document.data.targets.map(target=>({...target,name:(stored.document.data.sources.find(device=>device.id===target.device_id)?.name?stored.document.data.sources.find(device=>device.id===target.device_id).name+' / ':'')+target.name})));
   field(grid,'Software (optional)','software_id',p.software_id||'',[{id:'',name:'Nicht festgelegt'},...stored.document.data.software]);
   field(grid,'Über vorhandene Kopie (optional)','source_target_id',p.source_target_id||'',[{id:'',name:'Direkt von der Quelle'},...stored.document.data.targets]);
   field(grid,'Schutzart','protection_type',p.protection_type,[{id:'backup',name:'Sicherung mit Versionen'},{id:'synchronization',name:'Synchronisierung'},{id:'archive',name:'Archiv'}]);
@@ -239,17 +240,17 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
   form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;try{
    const values=Object.fromEntries(new FormData(form));const next={...p,...values,id:previous?.id||newId(),active:1,day_of_month:values.day_of_month==='last'?'last':Number(values.day_of_month),weekdays:dayInputs.filter(input=>input.checked).map(input=>Number(input.value)),duration_minutes:Number(values.duration_minutes),dataset_ids:[...datasetBox.querySelectorAll('input:checked')].map(input=>input.value),software_id:values.software_id||null,retention_value:values.retention_value===''?null:Number(values.retention_value),version_count:Number(values.version_count),encrypted:form.elements.encrypted.checked?1:0,immutable:form.elements.immutable.checked?1:0,network_id:values.network_id||null,bandwidth_mib:values.bandwidth_mib===''?null:Number(values.bandwidth_mib)};
    if(!next.source_id||!next.target_id)throw Error('Zuerst unter Geräte & Standorte ein Quellgerät und ein Ziel anlegen.');if(!next.dataset_ids.length)throw Error('Mindestens einen Datenbestand auswählen.');
-   const doc=structuredClone(stored.document);if(next.implementation==='app'){const selected=readMapping(appMapping);for(const dataset of next.dataset_ids)delete doc.mapping.datasets[dataset];delete doc.mapping.targets[next.target_id];doc.mapping={datasets:{...doc.mapping.datasets,...selected.datasets},targets:{...doc.mapping.targets,...selected.targets}};}doc.data.plans=previous?doc.data.plans.map(plan=>plan.id===identifier?next:plan):[...doc.data.plans,next];await save(doc,doc.mapping);root.hidden=true;
+   const doc=structuredClone(stored.document);if(next.implementation==='app'){const selected=readMapping(appMapping);for(const dataset of next.dataset_ids)delete doc.mapping.datasets[dataset];delete doc.mapping.targets[next.target_id];doc.mapping={...doc.mapping,datasets:{...doc.mapping.datasets,...selected.datasets},targets:{...doc.mapping.targets,...selected.targets}};}doc.data.plans=previous?doc.data.plans.map(plan=>plan.id===identifier?next:plan):[...doc.data.plans,next];await save(doc,doc.mapping);root.hidden=true;
   }catch(error){result.textContent=error.message;}finally{submit.disabled=false;}};
   root.scrollIntoView({block:'start',behavior:'smooth'});
  }
  function editEntity(kind,identifier){
   if(!stored)return;const previous=stored.document.data[kind].find(row=>row.id===identifier),root=editor(previous?'Strategieeintrag bearbeiten':'Strategieeintrag anlegen'),form=n('form');form.className='editor-grid';root.append(form);
-  const item=previous||{id:newId(),name:'',notes:'',active:1};field(form,'Name','name',item.name).required=true;
+  const item=previous||{id:newId(),name:'',notes:'',active:1};if(kind==='targets')root.append(n('p','Das Ziel ist der konkrete Speicherort, z. B. Datastore pbs2 oder ein Cloud-Ordner. Der bereitstellende Server bzw. Dienst wird separat als Gerät zugeordnet.','hint'));field(form,'Name','name',item.name).required=true;
   if(['sources','targets'].includes(kind))field(form,'Standort','location_id',item.location_id||'',[{id:'',name:'Nicht festgelegt'},...stored.document.data.locations]);
   if(kind==='locations'){field(form,'Übergeordneter Standort','parent_id',item.parent_id||'',[{id:'',name:'Keiner'},...stored.document.data.locations.filter(row=>row.id!==identifier)]);field(form,'Typ','type',item.type||'site',[{id:'country',name:'Land'},{id:'site',name:'Standort'},{id:'building',name:'Gebäude'},{id:'room',name:'Raum'},{id:'cloud',name:'Cloud'}]);}
   if(kind==='sources')field(form,'Gerätetyp','device_type',item.device_type||'nas',[{id:'nas',name:'NAS'},{id:'server',name:'Server'},{id:'computer',name:'Computer'},{id:'other',name:'Andere'}]);
-  if(kind==='targets'){field(form,'Speichertyp','storage_type',item.storage_type||'server',[{id:'server',name:'Server'},{id:'nas',name:'NAS'},{id:'cloud',name:'Cloud'},{id:'external-disk',name:'Externe Festplatte'},{id:'other',name:'Andere'}]);field(form,'Anbieter / Gerät','provider',item.provider||'');field(form,'Zielfarbe','color',item.color||'#3978ed').type='color';for(const [key,title]of [['immutable_capable','Unveränderliche Sicherung möglich'],['encrypted_default','Verschlüsselung vorgesehen']]){const label=n('label',title,'checkbox-label'),input=n('input');input.type='checkbox';input.name=key;input.checked=Boolean(item[key]);label.prepend(input);form.append(label);}}
+  if(kind==='targets'){field(form,'Gerät des Ziels','device_id',item.device_id||'',[{id:'',name:'Noch nicht zugeordnet'},...stored.document.data.sources]);field(form,'Speichertyp','storage_type',item.storage_type||'server',[{id:'server',name:'Server'},{id:'nas',name:'NAS'},{id:'cloud',name:'Cloud'},{id:'external-disk',name:'Externe Festplatte'},{id:'other',name:'Andere'}]);field(form,'Anbieter / Gerät','provider',item.provider||'');field(form,'Zielfarbe','color',item.color||'#3978ed').type='color';for(const [key,title]of [['immutable_capable','Unveränderliche Sicherung möglich'],['encrypted_default','Verschlüsselung vorgesehen']]){const label=n('label',title,'checkbox-label'),input=n('input');input.type='checkbox';input.name=key;input.checked=Boolean(item[key]);label.prepend(input);form.append(label);}}
   if(kind==='datasets'){if(!stored.document.data.sources.length)form.append(link('Zuerst ein Quellgerät dokumentieren','#strategy/entity/sources~'));field(form,'Ursprüngliches Quellgerät','source_id',item.source_id||'',stored.document.data.sources);field(form,'Priorität','priority',item.priority||'normal',[{id:'high',name:'Hoch'},{id:'normal',name:'Normal'},{id:'low',name:'Niedrig'}]);}
   if(kind==='networks'){const capacity=field(form,'Nutzbare Kapazität (MiB/s, leer = unbekannt)','capacity_mib',item.capacity_mib??'');capacity.type='number';capacity.min='0.01';capacity.max='100000';capacity.step='0.01';form.append(n('p','Beispiel: 100 MiB/s nutzbar im LAN. Für Internet-Uplink eine eigene Gruppe anlegen. Die App prüft erwartete Last, verändert aber keine Netzwerkregeln.','hint'));}
   field(form,'Notizen','notes',item.notes);const submit=n('button','Eintrag speichern','primary');submit.type='submit';form.append(submit);const result=errorBox(form);
@@ -268,9 +269,9 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
   $('#plannerPreviewResult').textContent=`${preview.counts.plans} aktive Pläne · ${preview.counts.datasets} Datenbestände · ${preview.counts.targets} Ziele · ${preview.counts.locations} Standorte. ${preview.warnings.join(' ')}`;
   mappingEditor($('#plannerImportMapping'),preview.document,importFile.mapping||{datasets:{},targets:{}});$('#plannerMappingDetails').hidden=false;$('#plannerMappingDetails').open=false;$('#plannerConfirmLabel').hidden=false;$('#plannerConfirm').checked=false;$('#plannerApply').hidden=false;
  }catch(error){preview=null;$('#plannerApply').hidden=true;$('#plannerPreviewResult').textContent=error.message;}finally{button.disabled=false;}};
- $('#plannerApply').onclick=async()=>{if(!preview||!$('#plannerConfirm').checked){$('#plannerPreviewResult').textContent='Vorschau prüfen und Übernahme bestätigen.';return;}const button=$('#plannerApply');button.disabled=true;try{await api('/api/strategy/import',{document:preview.document,mapping:readMapping($('#plannerImportMapping')),revision:preview.revision});$('#strategyImport').hidden=true;preview=null;await load(true);feedback('Planner importiert. Nur Strategie-Metadaten übernommen; keine Sicherung gestartet.');}catch(error){$('#plannerPreviewResult').textContent=error.message;}finally{button.disabled=false;}};
+ $('#plannerApply').onclick=async()=>{if(!preview||!$('#plannerConfirm').checked){$('#plannerPreviewResult').textContent='Vorschau prüfen und Übernahme bestätigen.';return;}const button=$('#plannerApply');button.disabled=true;try{await api('/api/strategy/import',{document:preview.document,mapping:{...(importFile.mapping||{}),...readMapping($('#plannerImportMapping'))},revision:preview.revision});$('#strategyImport').hidden=true;preview=null;await load(true);feedback('Planner importiert. Nur Strategie-Metadaten übernommen; keine Sicherung gestartet.');}catch(error){$('#plannerPreviewResult').textContent=error.message;}finally{button.disabled=false;}};
  $('#strategyMapping').onchange=()=>{$('#strategyMapping').dataset.dirty='true';};
- $('#strategyMappingSave').onclick=async()=>{try{await save(stored.document,readMapping($('#strategyMapping')));delete $('#strategyMapping').dataset.dirty;mappingEditor($('#strategyMapping'),stored.document,stored.document.mapping);}catch(error){feedback(error.message,true);}};
+ $('#strategyMappingSave').onclick=async()=>{try{await save(stored.document,{...stored.document.mapping,...readMapping($('#strategyMapping'))});delete $('#strategyMapping').dataset.dirty;mappingEditor($('#strategyMapping'),stored.document,stored.document.mapping);}catch(error){feedback(error.message,true);}};
  $('#strategyExport').onclick=()=>{if(!stored)return;const blob=new Blob([JSON.stringify(stored.document,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=link('','');a.href=url;a.download='backup-strategy-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
  document.querySelectorAll('[data-strategy-tab]').forEach(b=>b.onclick=()=>goTab(b.dataset.strategyTab));
  $('#planningSearch').oninput=()=>{if(stored)renderPlanList();};$('#planningPlanAdd').onclick=()=>editPlan();$('#inventoryKind').onchange=renderInventory;$('#inventoryAdd').onclick=()=>editEntity($('#inventoryKind').value);$('#externalPlanAdd').onclick=()=>editPlan();
