@@ -2122,18 +2122,18 @@ aside a.system-link { display:flex; align-items:center; justify-content:center; 
 .dashboard-issue { display:block; padding:6px 0; text-align:left; background:none; color:#925b20; border:0; cursor:pointer; font:inherit; font-size:10px; }
 .sources-toolbar { display:flex; gap:14px; align-items:end; flex-wrap:wrap; padding:14px 0; }
 .sources-toolbar label { margin:0; flex:1; min-width:160px; }
-.sources-table-scroll { max-height:52vh; overflow:auto; border:1px solid var(--line); border-radius:8px; }
-.sources-table { min-width:900px; width:100%; }
+.sources-table-scroll { border:1px solid var(--line); border-radius:8px; }
+.sources-table { width:100%; table-layout:fixed; overflow-wrap:anywhere; }
 .sources-table thead th { position:sticky; top:0; z-index:2; background:#edf5f1; }
 #sourcesDialog { max-height:none; overflow:visible; }
 #sourceList .source-editor-row { display:table-row; }
 #sourceList .source-editor-row>td { padding:12px; vertical-align:top; }
-#sourceList .source-editor-actions { display:table-cell; white-space:nowrap; }
+#sourceList .source-editor-actions { display:table-cell; white-space:normal; }
 #sourceList .source-editor-actions button { display:block; margin-bottom:6px; }
 #sourceList td strong, #sourceList td code, #sourceList td small { display:block; }
 #sourceList td code { white-space:normal; overflow-wrap:anywhere; }
 #sourceOverviewDetails>summary, #overviewPlan>summary { cursor:pointer; }
-@media(max-width:760px) { .dashboard-grid { grid-template-columns:1fr; } .sources-table-scroll { max-height:60vh; } }
+@media(max-width:760px) { .dashboard-grid { grid-template-columns:1fr; } }
 .sources-toolbar input, .sources-toolbar select { padding:9px 10px; border:1px solid var(--line); border-radius:6px; background:#fff; font:inherit; }
 #sourceList .source-editor-actions button { display:inline-block; margin:0 8px 0 0; }
 .sources-table td { font-size:12px; }
