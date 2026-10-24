@@ -22,8 +22,8 @@ test('Planner-Import hat Vorschau, explizite Zuordnung und verändert keine ausf
  await page.getByRole('link',{name:/Aufträge$/}).click();await expect(page.locator('#externalJobRows')).toHaveCount(0);await expect(page.locator('#jobCount')).toHaveText('6');await expect(page.locator('#jobsTable')).not.toContainText('Dokumente in die Cloud');
  await page.locator('#jobManagement').selectOption('pbs');await expect(page.locator('#folders tr:visible')).toHaveCount(6);
  await page.locator('#jobSearch').fill('Cloud');await expect(page.locator('#folders tr:visible')).toHaveCount(0);
- await page.getByRole('link',{name:/Zeitplan$/}).click();await expect(page.locator('#calendarFilter')).toHaveValue('app');await expect(page.locator('#unifiedCalendar .calendar-external')).toHaveCount(0);await page.locator('#calendarFilter').selectOption('external');await expect(page.locator('#unifiedCalendar .calendar-bar')).not.toHaveCount(0);await page.locator('#calendarAgenda').click();await expect(page.locator('#unifiedCalendar .agenda-row')).not.toHaveCount(0);
- await page.locator('#calendarFilter').selectOption('external');await expect(page.locator('#unifiedCalendar')).toContainText('Dokumente in die Cloud');
+ await page.getByRole('link',{name:/Zeitplan$/}).click();await expect(page.locator('#calendarFilter')).toHaveValue('operating');await expect(page.locator('#unifiedCalendar .calendar-external')).toHaveCount(0);await page.locator('#calendarFilter').selectOption('planned');await expect(page.locator('#unifiedCalendar .calendar-bar')).not.toHaveCount(0);await page.locator('#calendarAgenda').click();await expect(page.locator('#unifiedCalendar .agenda-row')).not.toHaveCount(0);
+ await page.locator('#calendarFilter').selectOption('planned');await expect(page.locator('#unifiedCalendar')).toContainText('Dokumente in die Cloud');
  await page.locator('#calendarWeek').click();await page.screenshot({path:testInfo.outputPath('strategy-calendar.png'),fullPage:true});
 });
 test('Externe Pläne und Stammdaten lassen sich ohne Modal bearbeiten; verknüpfte Geräte bleiben geschützt',async({page},testInfo)=>{

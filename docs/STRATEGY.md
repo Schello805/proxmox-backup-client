@@ -1,38 +1,61 @@
-# Backup-Planung und tatsächlicher Betrieb
+# Backup-Planung, Umsetzung und gemeinsamer Betrieb
 
-**Aufträge**, **Quellen** und **Ziele** bilden den tatsächlichen Betrieb ab. Die violett abgesetzte **Backup-Planung** unter Ziele beschreibt den gewünschten Soll-Zustand. Sie ersetzt die frühere Planner-App: alle Pläne und Stammdaten lassen sich hier anlegen, bearbeiten und entfernen. **Zeitplan** zeigt standardmäßig den Betrieb; Theorie lässt sich ausdrücklich zum Vergleich einblenden.
+Die App dokumentiert die gesamte Backup-Landschaft. Die Ausführung kann durch Backup Control oder direkt durch ein anderes System erfolgen. Quellen und Ziele werden dabei gemeinsam dargestellt: Ein Datenbestand kann einen eingerichteten Sicherungsweg und weitere noch geplante Wege besitzen.
+
+## Drei Umsetzungsstände
+
+| Stand | Bedeutung |
+|---|---|
+| Geplant | Gewünschter Sicherungsweg, noch nicht als eingerichtet bestätigt. |
+| Durch diese App umgesetzt | Vollständig mit passenden vorhandenen App-Aufträgen verbunden. Der tatsächliche App-Zeitplan ist maßgeblich. |
+| Extern umgesetzt | Das angegebene System führt die Sicherung aus, etwa Proxmox oder QNAP HBS. Die App dokumentiert dessen Zeitplan; Laufstatus und Erfolg werden nicht automatisch abgefragt. |
+
+Das Umstellen eines Planes startet keine Sicherung und verändert keine bestehenden App-Aufträge. Ein extern eingerichtetes Backup braucht keinen LXC-Mount und keine Middleware.
 
 ## Planner übernehmen
 
-1. Unter **Backup-Planung → Planner importieren** die JSON-Datei auswählen und **Datei prüfen** drücken.
-2. Die Vorschau zeigt aktive Pläne, Datenbestände, Ziele und Standorte. Gelöschte oder inaktive Datensätze werden ausgeschlossen; defekte Referenzen verhindern den Import.
-3. Optional Datenbestände ausdrücklich mit eingebundenen App-Quellen und Planner-Ziele mit App-Zielen verbinden. Gleiche Namen bedeuten nicht dieselbe Quelle oder dasselbe Gerät.
-4. Ersetzen bestätigen und **Strategie übernehmen** drücken.
+1. **Backup-Planung → Planner importieren** öffnen, JSON-Datei auswählen und **Datei prüfen** drücken.
+2. Die Vorschau zeigt aktive Pläne und Stammdaten. Gelöschte oder inaktive Einträge werden ausgeschlossen; defekte Referenzen verhindern die Übernahme.
+3. Optional Datenbestände mit App-Quellen und Planner-Ziele mit App-Zielen verbinden. Gleiche Namen werden nicht automatisch gleichgesetzt.
+4. Ersetzen bestätigen und übernehmen.
 
-Der Import ersetzt ausschließlich Strategie-Metadaten. Er legt keine ausführbaren Aufträge, Mounts oder Zugangsdaten an und verändert keine bestehenden App-Zeitpläne. Externe Sicherungen müssen weiterhin in ihrem jeweiligen Programm eingerichtet werden.
+Ältere/importierte Pläne bleiben zunächst **geplant**. Danach unter **Backup-Pläne → Bearbeiten → Umsetzung** angeben, welche Sicherungen bereits eingerichtet sind. Die App erfindet keinen Ausführungsnachweis.
 
-## Danach
+## Umsetzung bearbeiten
 
-- **Sicherungswege** zeigt Ursprung, gegebenenfalls eine vorgeschaltete Kopie, Ziel und Schutzart.
-- **Mit App verbinden** verwaltet die Zuordnung zu vorhandenen Quellen und Zielen.
-- **Geräte & Standorte** verwaltet Standorte, Quellgeräte, Speicherziele, Datenbestände und Software. Verwendete Einträge lassen sich erst nach dem Entfernen ihrer Verknüpfungen löschen.
-- **Backup-Pläne** enthält eine durchsuchbare Planliste mit Bearbeiten und Entfernen. **Neuer Backup-Plan** legt einen theoretischen Weg samt Tages-, Wochen- oder Monatsplan an. Auch Monatsende und manuelle Pläne sind möglich. Software, Aufbewahrung, Versionenzahl, Verantwortlichkeit und deklarierte Schutzmerkmale sind direkt bearbeitbar.
-- **Aufträge** enthält ausschließlich die eingerichteten App-Aufträge, mit Suche sowie Filtern für PBS/Google Drive und Status. Theoretische Pläne bleiben in der Backup-Planung. Eine Zuordnung zu einem App-Auftrag verändert dessen Konfiguration nicht.
+- **Extern umgesetzt:** Ausführendes System, Quelle, Ziel und tatsächlich dort eingerichteten Tages-, Wochen- oder Monatsplan eintragen. Die App führt diesen Auftrag nicht aus und verändert das fremde System nicht.
+- **Durch diese App umgesetzt:** Im selben Formular die ausgewählten Datenbestände und das Ziel ausdrücklich mit vorhandenen App-Quellen und App-Zielen verbinden. Nur passende, vollständig abgedeckte Aufträge werden akzeptiert. Deren echte Zeitpläne lassen sich über die angezeigten Links bearbeiten.
+- **Noch nicht eingerichtet:** Als geplant speichern. Über den Quellen-Assistenten einen lesbaren LXC-Ordner registrieren und unter Ziele den Zugang einrichten; danach den Weg mit seinem eingerichteten App-Auftrag verbinden. Alternativ die Sicherung im zuständigen System einrichten und anschließend als extern umgesetzt dokumentieren.
 
-## Status und Kalender richtig lesen
+Fehlt eine App-Verknüpfung nach einer Konfigurationsänderung, zeigt die Planung dies ausdrücklich. Teilzuordnungen und fehlende Zugangsdaten gelten nicht als vollständige App-Umsetzung. Die App markiert sie nicht allein anhand eines früheren Namens als erfolgreich.
 
-Ein dokumentierter Plan ist kein Backup-Nachweis. Auch die Zuordnung zu einem App-Auftrag bestätigt nicht automatisch jeden Datenbestand oder eine unabhängige Kopie. Datastores desselben PBS dürfen nicht allein aufgrund ihrer Anzahl als unabhängige Sicherungen gezählt werden.
+## Gemeinsame Ansichten
 
-Der gemeinsame Kalender zeigt gemessene erfolgreiche Laufzeiten bei App-Aufträgen, deklarierte Laufzeiten bei externen Plänen und Startpunkte bei unbekannter Dauer. Eine deklarierte Dauer ist gestrichelt. Überlappende Balken werden in getrennten Spuren angezeigt. PBS-Aufträge dieser App laufen weiterhin nacheinander; Balken sind keine Zusage tatsächlicher Start- oder Endzeiten.
+- **Quellen:** App-Ordner und nicht zugeordnete dokumentierte Datenbestände. Eine explizite Zuordnung vermeidet doppelte Einträge. Externe/geplante Datenbestände bekommen keine erfundene Mount-Prüfung und keine Start-Schaltfläche.
+- **Ziele:** Gemeinsamer Zielkatalog aus eingerichteten App-Zielen und dokumentierten Speicherzielen mit Umsetzungsstand.
+- **Aufträge:** Alle eingerichteten Sicherungen, durch diese App oder extern. Filter für PBS, Drive, externe Umsetzung sowie Status. Nur App-Aufträge lassen sich hier starten/abbrechen.
+- **Zeitplan:** Standardmäßig alle eingerichteten Sicherungen. Noch geplante Wege sind separat oder zum Vergleich zuschaltbar. App-Umsetzungen verwenden die wirklichen App-Termine und werden nicht als zweiter Plan doppelt angezeigt.
 
-Die Wochenansicht und Agenda berücksichtigen die konfigurierte Zeitzone und die tatsächliche Länge der Tage bei Zeitumstellungen. Vollständig verknüpfte externe Pläne lassen sich über „Backup-Planung · Theorie“ im Kalenderfilter ansehen; in der gemeinsamen Ansicht wird derselbe zugeordnete Weg nicht noch einmal als eigener Termin angezeigt.
+Die Balken verwenden letzte erfolgreiche App-Laufzeiten oder die deklarierte externe Dauer. Bei unbekannter Dauer erscheinen Startpunkte. Zeitzone, Monatsende, über Mitternacht reichende Läufe und Zeitumstellungen werden berücksichtigt. Geplante Zeitfenster sind kein Live-Fortschritt und keine Zusage tatsächlicher Endzeiten.
 
-## Strategie sichern
+## Netzlast und Überschneidungen
 
-**Planung exportieren** lädt eine JSON-Datei ohne Backup-Zugangsdaten herunter. Sie lässt sich über denselben Import wieder einlesen. Beim Import oder Speichern eines geänderten Strategiestands behält die App zehn vorherige Fassungen unter `strategy-backups/` im Datenverzeichnis. Eine dortige JSON-Datei kann über den Strategie-Import wiederhergestellt werden.
+1. Unter **Geräte & Standorte → Netzwerkbereiche** einen Bereich samt nutzbarer Kapazität in **MiB/s** anlegen, beispielsweise LAN oder Internet-Uplink.
+2. Im jeweiligen Plan unter **Netzwerk & erwartete Last** Bereich und erwartete Übertragungsrate eintragen. Diese Angaben sind Schätzungen; sie setzen kein Upload-Limit.
+3. Im **Zeitplan → Zeitfenster und Netzlast prüfen** die Hinweise ansehen.
 
-Die Strategie liegt in `strategy.json` im Datenverzeichnis und ist unabhängig vom Einstellungs-Export. Daher den Strategie-Export zusätzlich aufbewahren. Eine veraltete Vorschau oder gleichzeitig geänderte Strategie wird vor dem Überschreiben abgewiesen.
+Die Analyse vergleicht bekannte Fenster auf gemeinsamen Quellen/Zielen und summiert erwartete externe Übertragungen im jeweiligen Netzwerkbereich. PBS und Drive teilen sich die App-Warteschlange; ihre Raten werden nicht so addiert, als liefen sie gleichzeitig. Zeitgleiche App-Termine können sich durch die Warteschlange verschieben und dadurch mit späteren externen Läufen konkurrieren.
 
-## Planung ohne Import anlegen
+Ohne Dauer oder Rate ist die Auswertung unvollständig. Gleichzeitige Termine allein sind kein Überlastungsnachweis. In der Vergleichsansicht werden eingerichtete und noch geplante Wege als Simulation gemeinsam betrachtet. Die App misst keine Live-Netzauslastung und verschiebt keine externen Zeitpläne. Bei sehr großen Datenmengen wird die Auswertung ausdrücklich begrenzt.
 
-Unter **Backup-Planung → Geräte & Standorte** zuerst ein Quellgerät und ein Speicherziel anlegen. Danach einen Datenbestand seinem Quellgerät zuordnen und optional Software eintragen. Unter **Backup-Pläne → Neuer Backup-Plan** Quelle, Datenbestand, Ziel, Software und gewünschten Zeitplan wählen. Die frühere Planner-App wird hierfür nicht benötigt.
+## Ohne die frühere App planen
+
+Unter **Geräte & Standorte** Standorte, Quellgeräte, Speicherziele, Datenbestände, Software und Netzwerkbereiche anlegen oder bearbeiten. Danach unter **Backup-Pläne** einen Plan mit Schutzart, Zeitplan und Umsetzungsstand erstellen. Aufbewahrung, Versionenzahl, Verantwortung und deklarierte Schutzmerkmale sind bearbeitbar. Verwendete Stammdaten können erst nach ihren Verknüpfungen entfernt werden.
+
+Die Angaben beschreiben gewünschte oder dokumentierte Einstellungen. Sie stellen am Ziel keine Aufbewahrung, Verschlüsselung oder Unveränderlichkeit ein. Auch mehrere Datastores auf demselben PBS sind nicht automatisch unabhängige Kopien.
+
+## Planung sichern
+
+**Planung exportieren** lädt die JSON-Datei ohne Backup-Zugangsdaten herunter. Der Import liest auch die eigenen Exporte einschließlich Zuordnungen und Umsetzungsständen. App-Zuordnungen werden erneut gegen die vorhandenen Aufträge validiert.
+
+Die Planung liegt in `strategy.json` im Datenverzeichnis. Beim Speichern bleiben zehn vorherige Fassungen unter `strategy-backups/` erhalten. Diese Dateien lassen sich über denselben Import wiederherstellen. Eine veraltete Vorschau wird vor dem Überschreiben abgewiesen. Planung und App-Einstellungen sind weiterhin getrennt zu exportieren; die Rclone-Anmeldung separat sichern.

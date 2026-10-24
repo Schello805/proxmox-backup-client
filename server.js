@@ -97,7 +97,7 @@ const server = http.createServer(async (req, res) => {
       if (req.headers['x-requested-with'] !== 'qnap-dashboard') return json(res, 403, { error: 'Anfrage-Header fehlt.' });
     }
     // Nur die App-Hülle ist öffentlich. Daten und Aktionen benötigen eine Sitzung.
-    const assets = { '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], '/workspace.css': ['workspace.css', 'text/css'], ...Object.fromEntries(['strategy','source-help','partitions','logbook','dashboard','gdrive','api','views','forms','maintenance','assistant','timeline','problems','operations','controls','restore'].map(name => ['/js/' + name + '.js', ['js/' + name + '.js', 'text/javascript']])) };
+    const assets = { '/favicon.svg': ['favicon.svg', 'image/svg+xml'], '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], '/workspace.css': ['workspace.css', 'text/css'], ...Object.fromEntries(['execution','strategy','source-help','partitions','logbook','dashboard','gdrive','api','views','forms','maintenance','assistant','timeline','problems','operations','controls','restore'].map(name => ['/js/' + name + '.js', ['js/' + name + '.js', 'text/javascript']])) };
     if (req.method === 'GET' && assets[url.pathname]) {
       const [file, type] = assets[url.pathname]; res.writeHead(200, { 'Content-Type': `${type}; charset=utf-8`, 'Cache-Control': 'no-cache' });
       return res.end(fs.readFileSync(path.join(ROOT, 'public', file)));
@@ -116,6 +116,7 @@ const server = http.createServer(async (req, res) => {
       if(input.revision!==strategy.revision(strategyDocument))return json(res,409,{error:'Strategie wurde inzwischen geändert. Neu laden und erneut prüfen.'});
       const next=strategy.normalize(input.document).document;
       next.mapping=strategy.validateMapping(input.mapping||input.document.mapping||{datasets:{},targets:{}},next,getConfig());
+      strategy.validateImplementation(next,getConfig(),state,drive.snapshot());
       if(fs.existsSync(STRATEGY)){
         const directory=path.join(DATA,'strategy-backups');fs.mkdirSync(directory,{recursive:true,mode:0o700});
         saveJSON(path.join(directory,Date.now()+'-'+require('node:crypto').randomUUID()+'.json'),strategyDocument);

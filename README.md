@@ -1,11 +1,11 @@
 # Backup Control
 
-Lokale Web-App für **QNAP → Debian-LXC → Proxmox Backup Server** und **Google Drive über Rclone**. Betrieb und theoretische Backup-Planung sind getrennt. Die Planung lässt sich vollständig hier bearbeiten, auch ohne die frühere Planner-App.
+Lokale Web-App für **QNAP → Debian-LXC → Proxmox Backup Server** und **Google Drive über Rclone**. Gemeinsame Übersicht über Planung, App-Aufträge und extern umgesetzte Sicherungen. Die frühere Planner-App wird für das Bearbeiten der Planung nicht benötigt.
 
 - **Übersicht:** Laufstatus, Fehler, Quellen, Ziele und tatsächliche Sicherungswege.
-- **Aufträge:** tatsächlich eingerichtete PBS- und Drive-Aufträge starten, abbrechen und filtern.
-- **Zeitplan:** Betrieb als Wochenkalender und Agenda; theoretische Pläne optional zum Vergleich einblenden.
-- **Backup-Planung:** Backup-Planner-JSON mit Vorschau importieren, Geräte/Standorte/Datenbestände verwalten und ausdrücklich mit App-Aufträgen verbinden.
+- **Aufträge:** eingerichtete App-Aufträge und externe Sicherungen gemeinsam sehen; PBS und Drive starten/abbrechen.
+- **Zeitplan:** alle eingerichteten Backups als Woche/Agenda; geplante Wege optional vergleichen, Zeitfenster und erwartete Netzlast prüfen.
+- **Backup-Planung:** Planner-Import und vollständige Bearbeitung; je Weg geplant, App-Umsetzung oder externe Umsetzung dokumentieren.
 - **Quellen / Ziele:** SMB- oder NFS-Bind-Mounts registrieren, PBS-Datastores und Drive konfigurieren. Mount-Änderungen am Host bleiben Teil der Anleitung.
 - **Einstellungen / Protokoll:** Zeitzone, Bandbreite, ntfy, Updates, Diagnose und zentrale Laufprotokolle.
 
@@ -40,7 +40,7 @@ Vor dem Update laufende Aufträge beenden. Konfiguration und Verlauf liegen unte
 - [Google Drive vollständig einrichten](docs/GOOGLE-DRIVE.md)
 - [Planner-Import, Strategie und Kalender](docs/STRATEGY.md)
 
-Der Planner-Import übernimmt Dokumentation und startet keine Sicherungen. Externe Pläne sind kein Nachweis erfolgreicher Ausführung. Strategie und App-Einstellungen getrennt exportieren; die Rclone-Anmeldung separat sichern.
+Der Planner-Import startet keine Sicherungen. Externe Umsetzung dokumentiert das ausführende System und den Zeitplan, ohne einen automatischen Laufnachweis zu behaupten. Netzlast-Hinweise beruhen auf bekannten/geschätzten Zeiten und MiB/s, nicht auf Live-Messungen. Strategie und App-Einstellungen getrennt exportieren; die Rclone-Anmeldung separat sichern.
 
 ## Entwicklung
 

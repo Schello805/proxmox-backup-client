@@ -336,7 +336,7 @@ function renderSources() {
   const query = $('#sourceSearch').value.trim().toLocaleLowerCase('de'), filter = $('#sourceStatusFilter').value;
   const sources = savedConfig.sources.filter(source => {
     const folder=folderData.find(item=>item.id===source.id);
-    return (!$('#sourceSearch').dataset.exactId || source.id === $('#sourceSearch').dataset.exactId) && [source.name,source.path,source.expectedSource,folder?.mount?.source].join(' ').toLocaleLowerCase('de').includes(query) && (filter==='all'||filter==='available'&&folder?.ok||filter==='unavailable'&&!folder?.ok&&!folder?.checking);
+    return (!$('#sourceSearch').dataset.exactId || source.id === $('#sourceSearch').dataset.exactId) && [source.name,source.path,source.expectedSource,folder?.mount?.source,strategyUI?.sourceAliases(source.id)].join(' ').toLocaleLowerCase('de').includes(query) && (filter==='all'||filter==='external'&&strategyUI?.sourceStates(source.id).includes('external')||filter==='planned'&&strategyUI?.sourceStates(source.id).includes('planned')||filter==='available'&&folder?.ok||filter==='unavailable'&&!folder?.ok&&!folder?.checking);
   });
   $('#sourceListCount').textContent = `${sources.length} von ${savedConfig.sources.length} Quellen`;
   for (const source of sources) {
@@ -367,6 +367,7 @@ function renderSources() {
     const split=element('button',source.partitioned?'Aufteilung bearbeiten':'Dateien & Ordner zuordnen','row-action');split.type='button';split.onclick=()=>partitionTools.open(source.id);
     actions.append(edit,pin,...(!source.parentId&&source.target!=='gdrive'?[split]:[]),remove);row.append(info,mount,size,target,plan,actions);$('#sourceList').append(row);
   }
+  strategyUI?.sourcesRendered();
 }
 function renderSourceTargetHint() {
   let hint = $('#sourceTargetHint');

@@ -1,3 +1,4 @@
+import { installExecutionViews } from '/js/execution.js';
 export function installStrategy({api,element,date,scheduleText,notice}) {
  const $=selector=>document.querySelector(selector);
  let snapshot=null, stored=null, preview=null, loading=null, loadedAt=0, calendarMode='week', calendarOffset=0, activeTab='paths', importFile=null;
@@ -10,9 +11,11 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
  const link=(text,href,cls='row-action')=>{const a=n('a',text,cls);a.href=href;return a;};
  const button=(text,action,cls='secondary')=>{const b=n('button',text,cls);b.type='button';b.onclick=action;return b;};
  const badge=(text,tone='')=>n('span',text,'badge '+tone);
+ const implementationLabel={planned:'Geplant',app:'Durch App umgesetzt',external:'Extern umgesetzt'};
  const duration=seconds=>seconds==null?'Dauer unbekannt':seconds<60?Math.round(seconds)+' s':seconds<3600?Math.ceil(seconds/60)+' min':Math.floor(seconds/3600)+' h '+Math.round(seconds%3600/60)+' min';
  function feedback(text,error=false){$('#strategyFeedback').textContent=text;$('#strategyFeedback').classList.toggle('row-error',error);}
  function metric(root,items){root.replaceChildren();for(const [value,title,hint]of items){const card=n('article',undefined,'inventory-metric');card.append(n('strong',String(value)),n('span',title),n('small',hint,'hint'));root.append(card);}}
+ const execution=installExecutionViews({n,badge,button,link,date,scheduleText,metric,getStored:()=>stored,getSnapshot:()=>snapshot});
  function goTab(tab){activeTab=tab;for(const key of ['paths','plans','mapping','inventory'])$('#strategy'+key[0].toUpperCase()+key.slice(1)+'Panel').hidden=key!==tab;document.querySelectorAll('[data-strategy-tab]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.strategyTab===tab)));}
  function renderLivePaths(){
   if(!snapshot)return;
@@ -47,7 +50,7 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
    const grid=n('div',undefined,'mapping-grid');
    for(const item of document.data[kind]){
     const label=n('label',item.name),select=n('select');select.dataset.mapKind=kind;select.dataset.mapId=item.id;select.setAttribute('aria-label','Zuordnung '+item.name);
-    const options=kind==='datasets'?snapshot.config.sources.filter(source=>!source.parentId).map(source=>({id:source.id,name:source.name+' · '+source.path})):[...snapshot.targets.filter(target=>target.repository),{id:'gdrive',name:'Google Drive'}];
+    const options=kind==='datasets'?snapshot.config.sources.map(source=>({id:source.id,name:source.name+' · '+source.path})):[...snapshot.targets.filter(target=>target.repository),{id:'gdrive',name:'Google Drive'}];
     const empty=n('option','Extern / noch nicht verbunden');empty.value='';select.append(empty);
     for(const option of options){const node=n('option',option.name);node.value=option.id;select.append(node);}select.value=mapping[kind]?.[item.id]||'';if(!select.value)select.value='';label.append(select);grid.append(label);
    }
@@ -84,7 +87,8 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
     if(via)row.append(n('span','→','path-arrow'),n('span',via.name,'path-chip'));
     row.append(n('span','→','path-arrow'),button(target.name,()=>editPlan(plan.id),'path-chip'),badge(labels[plan.protection_type]));
     const external=view.external.find(item=>item.planId===plan.id),linked=external.bindings.length;
-    const note=button(linked?'Mit '+linked+' App-Auftrag verbunden':'Theoretischer Plan · kein Laufnachweis',()=>editPlan(plan.id),'row-action');row.append(note);card.append(row);
+    row.append(badge(external.implementation==='app'&&!external.executionReady?'App-Zuordnung fehlt':implementationLabel[external.implementation],external.implementation==='external'?'external-ready':external.implementation==='app'&&external.executionReady?'ok':'external'));
+    const note=button(external.implementation==='app'&&!external.executionReady?'App-Verknüpfung fehlt':linked?'Mit '+linked+' App-Auftrag verbunden':external.implementation==='external'?external.executor+' · Laufstatus nicht abgefragt':'Geplant · noch nicht eingerichtet',()=>editPlan(plan.id),'row-action');row.append(note);card.append(row);
    }
    if(!plans.length)card.append(n('p','Noch kein Sicherungsweg geplant.','strategy-warning'));
    const mapped=stored.document.mapping.datasets[dataset.id];card.append(n('p',mapped?'App-Quelle: '+(snapshot.config.sources.find(item=>item.id===mapped)?.name||'Zuordnung nicht mehr vorhanden'):'Noch keiner eingebundenen App-Quelle zugeordnet.','hint'));root.append(card);
@@ -105,13 +109,13 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
   const root=$('#planningPlanList');root.replaceChildren();
   const query=$('#planningSearch').value.trim().toLocaleLowerCase('de');
   const table=n('table'),head=n('thead'),heading=n('tr');
-  for(const title of ['Name / Datenbestände','Quelle','Ziel','Schutzart','Zeitplan','Aktionen'])heading.append(n('th',title));head.append(heading);table.append(head);const body=n('tbody');
+  for(const title of ['Name / Datenbestände','Quelle','Ziel','Umsetzung','Zeitplan','Aktionen'])heading.append(n('th',title));head.append(heading);table.append(head);const body=n('tbody');
   for(const job of stored.view.external){
    if(query&&![job.name,job.source,job.target,...job.datasetNames].join(' ').toLocaleLowerCase('de').includes(query))continue;
    const row=n('tr');row.dataset.planId=job.planId;
    const name=n('td');const title=n('strong',job.name);title.style.borderLeft='3px solid '+(stored.document.data.plans.find(plan=>plan.id===job.planId)?.color||'#8051b8');title.style.paddingLeft='8px';name.append(title,n('small',job.datasetNames.join(', '),'hint'));
-   const source=n('td',job.source),target=n('td',job.target),kind=n('td');kind.append(badge(labels[job.protection],'external'));
-   const plan=n('td',scheduleText(job.schedule)),actions=n('td');
+   const source=n('td',job.source),target=n('td',job.target),kind=n('td');kind.append(badge(job.implementation==='app'&&!job.executionReady?'App-Zuordnung fehlt':implementationLabel[job.implementation],job.implementation==='external'?'external-ready':job.implementation==='app'&&job.executionReady?'ok':'external'),n('small',job.implementation==='app'&&!job.executionReady?'App-Verknüpfung fehlt':job.executor||labels[job.protection],'hint'));
+   const plan=n('td',job.implementation==='app'&&job.executionReady?job.appSchedules.map(item=>scheduleText(item.schedule)).join(' / '):scheduleText(job.schedule)),actions=n('td');
    actions.append(button('Bearbeiten',()=>editPlan(job.planId),'row-action'),button('Entfernen',()=>confirmDelete('plans',job.planId),'row-action'));
    row.append(name,source,target,kind,plan,actions);body.append(row);
   }
@@ -120,28 +124,28 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
  function filterJobs(){
   if(!snapshot)return;
   const query=$('#jobSearch').value.toLocaleLowerCase('de'),management=$('#jobManagement').value,filter=$('#jobState').value;
-  const rows=[...$('#folders').children,...$('#driveJobRows').children];
+  const rows=[...$('#folders').children,...$('#operatingExternalRows').children,...$('#driveJobRows').children];
   let total=0;
   for(const row of rows){
-   const drive=row.id==='driveOverview',id=row.dataset.folder;
+   const external=Boolean(row.dataset.externalJob),drive=row.id==='driveOverview',id=row.dataset.folder;
    if(drive&&!snapshot.config.gdrive.sources.length){row.hidden=true;continue;}
    total++;
-   const status=drive?snapshot.drive.status:snapshot.folders.find(folder=>folder.id===id)?.job.status;
-   row.hidden=Boolean(query&&!row.textContent.toLocaleLowerCase('de').includes(query)||management==='pbs'&&drive||management==='gdrive'&&!drive||filter==='busy'&&!['queued','running','cancelling'].includes(status)||filter==='failed'&&!['failed','interrupted'].includes(status));
+   const status=external?'unverified':drive?snapshot.drive.status:snapshot.folders.find(folder=>folder.id===id)?.job.status;
+   row.hidden=Boolean(query&&!row.textContent.toLocaleLowerCase('de').includes(query)||management==='pbs'&&(drive||external)||management==='gdrive'&&!drive||management==='external'&&!external||filter==='busy'&&!['queued','running','cancelling'].includes(status)||filter==='failed'&&!['failed','interrupted'].includes(status));
   }
   $('#jobCount').textContent=String(total);$('#jobEmpty').hidden=total>0;
-  metric($('#jobMetrics'),[[total,'Eingerichtete Aufträge','Tatsächlicher Betrieb · PBS und Google Drive'],[snapshot.folders.filter(folder=>busy(folder.job||{})).length+Number(busy(snapshot.drive)),'Aktiv / wartend','Aktueller Laufstatus'],[snapshot.folders.filter(folder=>bad(folder.job||{})).length+Number(bad(snapshot.drive)),'Fehler / unterbrochen','Protokoll für Details öffnen']]);
+  metric($('#jobMetrics'),[[total,'Eingerichtete Sicherungen','App-Aufträge und extern eingerichtete Backups'],[snapshot.folders.filter(folder=>busy(folder.job||{})).length+Number(busy(snapshot.drive)),'Aktiv / wartend','Aktueller Laufstatus'],[snapshot.folders.filter(folder=>bad(folder.job||{})).length+Number(bad(snapshot.drive)),'Fehler / unterbrochen','Protokoll für Details öffnen']]);
  }
  function renderCalendar(){
-  if(!stored)return;
-  const view=stored.view,filter=$('#calendarFilter').value;$('#schedule').classList.toggle('show-planning',filter!=='app');const all=[...view.jobs,...view.external],jobs=all.filter(job=>(filter!=='app'||job.engine!=='external')&&(filter!=='external'||job.engine==='external')&&(job.engine!=='external'||!job.fullyLinked||filter==='external'));
+  if(!stored)return;execution.network();
+  const view=stored.view,filter=$('#calendarFilter').value;$('#schedule').classList.toggle('show-planning',['planned','all'].includes(filter));const all=[...view.jobs,...view.external.filter(job=>job.implementation!=='app')],jobs=all.filter(job=>filter==='all'||filter==='app'&&job.engine!=='external'||filter==='external'&&job.engine==='external'&&job.implementation==='external'||filter==='planned'&&job.implementation==='planned'||filter==='operating'&&job.implementation!=='planned');
   const index=new Map(jobs.map(job=>[job.id,job]));
   const root=$('#unifiedCalendar');root.replaceChildren();const format=t=>new Intl.DateTimeFormat('de-DE',{timeZone:view.timezone,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(t));
   $('#calendarDates').textContent=format(view.days[0].start).split(',')[0]+' – '+format(view.days.at(-1).start).split(',')[0];
-  $('#calendarSummary').textContent=view.timezone+' · '+jobs.filter(job=>job.engine!=='external').length+' App-Aufträge · '+jobs.filter(job=>job.engine==='external').length+' theoretische Pläne · manuelle Aufträge haben keinen Termin';
+  $('#calendarSummary').textContent=view.timezone+' · '+jobs.filter(job=>job.engine!=='external').length+' App-Aufträge · '+jobs.filter(job=>job.engine==='external'&&job.implementation==='external').length+' extern eingerichtete Backups · '+jobs.filter(job=>job.implementation==='planned').length+' geplante Sicherungen · manuelle Aufträge haben keinen Termin';
   if(calendarMode==='agenda'){
    const events=view.events.filter(event=>index.has(event.jobId)).sort((a,b)=>a.start-b.start);
-   for(const event of events){const job=index.get(event.jobId),row=button('',()=>openJob(job),'agenda-row');row.append(n('strong',format(event.start)),n('span',job.name+' · '+job.source+' → '+job.target),badge(job.engine==='external'?'Theoretischer Plan':job.durationKind==='measured'?'Dauer gemessen':'Dauer unbekannt'),n('small',duration(job.seconds),'hint'));root.append(row);}
+   for(const event of events){const job=index.get(event.jobId),row=button('',()=>openJob(job),'agenda-row');row.append(n('strong',format(event.start)),n('span',job.name+' · '+job.source+' → '+job.target),badge(job.engine==='external'?(job.implementation==='external'?'Extern · '+job.executor:'Geplant'):job.durationKind==='measured'?'Dauer gemessen':'Dauer unbekannt'),n('small',duration(job.seconds),'hint'));root.append(row);}
    if(!events.length)root.append(n('p','Keine Termine in diesem Zeitraum. Unter Aufträge einen Zeitplan einrichten.','workspace-empty'));return;
   }
   const grid=n('div',undefined,'week-calendar'),header=n('div',undefined,'week-header');header.append(n('span','Tag / Stunde'));for(let hour=0;hour<24;hour++)header.append(n('span',String(hour).padStart(2,'0')));grid.append(header);
@@ -152,8 +156,8 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
     const job=index.get(event.jobId),start=Math.max(day.start,event.start),end=Math.min(day.end,event.end??event.start+60000);
     const point=event.end==null,startPercent=(start-day.start)/(day.end-day.start)*100,width=Math.max(.6,(end-start)/(day.end-day.start)*100);
     let lane=lanes.findIndex(last=>last<=startPercent);if(lane<0)lane=lanes.length;lanes[lane]=startPercent+Math.max(width,2);
-    const bar=button('',()=>openJob(job),'calendar-bar '+(job.engine==='external'?'calendar-external':job.engine==='gdrive'?'calendar-drive':'calendar-pbs')+(point?' calendar-point':''));
-    const description=job.name+' · '+job.source+' → '+job.target+' · '+format(event.start)+' · '+duration(job.seconds)+' · '+(job.durationKind==='planned'?'geplante Dauer':job.durationKind==='measured'?'zuletzt gemessene Dauer':'Dauer unbekannt');
+    const bar=button('',()=>openJob(job),'calendar-bar '+(job.engine==='external'?(job.implementation==='external'?'calendar-external-ready':'calendar-external'):job.engine==='gdrive'?'calendar-drive':'calendar-pbs')+(point?' calendar-point':''));
+    const description=(job.implementation==='external'?'Extern eingerichtet · '+job.executor+' · ':job.implementation==='planned'?'Geplant · ':'App · ')+job.name+' · '+job.source+' → '+job.target+' · '+format(event.start)+' · '+duration(job.seconds)+' · '+(job.durationKind==='planned'?'geplante Dauer':job.durationKind==='measured'?'zuletzt gemessene Dauer':'Dauer unbekannt');
     bar.title=description;bar.setAttribute('aria-label',description);bar.textContent=point?'':job.name;bar.style.left=startPercent+'%';bar.style.width=width+'%';bar.style.top=(lane*38+9)+'px';track.append(bar);
    }
    track.style.height=Math.max(62,lanes.length*38+18)+'px';
@@ -165,8 +169,8 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
  function render(){
   if(!stored)return;
   const d=stored.document.data;
-  metric($('#strategyMetrics'),[[d.plans.length,'Dokumentierte Pläne','Keine Aussage über Ausführung'],[stored.view.linkedJobs,'Verknüpfte App-Aufträge','Zuordnung zu Quelle und Ziel'],[d.datasets.length,'Datenbestände',d.sources.length+' Quellgeräte'],[d.locations.length,'Standorte','Gemeinsame Ausfallbereiche beachten']]);
-  renderPaths();renderInventory();renderPlanList();renderCalendar();filterJobs();
+  metric($('#strategyMetrics'),[[d.plans.filter(plan=>plan.implementation==='planned').length,'Noch geplant','Noch nicht als eingerichtet bestätigt'],[stored.view.external.filter(plan=>plan.executionReady).length,'Umsetzung dokumentiert','App-verknüpft oder extern eingerichtet'],[d.datasets.length,'Datenbestände',d.sources.length+' Quellgeräte'],[d.locations.length,'Standorte','Gemeinsame Ausfallbereiche beachten']]);
+  renderPaths();renderInventory();renderPlanList();renderCalendar();execution.render();filterJobs();
   // Preserve unsaved mapping selections during background refreshes.
   if(!$('#strategyMapping').dataset.dirty)mappingEditor($('#strategyMapping'),stored.document,stored.document.mapping);
  }
@@ -178,12 +182,15 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
   input.value=value??'';label.append(input);form.append(label);return input;
  }
  function errorBox(form){const result=n('p','','hint');result.setAttribute('role','status');form.append(result);return result;}
- function editPlan(identifier){
+ function editPlan(identifier,presetDataset){
   if(!stored)return;
   const previous=stored.document.data.plans.find(plan=>plan.id===identifier),root=editor(previous?'Backup-Plan bearbeiten':'Backup-Plan anlegen'),form=n('form'),grid=n('div',undefined,'editor-grid');
-  root.append(n('p','Hier bearbeitest du die Theorie: Quelle, Ziel, Schutzart und gewünschter Zeitplan. Speichern startet keine Sicherung und ändert keine App-Aufträge.','hint'),form);form.append(grid);
+  root.append(n('p','Sicherungsweg und Umsetzung dokumentieren. Geplant: noch nicht eingerichtet. Extern: wird im angegebenen System ausgeführt. App: mit passenden vorhandenen App-Aufträgen verbinden. Speichern startet keine Sicherung.','hint'),form);form.append(grid);
   const p=previous||{name:'',source_id:stored.document.data.sources[0]?.id,target_id:stored.document.data.targets[0]?.id,protection_type:'backup',schedule_type:'manual',weekdays:[],day_of_month:1,start_time:'02:00',duration_minutes:0,dataset_ids:[],notes:''};
+  if(!previous&&presetDataset){const dataset=stored.document.data.datasets.find(item=>item.id===presetDataset);if(dataset){p.source_id=dataset.source_id;p.dataset_ids=[dataset.id];p.name=dataset.name+' sichern';}}
   field(grid,'Name','name',p.name).required=true;
+  const implementation=field(grid,'Umsetzung','implementation',p.implementation||'planned',[{id:'planned',name:'Geplant · noch nicht eingerichtet'},{id:'external',name:'Extern umgesetzt'},{id:'app',name:'Durch diese App umgesetzt'}]);
+  const executor=field(grid,'Ausführendes System','executor',p.executor||'');executor.placeholder='z. B. Proxmox pve · Datacenter → Backup';
   const source=field(grid,'Ursprüngliches Quellgerät','source_id',p.source_id,stored.document.data.sources);
   field(grid,'Ziel','target_id',p.target_id,stored.document.data.targets);
   field(grid,'Software (optional)','software_id',p.software_id||'',[{id:'',name:'Nicht festgelegt'},...stored.document.data.software]);
@@ -197,9 +204,30 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
   ['Mo','Di','Mi','Do','Fr','Sa','So'].forEach((day,index)=>{const label=n('label',day,'checkbox-label'),input=n('input');input.type='checkbox';input.value=index+1;input.checked=p.weekdays.includes(index+1);dayInputs.push(input);label.prepend(input);days.append(label);});form.append(days);
   const datasetBox=n('fieldset');datasetBox.append(n('legend','Datenbestände des Quellgeräts'));form.append(datasetBox);
   function paintDatasets(){datasetBox.querySelectorAll('label').forEach(label=>label.remove());for(const dataset of stored.document.data.datasets.filter(dataset=>dataset.source_id===source.value)){const label=n('label',dataset.name,'checkbox-label'),input=n('input');input.type='checkbox';input.value=dataset.id;input.checked=p.dataset_ids.includes(dataset.id);label.prepend(input);datasetBox.append(label);}}
-  source.onchange=paintDatasets;paintDatasets();
+  source.onchange=()=>{paintDatasets();if(typeof paintAppMapping==='function')paintAppMapping();};paintDatasets();
   function frequency(){const mode=form.elements.schedule_type.value;days.hidden=mode!=='weekly';form.elements.day_of_month.closest('label').hidden=mode!=='monthly';form.elements.start_time.disabled=mode==='manual';}
   form.elements.schedule_type.onchange=frequency;frequency();
+  const appBox=n('fieldset');appBox.append(n('legend','Verbindung zur tatsächlichen App-Umsetzung'));form.append(appBox);
+  const appMapping=n('div',undefined,'mapping-grid'),appSchedules=n('div',undefined,'app-schedules');appBox.append(n('p','Datenbestände und Ziel ausdrücklich zuordnen. Quelle und Ziel müssen bereits als passende App-Aufträge eingerichtet sein. Deren tatsächlicher Zeitplan bleibt maßgeblich.','hint'),appMapping,appSchedules);
+  const draftMapping=structuredClone(stored.document.mapping);
+  function paintAppMapping(){
+   appMapping.querySelectorAll('select[data-map-kind]').forEach(select=>{draftMapping[select.dataset.mapKind][select.dataset.mapId]=select.value;});
+   const selected=[...datasetBox.querySelectorAll('input:checked')].map(input=>input.value);
+   mappingEditor(appMapping,{data:{datasets:stored.document.data.datasets.filter(dataset=>selected.includes(dataset.id)),targets:stored.document.data.targets.filter(target=>target.id===form.elements.target_id.value)}},draftMapping);
+   paintAppSchedules();
+  }
+  function paintAppSchedules(){const selected=readMapping(appMapping);appSchedules.replaceChildren();const candidates=stored.view.jobs.filter(job=>job.targetId===selected.targets[form.elements.target_id.value]&&Object.values(selected.datasets).some(id=>job.sourceId===id||job.rootId===id||job.sourceIds?.includes(id)));for(const job of candidates)appSchedules.append(link(job.name+' → '+job.target+' · '+scheduleText(job.schedule),job.edit));if(!candidates.length)appSchedules.append(n('p','Noch kein passender App-Auftrag. Quelle und Ziel zuerst einrichten oder diesen Weg vorerst als geplant speichern.','hint'));appSchedules.append(link('Quelle über Assistent einrichten','#assistant/source'),link('App-Ziele einrichten','#targets'));}
+  appMapping.addEventListener('change',paintAppSchedules);
+  datasetBox.addEventListener('change',paintAppMapping);form.elements.target_id.addEventListener('change',paintAppMapping);
+  function implementationChanged(){
+   const app=implementation.value==='app';appBox.hidden=!app;executor.closest('label').hidden=implementation.value!=='external';executor.required=implementation.value==='external';
+   for(const key of ['schedule_type','start_time','day_of_month','duration_minutes'])form.elements[key].closest('label').hidden=app||key==='day_of_month'&&form.elements.schedule_type.value!=='monthly';
+   days.hidden=app||form.elements.schedule_type.value!=='weekly';if(app)paintAppMapping();
+  }
+  implementation.onchange=implementationChanged;implementationChanged();
+  const networkBox=n('details');networkBox.className='advanced';networkBox.append(n('summary','Netzwerk & erwartete Last'));const networkGrid=n('div',undefined,'editor-grid');networkBox.append(networkGrid);form.append(networkBox);
+  field(networkGrid,'Netzwerkbereich','network_id',p.network_id||'',[{id:'',name:'Noch nicht zugeordnet'},...(stored.document.data.networks||[])]);
+  const bandwidth=field(networkGrid,'Erwartete Bandbreite (MiB/s, leer = unbekannt)','bandwidth_mib',p.bandwidth_mib??'');bandwidth.type='number';bandwidth.min='0.01';bandwidth.max='100000';bandwidth.step='0.01';networkBox.append(n('p','Eine Schätzung für die gemeinsame Lastprüfung. Kein Upload-Limit und keine Live-Messung. Netzwerkbereiche samt Kapazität unter Geräte & Standorte anlegen.','hint'));
   const advanced=n('details');advanced.className='advanced';advanced.append(n('summary','Aufbewahrung & Verantwortung · Dokumentation'));const extra=n('div',undefined,'editor-grid');advanced.append(extra);form.append(advanced);
   const retention=field(extra,'Aufbewahrung (leer = nicht dokumentiert)','retention_value',p.retention_value??'');retention.type='number';retention.min='0';retention.max='1000000';
   field(extra,'Einheit','retention_unit',p.retention_unit||'days',[{id:'days',name:'Tage'},{id:'weeks',name:'Wochen'},{id:'months',name:'Monate'},{id:'years',name:'Jahre'}]);
@@ -209,9 +237,9 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
   const submit=n('button','Plan speichern','primary');submit.type='submit';form.append(submit);if(previous)form.append(button('Plan entfernen',()=>confirmDelete('plans',identifier),'secondary'));
   const result=errorBox(form);
   form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;try{
-   const values=Object.fromEntries(new FormData(form));const next={...p,...values,id:previous?.id||newId(),active:1,day_of_month:values.day_of_month==='last'?'last':Number(values.day_of_month),weekdays:dayInputs.filter(input=>input.checked).map(input=>Number(input.value)),duration_minutes:Number(values.duration_minutes),dataset_ids:[...datasetBox.querySelectorAll('input:checked')].map(input=>input.value),software_id:values.software_id||null,retention_value:values.retention_value===''?null:Number(values.retention_value),version_count:Number(values.version_count),encrypted:form.elements.encrypted.checked?1:0,immutable:form.elements.immutable.checked?1:0};
+   const values=Object.fromEntries(new FormData(form));const next={...p,...values,id:previous?.id||newId(),active:1,day_of_month:values.day_of_month==='last'?'last':Number(values.day_of_month),weekdays:dayInputs.filter(input=>input.checked).map(input=>Number(input.value)),duration_minutes:Number(values.duration_minutes),dataset_ids:[...datasetBox.querySelectorAll('input:checked')].map(input=>input.value),software_id:values.software_id||null,retention_value:values.retention_value===''?null:Number(values.retention_value),version_count:Number(values.version_count),encrypted:form.elements.encrypted.checked?1:0,immutable:form.elements.immutable.checked?1:0,network_id:values.network_id||null,bandwidth_mib:values.bandwidth_mib===''?null:Number(values.bandwidth_mib)};
    if(!next.source_id||!next.target_id)throw Error('Zuerst unter Geräte & Standorte ein Quellgerät und ein Ziel anlegen.');if(!next.dataset_ids.length)throw Error('Mindestens einen Datenbestand auswählen.');
-   const doc=structuredClone(stored.document);doc.data.plans=previous?doc.data.plans.map(plan=>plan.id===identifier?next:plan):[...doc.data.plans,next];await save(doc,doc.mapping);root.hidden=true;
+   const doc=structuredClone(stored.document);if(next.implementation==='app'){const selected=readMapping(appMapping);for(const dataset of next.dataset_ids)delete doc.mapping.datasets[dataset];delete doc.mapping.targets[next.target_id];doc.mapping={datasets:{...doc.mapping.datasets,...selected.datasets},targets:{...doc.mapping.targets,...selected.targets}};}doc.data.plans=previous?doc.data.plans.map(plan=>plan.id===identifier?next:plan):[...doc.data.plans,next];await save(doc,doc.mapping);root.hidden=true;
   }catch(error){result.textContent=error.message;}finally{submit.disabled=false;}};
   root.scrollIntoView({block:'start',behavior:'smooth'});
  }
@@ -222,9 +250,10 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
   if(kind==='locations'){field(form,'Übergeordneter Standort','parent_id',item.parent_id||'',[{id:'',name:'Keiner'},...stored.document.data.locations.filter(row=>row.id!==identifier)]);field(form,'Typ','type',item.type||'site',[{id:'country',name:'Land'},{id:'site',name:'Standort'},{id:'building',name:'Gebäude'},{id:'room',name:'Raum'},{id:'cloud',name:'Cloud'}]);}
   if(kind==='sources')field(form,'Gerätetyp','device_type',item.device_type||'nas',[{id:'nas',name:'NAS'},{id:'server',name:'Server'},{id:'computer',name:'Computer'},{id:'other',name:'Andere'}]);
   if(kind==='targets'){field(form,'Speichertyp','storage_type',item.storage_type||'server',[{id:'server',name:'Server'},{id:'nas',name:'NAS'},{id:'cloud',name:'Cloud'},{id:'external-disk',name:'Externe Festplatte'},{id:'other',name:'Andere'}]);field(form,'Anbieter / Gerät','provider',item.provider||'');field(form,'Zielfarbe','color',item.color||'#3978ed').type='color';for(const [key,title]of [['immutable_capable','Unveränderliche Sicherung möglich'],['encrypted_default','Verschlüsselung vorgesehen']]){const label=n('label',title,'checkbox-label'),input=n('input');input.type='checkbox';input.name=key;input.checked=Boolean(item[key]);label.prepend(input);form.append(label);}}
-  if(kind==='datasets'){field(form,'Ursprüngliches Quellgerät','source_id',item.source_id||'',stored.document.data.sources);field(form,'Priorität','priority',item.priority||'normal',[{id:'high',name:'Hoch'},{id:'normal',name:'Normal'},{id:'low',name:'Niedrig'}]);}
+  if(kind==='datasets'){if(!stored.document.data.sources.length)form.append(link('Zuerst ein Quellgerät dokumentieren','#strategy/entity/sources~'));field(form,'Ursprüngliches Quellgerät','source_id',item.source_id||'',stored.document.data.sources);field(form,'Priorität','priority',item.priority||'normal',[{id:'high',name:'Hoch'},{id:'normal',name:'Normal'},{id:'low',name:'Niedrig'}]);}
+  if(kind==='networks'){const capacity=field(form,'Nutzbare Kapazität (MiB/s, leer = unbekannt)','capacity_mib',item.capacity_mib??'');capacity.type='number';capacity.min='0.01';capacity.max='100000';capacity.step='0.01';form.append(n('p','Beispiel: 100 MiB/s nutzbar im LAN. Für Internet-Uplink eine eigene Gruppe anlegen. Die App prüft erwartete Last, verändert aber keine Netzwerkregeln.','hint'));}
   field(form,'Notizen','notes',item.notes);const submit=n('button','Eintrag speichern','primary');submit.type='submit';form.append(submit);const result=errorBox(form);
-  form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;try{const next={...item,...Object.fromEntries(new FormData(form))};if(kind==='targets')for(const key of ['immutable_capable','encrypted_default'])next[key]=form.elements[key].checked?1:0;const doc=structuredClone(stored.document);doc.data[kind]=previous?doc.data[kind].map(row=>row.id===identifier?next:row):[...doc.data[kind],next];await save(doc,doc.mapping);root.hidden=true;}catch(error){result.textContent=error.message;}finally{submit.disabled=false;}};
+  form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;try{const next={...item,...Object.fromEntries(new FormData(form))};if(kind==='networks')next.capacity_mib=next.capacity_mib===''?null:Number(next.capacity_mib);if(kind==='targets')for(const key of ['immutable_capable','encrypted_default'])next[key]=form.elements[key].checked?1:0;const doc=structuredClone(stored.document);doc.data[kind]=previous?doc.data[kind].map(row=>row.id===identifier?next:row):[...doc.data[kind],next];await save(doc,doc.mapping);root.hidden=true;}catch(error){result.textContent=error.message;}finally{submit.disabled=false;}};
   root.scrollIntoView({block:'start',behavior:'smooth'});
  }
  function confirmDelete(kind,identifier){
@@ -250,5 +279,5 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
  function calendar(mode){calendarMode=mode;$('#calendarWeek').setAttribute('aria-pressed',String(mode==='week'));$('#calendarAgenda').setAttribute('aria-pressed',String(mode==='agenda'));renderCalendar();}
  $('#calendarWeek').onclick=()=>calendar('week');$('#calendarAgenda').onclick=()=>calendar('agenda');
  $('#calendarPrevious').onclick=()=>{calendarOffset--;void load(true);};$('#calendarNext').onclick=()=>{calendarOffset++;void load(true);};$('#calendarToday').onclick=()=>{calendarOffset=0;void load(true);};
- return {update(data){snapshot=data;renderLivePaths();filterJobs();void load();},activity(data){if(!snapshot)return;snapshot={...snapshot,drive:data.drive,folders:snapshot.folders.map(source=>({...source,job:data.jobs[source.id]||source.job}))};renderLivePaths();filterJobs();},async open(page,id,tab){await load();if(page==='strategy'){goTab(activeTab);if(id==='plan'&&tab)editPlan(tab);else if(id==='new')editPlan();else $('#strategyEditor').hidden=true;}else renderCalendar();}};
+ return {sourcesRendered:execution.sources,sourceAliases:execution.sourceAliases,sourceStates:execution.sourceStates,update(data){snapshot=data;renderLivePaths();execution.render();filterJobs();void load();},activity(data){if(!snapshot)return;snapshot={...snapshot,drive:data.drive,folders:snapshot.folders.map(source=>({...source,job:data.jobs[source.id]||source.job}))};renderLivePaths();filterJobs();},async open(page,id,tab){await load(true);if(page==='strategy'){goTab(activeTab);if(id==='plan'&&tab)editPlan(tab);else if(id==='new')editPlan(undefined,tab);else if(id==='entity'&&tab){const [kind,key]=tab.split('~');if(['datasets','targets','sources','locations','software','networks'].includes(kind)){goTab('inventory');$('#inventoryKind').value=kind;renderInventory();editEntity(kind,key);}}else $('#strategyEditor').hidden=true;}else renderCalendar();}};
 }
