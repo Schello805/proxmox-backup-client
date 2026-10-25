@@ -860,3 +860,6 @@ body[data-page=strategy] #strategy>.page-heading { padding-left:16px; border-lef
 #footerUpdatePanel .actions { display:flex; flex-wrap:wrap; gap:6px; }
 #footerUpdatePanel button { padding:7px 9px; font-size:11px; }
 @media(max-width:760px) { aside .sidebar-bottom { display:block; width:100%; } }
+
+#strategyEditor .target-documentation { grid-column:1 / -1; }
+#strategyEditor .target-documentation>.editor-grid { margin-top:12px; }
