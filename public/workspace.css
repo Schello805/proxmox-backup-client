@@ -863,3 +863,10 @@ body[data-page=strategy] #strategy>.page-heading { padding-left:16px; border-lef
 
 #strategyEditor .target-documentation { grid-column:1 / -1; }
 #strategyEditor .target-documentation>.editor-grid { margin-top:12px; }
+
+#strategyEditor .plan-datasets { display:block; min-width:0; }
+.dataset-choices { display:flex; flex-wrap:wrap; gap:12px; margin:12px 0; }
+.dataset-add { display:flex; align-items:end; flex-wrap:wrap; gap:10px; margin-top:14px; }
+.dataset-add label { flex:1 1 240px; }
+.dataset-add input { display:block; width:100%; margin-top:6px; }
+.dataset-add button { flex:0 1 auto; }

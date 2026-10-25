@@ -190,7 +190,7 @@ export function installStrategy({api,element,date,scheduleText,notice,editAppSou
  function editPlan(identifier,presetDataset){
   if(!stored)return;
   const previous=stored.document.data.plans.find(plan=>plan.id===identifier),root=editor(previous?'Backup-Plan bearbeiten':'Backup-Plan anlegen'),form=n('form'),grid=n('div',undefined,'editor-grid');
-  const missing=[['sources','Gerät anlegen'],['datasets','Daten zuordnen'],['targets','Speicherziel anlegen']].filter(([key])=>!stored.document.data[key].length);if(missing.length){root.append(n('p','Für den ersten Backup-Plan fehlen noch diese Angaben:','hint'));for(const [key,title]of missing)root.append(link(title,'#strategy/entity/'+key+'~','secondary'));root.scrollIntoView({block:'start'});return;}
+  const missing=[['sources','Gerät anlegen'],['targets','Speicherziel anlegen']].filter(([key])=>!stored.document.data[key].length);if(missing.length){root.append(n('p','Für den ersten Backup-Plan fehlen noch diese Angaben:','hint'));for(const [key,title]of missing)root.append(link(title,'#strategy/entity/'+key+'~','secondary'));root.scrollIntoView({block:'start'});return;}
   root.append(n('p','Sicherungsweg und Umsetzung dokumentieren. Geplant: noch nicht eingerichtet. Extern: wird im angegebenen System ausgeführt. App: mit passenden vorhandenen App-Aufträgen verbinden. Speichern startet keine Sicherung.','hint'),form);form.append(grid);
   const p=previous||{name:'',source_id:stored.document.data.sources[0]?.id,target_id:stored.document.data.targets[0]?.id,protection_type:'backup',schedule_type:'manual',weekdays:[],day_of_month:1,start_time:'02:00',duration_minutes:0,dataset_ids:[],notes:''};
   if(!previous&&presetDataset){const dataset=stored.document.data.datasets.find(item=>item.id===presetDataset);if(dataset){p.source_id=dataset.source_id;p.dataset_ids=[dataset.id];p.name=dataset.name+' sichern';}}
@@ -208,9 +208,23 @@ export function installStrategy({api,element,date,scheduleText,notice,editAppSou
   field(grid,'Notizen','notes',p.notes||'');
   const days=n('fieldset'),dayLegend=n('legend','Wochentage');days.append(dayLegend);const dayInputs=[];
   ['Mo','Di','Mi','Do','Fr','Sa','So'].forEach((day,index)=>{const label=n('label',day,'checkbox-label'),input=n('input');input.type='checkbox';input.value=index+1;input.checked=(p.weekdays||[]).includes(index+1);dayInputs.push(input);label.prepend(input);days.append(label);});form.append(days);
-  const datasetBox=n('fieldset');datasetBox.append(n('legend','Datenbestände des Quellgeräts'));form.append(datasetBox);
-  function paintDatasets(){datasetBox.querySelectorAll('label').forEach(label=>label.remove());for(const dataset of stored.document.data.datasets.filter(dataset=>dataset.source_id===source.value)){const label=n('label',dataset.name,'checkbox-label'),input=n('input');input.type='checkbox';input.value=dataset.id;input.checked=(p.dataset_ids||[]).includes(dataset.id);label.prepend(input);datasetBox.append(label);}}
-  source.onchange=()=>{paintDatasets();if(typeof paintAppMapping==='function')paintAppMapping();};paintDatasets();
+  const newDatasets=[],selectedDatasets=new Set(p.dataset_ids||[]),allDatasets=()=>[...stored.document.data.datasets,...newDatasets];
+  const datasetBox=n('fieldset'),datasetChoices=n('div',undefined,'dataset-choices'),datasetHint=n('p','','hint'),datasetAdd=n('div',undefined,'dataset-add');datasetBox.className='plan-datasets';datasetHint.setAttribute('aria-live','polite');datasetBox.append(n('legend','Datenbestände des Quellgeräts'),datasetHint,datasetChoices,datasetAdd);form.append(datasetBox);
+  const datasetLabel=n('label','Neuer Datenbestand'),datasetName=n('input');datasetName.type='text';datasetName.maxLength=160;datasetName.placeholder='z. B. VMs & LXCs oder Familienfotos';datasetName.setAttribute('aria-label','Neuer Datenbestand');datasetLabel.append(datasetName);datasetAdd.append(datasetLabel,button('Datenbestand hinzufügen',addDataset,'secondary'));
+  function paintDatasets(){
+   datasetChoices.replaceChildren();const datasets=allDatasets().filter(dataset=>dataset.source_id===source.value),device=stored.document.data.sources.find(item=>item.id===source.value)?.name||'dieses Gerät';
+   datasetHint.textContent=datasets.length?'Auswählen, welche Daten dieser Plan schützt. Neue Datenbestände werden zusammen mit dem Plan gespeichert.':'Für „'+device+'“ gibt es noch keinen Datenbestand. Lege hier an, was gesichert wird, z. B. „VMs & LXCs“. Bei externen Sicherungen ist kein eingebundener Ordner erforderlich.';
+   for(const dataset of datasets){const label=n('label',dataset.name,'checkbox-label'),input=n('input');input.type='checkbox';input.value=dataset.id;input.checked=selectedDatasets.has(dataset.id);input.onchange=()=>{if(input.checked)selectedDatasets.add(dataset.id);else selectedDatasets.delete(dataset.id);};label.prepend(input);datasetChoices.append(label);}
+  }
+  function addDataset(){
+   const name=datasetName.value.trim();if(!name){datasetHint.textContent='Bitte einen Namen für den neuen Datenbestand eingeben.';datasetName.focus();return;}
+   if(!stored.document.data.sources.some(device=>device.id===source.value)){datasetHint.textContent='Zuerst ein Quellgerät auswählen.';return;}
+   let dataset=allDatasets().find(item=>item.source_id===source.value&&item.name.toLocaleLowerCase('de')===name.toLocaleLowerCase('de'));const existing=Boolean(dataset);
+   if(!dataset){dataset={id:newId(),name,source_id:source.value,notes:'',priority:'normal',active:1};newDatasets.push(dataset);}
+   selectedDatasets.add(dataset.id);datasetName.value='';paintDatasets();paintAppMapping();datasetHint.textContent=existing?'„'+dataset.name+'“ ist bereits vorhanden und wurde ausgewählt.':'„'+dataset.name+'“ ist ausgewählt und wird mit „Plan speichern“ angelegt.';
+  }
+  datasetName.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();addDataset();}};
+  source.onchange=()=>{paintDatasets();paintAppMapping();};paintDatasets();
   function frequency(){const mode=form.elements.schedule_type.value;days.hidden=mode!=='weekly';form.elements.day_of_month.closest('label').hidden=mode!=='monthly';form.elements.start_time.disabled=mode==='manual';}
   form.elements.schedule_type.onchange=frequency;frequency();
   const appBox=n('fieldset');appBox.append(n('legend','Verbindung zur tatsächlichen App-Umsetzung'));form.append(appBox);
@@ -219,7 +233,7 @@ export function installStrategy({api,element,date,scheduleText,notice,editAppSou
   function paintAppMapping(){
    appMapping.querySelectorAll('select[data-map-kind]').forEach(select=>{draftMapping[select.dataset.mapKind][select.dataset.mapId]=select.value;});
    const selected=[...datasetBox.querySelectorAll('input:checked')].map(input=>input.value);
-   mappingEditor(appMapping,{data:{datasets:stored.document.data.datasets.filter(dataset=>selected.includes(dataset.id)),targets:stored.document.data.targets.filter(target=>target.id===form.elements.target_id.value)}},draftMapping);
+   mappingEditor(appMapping,{data:{datasets:allDatasets().filter(dataset=>selected.includes(dataset.id)),targets:stored.document.data.targets.filter(target=>target.id===form.elements.target_id.value)}},draftMapping);
    paintAppSchedules();
   }
   function paintAppSchedules(){
@@ -266,8 +280,8 @@ export function installStrategy({api,element,date,scheduleText,notice,editAppSou
   for(const event of ['input','change'])form.addEventListener(event,()=>{result.textContent='';});
   form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;try{
    const values=Object.fromEntries(new FormData(form));const next={...p,...values,id:previous?.id||newId(),active:1,day_of_month:values.day_of_month==='last'?'last':Number(values.day_of_month),weekdays:dayInputs.filter(input=>input.checked).map(input=>Number(input.value)),duration_minutes:Number(values.duration_minutes),dataset_ids:[...datasetBox.querySelectorAll('input:checked')].map(input=>input.value),software_id:values.software_id||null,retention_value:values.retention_value===''?null:Number(values.retention_value),version_count:Number(values.version_count),encrypted:form.elements.encrypted.checked?1:0,immutable:form.elements.immutable.checked?1:0,network_id:values.network_id||null,bandwidth_mib:values.bandwidth_mib===''?null:Number(values.bandwidth_mib)};
-   if(!next.source_id||!next.target_id)throw Error('Zuerst unter Geräte, Daten & Ziele ein Quellgerät und ein Ziel anlegen.');if(!next.dataset_ids.length)throw Error('Mindestens einen Datenbestand auswählen.');
-   const doc=structuredClone(stored.document);if(next.implementation==='app'){const selected=readMapping(appMapping);for(const dataset of next.dataset_ids)delete doc.mapping.datasets[dataset];delete doc.mapping.targets[next.target_id];doc.mapping={...doc.mapping,datasets:{...doc.mapping.datasets,...selected.datasets},targets:{...doc.mapping.targets,...selected.targets}};}doc.data.plans=previous?doc.data.plans.map(plan=>plan.id===identifier?next:plan):[...doc.data.plans,next];await save(doc,doc.mapping);root.hidden=true;
+   if(!next.source_id||!next.target_id)throw Error('Zuerst unter Geräte, Daten & Ziele ein Quellgerät und ein Ziel anlegen.');if(!next.dataset_ids.length)throw Error('Mindestens einen Datenbestand des gewählten Quellgeräts auswählen oder hier neu hinzufügen.');
+   const doc=structuredClone(stored.document);doc.data.datasets.push(...newDatasets);if(next.implementation==='app'){const selected=readMapping(appMapping);for(const dataset of next.dataset_ids)delete doc.mapping.datasets[dataset];delete doc.mapping.targets[next.target_id];doc.mapping={...doc.mapping,datasets:{...doc.mapping.datasets,...selected.datasets},targets:{...doc.mapping.targets,...selected.targets}};}doc.data.plans=previous?doc.data.plans.map(plan=>plan.id===identifier?next:plan):[...doc.data.plans,next];await save(doc,doc.mapping);root.hidden=true;
   }catch(error){result.textContent=error.message;}finally{submit.disabled=false;}};
   root.scrollIntoView({block:'start',behavior:'smooth'});
  }
