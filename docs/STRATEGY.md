@@ -40,7 +40,7 @@ Die Balken verwenden letzte erfolgreiche App-Laufzeiten oder die deklarierte ext
 
 ## Netzlast und Überschneidungen
 
-1. Unter **Geräte & Standorte → Netzwerkbereiche** einen Bereich samt nutzbarer Kapazität in **MiB/s** anlegen, beispielsweise LAN oder Internet-Uplink.
+1. Unter **Geräte, Daten & Ziele → Netzwerkbereiche** einen Bereich samt nutzbarer Kapazität in **MiB/s** anlegen, beispielsweise LAN oder Internet-Uplink.
 2. Im jeweiligen Plan unter **Netzwerk & erwartete Last** Bereich und erwartete Übertragungsrate eintragen. Diese Angaben sind Schätzungen; sie setzen kein Upload-Limit.
 3. Im **Zeitplan → Zeitfenster und Netzlast prüfen** die Hinweise ansehen.
 
@@ -50,7 +50,7 @@ Ohne Dauer oder Rate ist die Auswertung unvollständig. Gleichzeitige Termine al
 
 ## Ohne die frühere App planen
 
-Unter **Geräte & Standorte** Standorte, Quellgeräte, Speicherziele, Datenbestände, Software und Netzwerkbereiche anlegen oder bearbeiten. Danach unter **Backup-Pläne** einen Plan mit Schutzart, Zeitplan und Umsetzungsstand erstellen. Aufbewahrung, Versionenzahl, Verantwortung und deklarierte Schutzmerkmale sind bearbeitbar. Verwendete Stammdaten können erst nach ihren Verknüpfungen entfernt werden.
+Unter **Geräte, Daten & Ziele** sind alle Bereiche direkt als Schaltflächen mit Anzahl erreichbar. Reihenfolge: Geräte (z. B. QNAP4bay und PBS) → Daten mit Quellgerät (z. B. Musik auf QNAP4bay) → Speicherziel mit Zielgerät (z. B. Datastore pbs2 auf PBS) → Backup-Plan. Standorte, Software und Netzwerkbereiche ergänzen die Dokumentation. Über **Weiter zum Backup-Plan** Schutzart, Zeitplan und Umsetzungsstand festlegen. Aufbewahrung, Versionenzahl, Verantwortung und deklarierte Schutzmerkmale sind bearbeitbar. Verwendete Stammdaten können erst nach ihren Verknüpfungen entfernt werden.
 
 Die Angaben beschreiben gewünschte oder dokumentierte Einstellungen. Sie stellen am Ziel keine Aufbewahrung, Verschlüsselung oder Unveränderlichkeit ein. Auch mehrere Datastores auf demselben PBS sind nicht automatisch unabhängige Kopien.
 

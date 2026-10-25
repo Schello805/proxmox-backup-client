@@ -30,8 +30,8 @@ test('Externe Pläne und Stammdaten lassen sich ohne Modal bearbeiten; verknüpf
  await page.addInitScript(()=>Object.defineProperty(crypto,'randomUUID',{value:undefined,configurable:true}));await login(page,{sourceDetails:false});await importPlanner(page);await page.locator('#plannerConfirm').check();await page.locator('#plannerApply').click();await expect(page.locator('#strategyFeedback')).toContainText('Planner importiert');
  await page.getByRole('button',{name:'Neuer Backup-Plan',exact:false}).first().click();const editor=page.locator('#strategyEditor');await expect(editor).toBeVisible();
  await editor.getByLabel('Name',{exact:true}).fill('Monatliche Dokumente');await editor.getByLabel('Frequenz',{exact:true}).selectOption('monthly');await editor.getByLabel('Monatstag',{exact:true}).selectOption('last');await editor.getByLabel('Dokumente',{exact:true}).check();await editor.getByRole('button',{name:'Plan speichern',exact:true}).click();await expect(editor).toBeHidden();
- await page.getByRole('button',{name:'Geräte & Standorte',exact:true}).click();await page.locator('#strategyInventory').getByRole('button',{name:'Entfernen',exact:true}).first().click();await editor.getByRole('button',{name:'Entfernen bestätigen',exact:true}).click();await expect(editor).toContainText('Standort');
- await editor.getByRole('button',{name:'Abbrechen',exact:true}).click();await page.getByRole('button',{name:'+ Eintrag',exact:true}).click();await editor.getByLabel('Name',{exact:true}).fill('Außenstandort');await editor.getByRole('button',{name:'Eintrag speichern',exact:true}).click();await expect(editor).toBeHidden();await expect(page.locator('#strategyInventory')).toContainText('Außenstandort');
+ await page.getByRole('button',{name:'Geräte, Daten & Ziele',exact:true}).click();await page.locator('#strategyInventory').getByRole('button',{name:'Entfernen',exact:true}).first().click();await editor.getByRole('button',{name:'Entfernen bestätigen',exact:true}).click();await expect(editor).toContainText('Standort');
+ await editor.getByRole('button',{name:'Abbrechen',exact:true}).click();await page.locator('#inventoryAdd').click();await editor.getByLabel('Name',{exact:true}).fill('Außenstandort');await editor.getByRole('button',{name:'Eintrag speichern',exact:true}).click();await expect(editor).toBeHidden();await expect(page.locator('#strategyInventory')).toContainText('Außenstandort');
  await page.setViewportSize({width:390,height:844});await page.screenshot({path:testInfo.outputPath('strategy-inventory-mobile.png'),fullPage:true});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 test('Import verweigert alte Revision und ungültige Referenzen; bestehende Strategie bleibt erhalten',async({page})=>{
@@ -43,9 +43,9 @@ test('Import verweigert alte Revision und ungültige Referenzen; bestehende Stra
 
 test('Backup-Planung ersetzt den Planner: Stammdaten und Plan ohne Import anlegen, bearbeiten und entfernen',async({page})=>{
  await login(page,{sourceDetails:false});const before=(await(await page.request.get('/api/status')).json()).config;
- await page.getByRole('navigation',{name:'Hauptnavigation',exact:true}).getByRole('link',{name:/Backup-Planung$/}).click();await page.getByRole('button',{name:'Geräte & Standorte',exact:true}).click();
+ await page.getByRole('navigation',{name:'Hauptnavigation',exact:true}).getByRole('link',{name:/Backup-Planung$/}).click();await page.getByRole('button',{name:'Geräte, Daten & Ziele',exact:true}).click();
  const editor=page.locator('#strategyEditor');
- async function add(kind,name,fill){await page.locator('#inventoryKind').selectOption(kind);await page.locator('#inventoryAdd').click();await editor.getByLabel('Name',{exact:true}).fill(name);if(fill)await fill();await editor.getByRole('button',{name:'Eintrag speichern',exact:true}).click();await expect(editor).toBeHidden();}
+ async function add(kind,name,fill){await page.locator(`[data-inventory-kind="${kind}"]`).click();await page.locator('#inventoryAdd').click();await editor.getByLabel('Name',{exact:true}).fill(name);if(fill)await fill();await editor.getByRole('button',{name:'Eintrag speichern',exact:true}).click();await expect(editor).toBeHidden();}
  await add('locations','Teststandort');
  await add('sources','Testgerät',async()=>{await editor.getByLabel('Standort',{exact:true}).selectOption({label:'Teststandort'});});
  await add('targets','Testziel',async()=>{await editor.getByLabel('Speichertyp',{exact:true}).selectOption('cloud');await editor.getByLabel('Unveränderliche Sicherung möglich',{exact:true}).check();});
@@ -55,4 +55,27 @@ test('Backup-Planung ersetzt den Planner: Stammdaten und Plan ohne Import anlege
  await page.reload();await page.getByRole('button',{name:'Backup-Pläne',exact:true}).click();let row=page.locator('#planningPlanList tbody tr');await expect(row).toContainText('Fotos zur Cloud');await row.getByRole('button',{name:'Bearbeiten',exact:true}).click();await expect(editor.getByLabel('Software (optional)',{exact:true})).toHaveValue((await(await page.request.get('/api/strategy')).json()).document.data.software[0].id);await editor.getByLabel('Name',{exact:true}).fill('Fotos wöchentlich');await editor.getByRole('button',{name:'Plan speichern',exact:true}).click();await expect(row).toContainText('Fotos wöchentlich');
  await row.getByRole('button',{name:'Entfernen',exact:true}).click();await editor.getByRole('button',{name:'Entfernen bestätigen',exact:true}).click();await expect(editor).toBeHidden();await expect(row).toHaveCount(0);
  expect((await(await page.request.get('/api/status')).json()).config).toEqual(before);
+});
+
+test('Mehrere dokumentierte Daten und Ziele laden; alle Planungsbereiche erlauben neue Einträge',async({page},testInfo)=>{
+ const errors=[];page.on('pageerror',error=>errors.push(error.message));
+ await login(page,{sourceDetails:false});const current=await(await page.request.get('/api/strategy')).json(),document=fixture();
+ document.data.datasets.push({id:'movies',name:'Filme geplant',source_id:'nas'});
+ document.data.targets.push({id:'pbs3',name:'Datastore pbs3',device_id:'nas'});
+ const response=await page.request.post('/api/strategy/import',{headers,data:{document,mapping:{datasets:{},targets:{}},revision:current.revision}});expect(response.ok()).toBe(true);
+ await page.getByRole('navigation',{name:'Hauptnavigation',exact:true}).getByRole('link',{name:/Backup-Planung$/}).click();
+ await expect(page.locator('#strategyPaths')).toContainText('Filme geplant');
+ await page.getByRole('button',{name:'Geräte, Daten & Ziele',exact:true}).click();
+ const editor=page.locator('#strategyEditor');
+ for(const kind of ['sources','datasets','targets','locations','software','networks']){
+  await page.locator(`[data-inventory-kind="${kind}"]`).click();await page.locator('#inventoryAdd').click();
+  await expect(editor.getByLabel('Name',{exact:true})).toBeVisible();await editor.getByRole('button',{name:'Schließen',exact:true}).click();
+ }
+ await page.locator('[data-inventory-kind="targets"]').click();await expect(page.locator('#strategyInventory')).toContainText('Datastore pbs3');await expect(page.locator('#strategyInventory')).toContainText('Plan-Cloud');
+ await page.locator('[data-inventory-kind="datasets"]').click();await page.locator('#inventoryAdd').click();await editor.getByLabel('Name',{exact:true}).fill('Neue Fotos');await editor.getByLabel('Ursprüngliches Quellgerät',{exact:true}).selectOption('nas');await editor.getByRole('button',{name:'Eintrag speichern',exact:true}).click();await expect(editor).toBeHidden();
+ await expect(page.locator('#strategyInventory')).toContainText('Neue Fotos');
+ await page.locator('#inventoryPlanAdd').click();await expect(editor.getByLabel('Neue Fotos',{exact:true})).toBeVisible();await editor.getByRole('button',{name:'Schließen',exact:true}).click();
+ await page.reload();await page.getByRole('button',{name:'Geräte, Daten & Ziele',exact:true}).click();await page.locator('[data-inventory-kind="datasets"]').click();await expect(page.locator('#strategyInventory')).toContainText('Neue Fotos');
+ await page.screenshot({path:testInfo.outputPath('planning-categories.png'),fullPage:true});
+ expect(errors).toEqual([]);await expect(page.locator('#strategyFeedback')).not.toContainText('includes');
 });

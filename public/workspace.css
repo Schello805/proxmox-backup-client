@@ -843,3 +843,7 @@ body[data-page=strategy] #strategy>.page-heading { padding-left:16px; border-lef
 .target-device-heading { margin:18px 0 0; padding:10px; background:#edf3fc; border-radius:6px; }
 .path-device { display:block; color:#5e71a1; font-size:10px; font-weight:600; margin-bottom:4px; }
 #targetDeviceEditor { margin:14px 0; background:#f7f9fe; border:1px solid var(--line); border-radius:8px; }
+
+.inventory-categories { display:flex; flex-wrap:wrap; gap:8px; margin:18px 0; }
+.inventory-categories button[aria-pressed="true"] { color:#5433a4; background:#eee8fb; border-color:#b8a3e4; }
+#strategyInventoryPanel .actions { margin-top:18px; }

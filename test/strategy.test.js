@@ -37,3 +37,16 @@ test('Gemeinsamer Kalender trennt gemessene App-Dauer von externer Planung und u
  assert.throws(()=>strategyView(doc,cfg,state,{},new Date(),'2026-02-31'));
  const monthly=fixture();Object.assign(monthly.data.plans[0],{schedule_type:'monthly',day_of_month:'last'});assert.equal(normalize(monthly).document.data.plans[0].day_of_month,'last');
 });
+
+test('Mehrere reine Planungsdaten und Speicherziele bleiben vollständig sichtbar',()=>{
+ const input=fixture();input.data.datasets.push({id:'movies',name:'Filme',source_id:'nas'});input.data.targets.push({id:'pbs3',name:'pbs3',device_id:'nas'});
+ const doc=normalize(input).document,cfg=config();
+ for(const mapping of [{datasets:{},targets:{}},{datasets:{docs:'software'},targets:{pbs:'primary'}}]){
+  doc.mapping=mapping;const view=strategyView(doc,cfg,{jobs:{},history:{}},{});
+  assert.ok(view.catalogSources.some(source=>source.datasetId==='movies'));
+  assert.ok(view.catalogSources.some(source=>source.datasetId==='docs'||source.datasetIds?.includes('docs')));
+  assert.ok(view.catalogTargets.some(target=>target.targetId==='cloud'));
+  assert.ok(view.catalogTargets.some(target=>target.targetId==='pbs3'));
+  assert.equal(view.catalogTargets.filter(target=>target.targetId==='pbs').length,mapping.targets.pbs?0:1);
+ }
+});
