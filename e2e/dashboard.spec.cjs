@@ -29,7 +29,7 @@ test('Ziele gemeinsam hinzufügen und Kennzahlen zwischen Daten und Zielen prüf
  await expect(page.locator('#sourceMetrics')).toContainText('von 6 Daten gemessen');
  await page.setViewportSize({width:390,height:844});
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
- await page.getByRole('link',{name:/Ziele$/}).click();await page.locator('#addTargetMenu > summary').click();await page.getByRole('link',{name:'Speicherziel dokumentieren',exact:true}).click();await expect(page.locator('#strategyEditor')).toBeVisible();await expect(page.locator('#strategyEditor').getByLabel('Name',{exact:true})).toBeEditable();await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.getByRole('link',{name:/Ziele$/}).click();await page.locator('#addTargetMenu > summary').click();await page.getByRole('link',{name:'Speicherziel dokumentieren',exact:true}).click();await expect(page.locator('#strategyEditor')).toBeVisible();await expect(page.locator('#strategyEditor').getByLabel('Name des Speicherziels',{exact:true})).toBeEditable();await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 test('Sicherungsstand zählt Erfolge statt Verbindungen und Zielprobleme bleiben außerhalb der Akkordeons sichtbar',async({page})=>{
  const lastSuccess=new Date().toISOString();let failed=false;

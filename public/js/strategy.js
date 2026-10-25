@@ -222,7 +222,18 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
    mappingEditor(appMapping,{data:{datasets:stored.document.data.datasets.filter(dataset=>selected.includes(dataset.id)),targets:stored.document.data.targets.filter(target=>target.id===form.elements.target_id.value)}},draftMapping);
    paintAppSchedules();
   }
-  function paintAppSchedules(){const selected=readMapping(appMapping);appSchedules.replaceChildren();const candidates=stored.view.jobs.filter(job=>job.targetId===selected.targets[form.elements.target_id.value]&&Object.values(selected.datasets).some(id=>job.sourceId===id||job.rootId===id||job.sourceIds?.includes(id)));for(const job of candidates)appSchedules.append(link(job.name+' → '+job.target+' · '+scheduleText(job.schedule),job.edit));if(!candidates.length)appSchedules.append(n('p','Noch kein passender App-Auftrag. Quelle und Ziel zuerst einrichten oder diesen Weg vorerst als geplant speichern.','hint'));appSchedules.append(link('Quelle über Assistent einrichten','#assistant/source'),link('App-Ziele einrichten','#targets'));}
+  function paintAppSchedules(){
+   const selected=readMapping(appMapping);appSchedules.replaceChildren();
+   const candidates=stored.view.jobs.filter(job=>job.targetId===selected.targets[form.elements.target_id.value]&&Object.values(selected.datasets).some(id=>job.sourceId===id||job.rootId===id||job.sourceIds?.includes(id)));
+   for(const job of candidates){
+    appSchedules.append(link(job.name+' → '+job.target+' · '+scheduleText(job.schedule),job.edit),n('small','Vorhandener Auftrag: '+labels[job.protection],'hint'));
+    if(!job.configured)appSchedules.append(n('p','Der Zielzugang dieses Auftrags ist noch unvollständig. Unter App-Ziele fertig einrichten.','strategy-warning'));
+    else if(job.protection!==form.elements.protection_type.value)appSchedules.append(n('p','Die Schutzart passt noch nicht: Dieser Auftrag verwendet „'+labels[job.protection]+'“. Oben bei „Schutzart“ ebenfalls „'+labels[job.protection]+'“ auswählen.','strategy-warning'));
+   }
+   if(!candidates.length)appSchedules.append(n('p','Noch kein passender App-Auftrag. Quelle und Ziel zuerst einrichten oder diesen Weg vorerst als geplant speichern.','hint'));
+   appSchedules.append(link('Quelle über Assistent einrichten','#assistant/source'),link('App-Ziele einrichten','#targets'));
+  }
+  form.elements.protection_type.addEventListener('change',paintAppSchedules);
   appMapping.addEventListener('change',paintAppSchedules);
   datasetBox.addEventListener('change',paintAppMapping);form.elements.target_id.addEventListener('change',paintAppMapping);
   function implementationChanged(){
@@ -242,6 +253,7 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
   advanced.append(n('p','Diese Angaben beschreiben die externe Konfiguration. Die App stellt keine Aufbewahrung, Verschlüsselung oder Unveränderlichkeit am Ziel ein.','hint'));
   const submit=n('button','Plan speichern','primary');submit.type='submit';form.append(submit);if(previous)form.append(button('Plan entfernen',()=>confirmDelete('plans',identifier),'secondary'));
   const result=errorBox(form);
+  for(const event of ['input','change'])form.addEventListener(event,()=>{result.textContent='';});
   form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;try{
    const values=Object.fromEntries(new FormData(form));const next={...p,...values,id:previous?.id||newId(),active:1,day_of_month:values.day_of_month==='last'?'last':Number(values.day_of_month),weekdays:dayInputs.filter(input=>input.checked).map(input=>Number(input.value)),duration_minutes:Number(values.duration_minutes),dataset_ids:[...datasetBox.querySelectorAll('input:checked')].map(input=>input.value),software_id:values.software_id||null,retention_value:values.retention_value===''?null:Number(values.retention_value),version_count:Number(values.version_count),encrypted:form.elements.encrypted.checked?1:0,immutable:form.elements.immutable.checked?1:0,network_id:values.network_id||null,bandwidth_mib:values.bandwidth_mib===''?null:Number(values.bandwidth_mib)};
    if(!next.source_id||!next.target_id)throw Error('Zuerst unter Geräte, Daten & Ziele ein Quellgerät und ein Ziel anlegen.');if(!next.dataset_ids.length)throw Error('Mindestens einen Datenbestand auswählen.');
@@ -279,6 +291,7 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
   }
   if(kind==='networks'){const capacity=field(form,'Nutzbare Kapazität (MiB/s, leer = unbekannt)','capacity_mib',item.capacity_mib??'');capacity.type='number';capacity.min='0.01';capacity.max='100000';capacity.step='0.01';form.append(n('p','Beispiel: 100 MiB/s nutzbar im LAN. Für Internet-Uplink eine eigene Gruppe anlegen. Die App prüft erwartete Last, verändert aber keine Netzwerkregeln.','hint'));}
   field(form,'Notizen','notes',item.notes);const submit=n('button',kind==='targets'?'Speicherziel speichern':'Eintrag speichern','primary');submit.type='submit';form.append(submit);const result=errorBox(form);
+  for(const event of ['input','change'])form.addEventListener(event,()=>{result.textContent='';});
   form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;try{const next={...item,...Object.fromEntries(new FormData(form))};if(kind==='networks')next.capacity_mib=next.capacity_mib===''?null:Number(next.capacity_mib);if(kind==='targets')for(const key of ['immutable_capable','encrypted_default'])next[key]=form.elements[key].checked?1:0;const doc=structuredClone(stored.document);doc.data[kind]=previous?doc.data[kind].map(row=>row.id===identifier?next:row):[...doc.data[kind],next];for(const {plan,select,confirm}of targetEdits){if(select.disabled||select.value===plan.target_id)continue;if(confirm&&!confirm.checked)throw Error('Zieländerung für den gesamten Plan „'+plan.name+'“ bestätigen.');doc.data.plans=doc.data.plans.map(row=>row.id===plan.id?{...row,target_id:select.value}:row);}await save(doc,doc.mapping,revision);root.hidden=true;if(kind==='targets')feedback('Speicherziel „'+next.name+'“ gespeichert. Es wurde kein Backup-Plan oder Auftrag angelegt.');}catch(error){result.textContent=error.message;}finally{submit.disabled=false;}};
   root.scrollIntoView({block:'start',behavior:'smooth'});
  }

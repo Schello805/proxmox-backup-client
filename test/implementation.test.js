@@ -15,7 +15,7 @@ test('Ältere Pläne bleiben geplant; externe Umsetzung benötigt ein ausführen
 });
 test('App-Umsetzung verlangt passende vollständige Zuordnung und übernimmt den echten App-Zeitplan',()=>{
  const cfg=config(),doc=normalize(fixture()).document,state={jobs:{},history:{}};doc.data.plans[0].implementation='app';
- assert.throws(()=>validateImplementation(doc,cfg,state,{}),/zuordnen/);
+ assert.throws(()=>validateImplementation(doc,cfg,state,{}),/eingebundenen Ordner auswählen/);
  doc.mapping={datasets:{docs:'software'},targets:{pbs:'primary'}};validateImplementation(doc,cfg,state,{});
  cfg.schedules.software={days:[1],time:'06:00'};
  const view=strategyView(doc,cfg,state,{},new Date('2026-10-24T10:00:00Z'));
@@ -40,4 +40,13 @@ test('Unbekannte Dauer wird nicht als fünfminütige Sicherung erfunden; noch ge
  const unknown={...job('unknown',30),seconds:null};let result=analyze({jobs:[unknown],events:[{jobId:'unknown',start:1000,end:null}],networks:[{id:'lan',name:'LAN',capacity_mib:100}],start:0,end:200000});assert.deepEqual(result.unknownDuration,['unknown']);assert.equal(result.networks[0].incomplete,true);assert.equal(result.networks[0].overload,null);
  const input=fixture();input.data.networks=[{id:'lan',name:'LAN',capacity_mib:50}];Object.assign(input.data.plans[0],{network_id:'lan',bandwidth_mib:90});const doc=normalize(input).document,view=strategyView(doc,config(),{jobs:{},history:{}},{},new Date('2026-10-24T10:00:00Z'));
  assert.equal(view.analysis.warnings.filter(warning=>warning.kind==='capacity').length,0);assert.ok(view.planningAnalysis.warnings.some(warning=>warning.kind==='capacity'));
+});
+
+test('App-Verknüpfungsfehler nennen die tatsächlich fehlende oder widersprüchliche Einstellung',()=>{
+ const cfg=config(),doc=normalize(fixture()).document,state={jobs:{},history:{}};const plan=doc.data.plans[0];plan.implementation='app';doc.mapping={datasets:{docs:'software'},targets:{}};
+ assert.throws(()=>validateImplementation(doc,cfg,state,{}),/App-Ziel auswählen/);
+ doc.mapping.targets.pbs='primary';plan.protection_type='synchronization';
+ assert.throws(()=>validateImplementation(doc,cfg,state,{}),/verwendet „Sicherung mit Versionen“.*„Synchronisierung“.*Schutzart im Plan anpassen/);
+ plan.protection_type='backup';cfg.password='';assert.throws(()=>validateImplementation(doc,cfg,state,{}),/vollständigen Zielzugang/);
+ cfg.password='secret';doc.mapping.datasets.docs='serien';cfg.sources.find(item=>item.id==='serien').target='secondary';assert.throws(()=>validateImplementation(doc,cfg,state,{}),/Kein App-Auftrag.*Serien/);
 });
