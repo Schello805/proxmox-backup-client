@@ -261,9 +261,27 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
   form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;try{const next={...item,...Object.fromEntries(new FormData(form))};if(kind==='networks')next.capacity_mib=next.capacity_mib===''?null:Number(next.capacity_mib);if(kind==='targets')for(const key of ['immutable_capable','encrypted_default'])next[key]=form.elements[key].checked?1:0;const doc=structuredClone(stored.document);doc.data[kind]=previous?doc.data[kind].map(row=>row.id===identifier?next:row):[...doc.data[kind],next];await save(doc,doc.mapping);root.hidden=true;}catch(error){result.textContent=error.message;}finally{submit.disabled=false;}};
   root.scrollIntoView({block:'start',behavior:'smooth'});
  }
+ function deletionReferences(kind,identifier){
+  const fields={locations:{locations:['parent_id'],sources:['location_id'],targets:['location_id']},sources:{datasets:['source_id'],targets:['device_id'],plans:['source_id']},targets:{plans:['target_id','source_target_id']},datasets:{plans:['dataset_ids']},software:{plans:['software_id']},networks:{plans:['network_id']}}[kind]||{};
+  const references=[];
+  for(const [collection,keys]of Object.entries(fields))for(const item of stored.document.data[collection])if(keys.some(key=>Array.isArray(item[key])?item[key].includes(identifier):item[key]===identifier))references.push({kind:collection,item});
+  if(kind==='sources')for(const [mapping,collection,label]of [['devices','sources','App-Daten'],['targetDevices','targets','App-Ziel']])for(const [id,device]of Object.entries(stored.document.mapping[mapping]||{}))if(device===identifier)references.push({label:label+' · '+(snapshot.config.sources.find(source=>source.id===id)?.name||snapshot.targets.find(target=>target.id===id)?.name||id),href:collection==='sources'?'#sourcesDialog':'#targets'});
+  return references;
+ }
  function confirmDelete(kind,identifier){
-  const item=stored.document.data[kind].find(row=>row.id===identifier),root=editor('Eintrag entfernen');root.append(n('p',`„${item.name}“ aus der Strategie entfernen? Quelldateien und App-Aufträge bleiben erhalten. Verwendete Einträge können erst nach ihren Verknüpfungen entfernt werden.`));
-  const result=n('p','','hint');root.append(button('Entfernen bestätigen',async()=>{try{const doc=structuredClone(stored.document);doc.data[kind]=doc.data[kind].filter(row=>row.id!==identifier);if(kind==='datasets'||kind==='targets')delete doc.mapping[kind][identifier];await save(doc,doc.mapping);root.hidden=true;}catch(error){result.textContent=error.message;}},'primary'),button('Abbrechen',()=>{root.hidden=true;}),result);root.scrollIntoView({block:'start'});
+  const item=stored.document.data[kind].find(row=>row.id===identifier),root=editor(({locations:'Standort',sources:'Gerät',targets:'Speicherziel',datasets:'Datenbestand',plans:'Backup-Plan',software:'Software',networks:'Netzwerkbereich'}[kind]||'Eintrag')+' entfernen'),references=deletionReferences(kind,identifier);
+  root.append(n('p',`„${item.name}“ aus der Strategie entfernen? Quelldateien und App-Aufträge bleiben erhalten.`));
+  if(references.length){
+   root.append(n('p','Dieser Eintrag wird noch verwendet:','strategy-warning'));
+   const list=n('ul');for(const reference of references){const row=n('li'),title=reference.label||({locations:'Untergeordneter Standort',sources:'Gerät',targets:'Speicherziel',datasets:'Datenbestand',plans:'Backup-Plan'})[reference.kind]+' · '+reference.item.name;row.append(n('span',title+' '));if(reference.item)row.append(button('Zuordnung bearbeiten',()=>reference.kind==='plans'?editPlan(reference.item.id):editEntity(reference.kind,reference.item.id),'row-action'));else row.append(link('Zuordnung bearbeiten',reference.href));list.append(row);}root.append(list);
+   root.append(n('p',kind==='locations'?'Du kannst die Zuordnungen vorher bearbeiten oder sie beim Entfernen dieses Standorts lösen. Untergeordnete Standorte werden dabei eigenständig. Geräte, Daten, Speicherziele und Backup-Pläne bleiben erhalten.':'Zuerst die oben genannten Zuordnungen bearbeiten. Danach kann dieser Eintrag entfernt werden.','hint'));
+  }
+  const result=n('p','','hint'),remove=button(references.length&&kind==='locations'?'Zuordnungen lösen und Standort entfernen':'Entfernen bestätigen',async()=>{remove.disabled=true;try{
+   const doc=structuredClone(stored.document);
+   if(kind==='locations')for(const [collection,key]of [['locations','parent_id'],['sources','location_id'],['targets','location_id']])doc.data[collection]=doc.data[collection].map(row=>row[key]===identifier?{...row,[key]:null}:row);
+   doc.data[kind]=doc.data[kind].filter(row=>row.id!==identifier);if(kind==='datasets'||kind==='targets')delete doc.mapping[kind][identifier];await save(doc,doc.mapping);root.hidden=true;
+  }catch(error){result.textContent=error.message;}finally{remove.disabled=false;}},'primary');
+  remove.disabled=references.length>0&&kind!=='locations';root.append(remove,button('Abbrechen',()=>{root.hidden=true;}),result);root.scrollIntoView({block:'start'});
  }
  $('#plannerFile').onchange=()=>{preview=null;importFile=null;$('#plannerApply').hidden=true;$('#plannerConfirmLabel').hidden=true;$('#plannerConfirm').checked=false;$('#plannerPreviewResult').textContent='';$('#plannerImportMapping').replaceChildren();$('#plannerMappingDetails').hidden=true;};
  $('#strategyImportOpen').onclick=()=>{$('#strategyImport').hidden=false;$('#plannerFile').focus();};$('#strategyImportClose').onclick=()=>{$('#strategyImport').hidden=true;};

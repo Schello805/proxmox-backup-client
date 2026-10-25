@@ -30,7 +30,7 @@ test('Externe Pläne und Stammdaten lassen sich ohne Modal bearbeiten; verknüpf
  await page.addInitScript(()=>Object.defineProperty(crypto,'randomUUID',{value:undefined,configurable:true}));await login(page,{sourceDetails:false});await importPlanner(page);await page.locator('#plannerConfirm').check();await page.locator('#plannerApply').click();await expect(page.locator('#strategyFeedback')).toContainText('Planner importiert');
  await page.getByRole('button',{name:'Neuer Backup-Plan',exact:false}).first().click();const editor=page.locator('#strategyEditor');await expect(editor).toBeVisible();
  await editor.getByLabel('Name',{exact:true}).fill('Monatliche Dokumente');await editor.getByLabel('Frequenz',{exact:true}).selectOption('monthly');await editor.getByLabel('Monatstag',{exact:true}).selectOption('last');await editor.getByLabel('Dokumente',{exact:true}).check();await editor.getByRole('button',{name:'Plan speichern',exact:true}).click();await expect(editor).toBeHidden();
- await page.getByRole('button',{name:'Geräte, Daten & Ziele',exact:true}).click();await page.locator('#strategyInventory').getByRole('button',{name:'Entfernen',exact:true}).first().click();await editor.getByRole('button',{name:'Entfernen bestätigen',exact:true}).click();await expect(editor).toContainText('Standort');
+ await page.getByRole('button',{name:'Geräte, Daten & Ziele',exact:true}).click();await page.locator('#strategyInventory').getByRole('button',{name:'Entfernen',exact:true}).first().click();await expect(editor).toContainText('Untergeordneter Standort · Serverraum');await expect(editor.getByRole('button',{name:'Zuordnungen lösen und Standort entfernen',exact:true})).toBeVisible();
  await editor.getByRole('button',{name:'Abbrechen',exact:true}).click();await page.locator('#inventoryAdd').click();await editor.getByLabel('Name',{exact:true}).fill('Außenstandort');await editor.getByRole('button',{name:'Eintrag speichern',exact:true}).click();await expect(editor).toBeHidden();await expect(page.locator('#strategyInventory')).toContainText('Außenstandort');
  await page.setViewportSize({width:390,height:844});await page.screenshot({path:testInfo.outputPath('strategy-inventory-mobile.png'),fullPage:true});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
@@ -78,4 +78,18 @@ test('Mehrere dokumentierte Daten und Ziele laden; alle Planungsbereiche erlaube
  await page.reload();await page.getByRole('button',{name:'Geräte, Daten & Ziele',exact:true}).click();await page.locator('[data-inventory-kind="datasets"]').click();await expect(page.locator('#strategyInventory')).toContainText('Neue Fotos');
  await page.screenshot({path:testInfo.outputPath('planning-categories.png'),fullPage:true});
  expect(errors).toEqual([]);await expect(page.locator('#strategyFeedback')).not.toContainText('includes');
+});
+
+test('Standort mit Geräten und Zielen kann ausdrücklich gelöst und entfernt werden; verwendete Speicherziele nennen ihre Pläne',async({page})=>{
+ await login(page,{sourceDetails:false});await importPlanner(page);await page.locator('#plannerConfirm').check();await page.locator('#plannerApply').click();await expect(page.locator('#strategyFeedback')).toContainText('Planner importiert');
+ const before=(await(await page.request.get('/api/status')).json()).config;
+ await page.getByRole('button',{name:'Geräte, Daten & Ziele',exact:true}).click();await page.locator('[data-inventory-kind="locations"]').click();
+ await page.locator('#strategyInventory tbody tr').filter({hasText:'Serverraum'}).getByRole('button',{name:'Entfernen',exact:true}).click();const editor=page.locator('#strategyEditor');
+ await expect(editor).toContainText('Gerät · Test-NAS');await expect(editor).toContainText('Speicherziel · Plan-PBS');
+ await editor.getByRole('button',{name:'Zuordnungen lösen und Standort entfernen',exact:true}).click();await expect(editor).toBeHidden();
+ await page.reload();let saved=(await(await page.request.get('/api/strategy')).json()).document;expect(saved.data.locations.map(item=>item.id)).toEqual(['home']);expect(saved.data.sources[0].location_id).toBeNull();expect(saved.data.targets.find(item=>item.id==='pbs').location_id).toBeNull();expect(saved.data.plans).toHaveLength(2);expect(saved.data.targets).toHaveLength(2);
+ await page.getByRole('button',{name:'Geräte, Daten & Ziele',exact:true}).click();await page.locator('[data-inventory-kind="targets"]').click();await page.locator('#strategyInventory tbody tr').filter({hasText:'Plan-PBS'}).getByRole('button',{name:'Entfernen',exact:true}).click();
+ await expect(editor).toContainText('Backup-Plan · Dokumente auf PBS');await expect(editor).toContainText('Backup-Plan · Dokumente in die Cloud');await expect(editor.getByRole('button',{name:'Entfernen bestätigen',exact:true})).toBeDisabled();
+ await editor.getByRole('button',{name:'Zuordnung bearbeiten',exact:true}).first().click();await expect(editor.getByLabel('Name',{exact:true})).toHaveValue('Dokumente auf PBS');
+ expect((await(await page.request.get('/api/status')).json()).config).toEqual(before);
 });
