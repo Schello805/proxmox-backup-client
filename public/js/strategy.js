@@ -121,7 +121,7 @@ export function installStrategy({api,element,date,scheduleText,notice,editAppSou
    const name=n('td');const title=n('strong',job.name);title.style.borderLeft='3px solid '+(stored.document.data.plans.find(plan=>plan.id===job.planId)?.color||'#8051b8');title.style.paddingLeft='8px';name.append(title,n('small',job.datasetNames.join(', '),'hint'));
    const source=n('td',job.source),target=n('td',job.target),kind=n('td');kind.append(badge(job.implementation==='app'&&!job.executionReady?'App-Zuordnung fehlt':implementationLabel[job.implementation],job.implementation==='external'?'external-ready':job.implementation==='app'&&job.executionReady?'ok':'external'),n('small',job.implementation==='app'&&!job.executionReady?'App-Verknüpfung fehlt':job.executor||labels[job.protection],'hint'));
    const plan=n('td',job.implementation==='app'&&job.executionReady?job.appSchedules.map(item=>scheduleText(item.schedule)).join(' / '):scheduleText(job.schedule)),actions=n('td');
-   actions.append(button('Bearbeiten',()=>editPlan(job.planId),'row-action'),button('Entfernen',()=>confirmDelete('plans',job.planId),'row-action'));
+   actions.append(button('Bearbeiten',()=>editPlan(job.planId),'row-action'),button('Kopieren',()=>editPlan(job.planId,undefined,true),'row-action'),button('Entfernen',()=>confirmDelete('plans',job.planId),'row-action'));
    row.append(name,source,target,kind,plan,actions);body.append(row);
   }
   table.append(body);root.append(table);if(!body.children.length)root.append(n('p',query?'Keine passenden Pläne.':'Noch keine Pläne. Über „Neuer Backup-Plan“ einen Sicherungsweg anlegen.','workspace-empty'));
@@ -187,12 +187,19 @@ export function installStrategy({api,element,date,scheduleText,notice,editAppSou
   input.value=value??'';label.append(input);form.append(label);return input;
  }
  function errorBox(form){const result=n('p','','hint');result.setAttribute('role','status');form.append(result);return result;}
- function editPlan(identifier,presetDataset){
+ function copiedPlanName(name){
+  const names=new Set(stored.document.data.plans.map(plan=>plan.name));let index=1,result;
+  do{const suffix=' – Kopie'+(index===1?'':' '+index);result=name.slice(0,160-suffix.length).trimEnd()+suffix;index++;}while(names.has(result));
+  return result;
+ }
+ function editPlan(identifier,presetDataset,copy=false){
   if(!stored)return;
-  const previous=stored.document.data.plans.find(plan=>plan.id===identifier),root=editor(previous?'Backup-Plan bearbeiten':'Backup-Plan anlegen'),form=n('form'),grid=n('div',undefined,'editor-grid');
+  const template=stored.document.data.plans.find(plan=>plan.id===identifier);if(copy&&!template){feedback('Die Kopiervorlage ist nicht mehr vorhanden. Planung aktualisieren.',true);return;}
+  const previous=copy?null:template,root=editor(copy?'Backup-Plan kopieren':previous?'Backup-Plan bearbeiten':'Backup-Plan anlegen'),form=n('form'),grid=n('div',undefined,'editor-grid');
   const missing=[['sources','Gerät anlegen'],['targets','Speicherziel anlegen']].filter(([key])=>!stored.document.data[key].length);if(missing.length){root.append(n('p','Für den ersten Backup-Plan fehlen noch diese Angaben:','hint'));for(const [key,title]of missing)root.append(link(title,'#strategy/entity/'+key+'~','secondary'));root.scrollIntoView({block:'start'});return;}
   root.append(n('p','Sicherungsweg und Umsetzung dokumentieren. Geplant: noch nicht eingerichtet. Extern: wird im angegebenen System ausgeführt. App: mit passenden vorhandenen App-Aufträgen verbinden. Speichern startet keine Sicherung.','hint'),form);form.append(grid);
-  const p=previous||{name:'',source_id:stored.document.data.sources[0]?.id,target_id:stored.document.data.targets[0]?.id,protection_type:'backup',schedule_type:'manual',weekdays:[],day_of_month:1,start_time:'02:00',duration_minutes:0,dataset_ids:[],notes:''};
+  const p=template?structuredClone(template):{name:'',source_id:stored.document.data.sources[0]?.id,target_id:stored.document.data.targets[0]?.id,protection_type:'backup',schedule_type:'manual',weekdays:[],day_of_month:1,start_time:'02:00',duration_minutes:0,dataset_ids:[],notes:''};
+  if(copy){delete p.id;p.name=copiedPlanName(template.name);root.insertBefore(n('p','Die Kopie übernimmt alle Angaben. Passe Name, Ziel oder Zeitplan an und wähle „Plan speichern“. Bis dahin bleibt sie ein Entwurf.','hint'),form);}
   if(!previous&&presetDataset){const dataset=stored.document.data.datasets.find(item=>item.id===presetDataset);if(dataset){p.source_id=dataset.source_id;p.dataset_ids=[dataset.id];p.name=dataset.name+' sichern';}}
   const planName=field(grid,'Name','name',p.name);planName.required=true;planName.closest('label').append(n('small','Frei wählbar. Die Zuordnung erfolgt über deine Auswahl, unabhängig vom Namen.','hint'));
   const implementation=field(grid,'Umsetzung','implementation',p.implementation||'planned',[{id:'planned',name:'Geplant · noch nicht eingerichtet'},{id:'external',name:'Extern umgesetzt'},{id:'app',name:'Durch diese App umgesetzt'}]);
