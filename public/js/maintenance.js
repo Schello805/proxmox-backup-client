@@ -1,6 +1,7 @@
 export function installMaintenance({ api, element, date, isAuthenticated, getEpoch }) {
 const $ = selector => document.querySelector(selector);
-let diagnosticTimer, diagnosticPolling = false, versionChecking = false, lastVersionAttempt = 0;
+let diagnosticTimer, diagnosticPolling = false, versionChecking = false, lastVersionAttempt = 0, updateCandidate=null, installTimer, installEpoch=-1, installActive=false, installSupported=false, connectionAttempts=0, unconfirmedAttempts=0;
+const installKey="backup-control-update-pending";
 function showDiagnostics(report) {
   const errors = report.checks.filter(check => check.status === 'error').length, warnings = report.checks.filter(check => check.status === 'warning').length;
   $('#diagnosticSummary').textContent = report.running ? `Prüfung läuft … ${report.checks.length} Ergebnisse vorhanden.` : report.checkedAt ? `${errors} Fehler · ${warnings} Hinweise · geprüft ${date(report.checkedAt)}` : 'Mounts, Verzeichniszugriff, PBS und Zeitpläne mit einem Klick prüfen.';
@@ -15,6 +16,7 @@ async function pollDiagnostics() {
   finally { diagnosticPolling = false; }
 }
 function showVersionStatus(result) {
+  updateCandidate=result;$('#footerUpdate').hidden=result?.status!=='available'&&!installActive;
   const badge = $('#versionUpdate');
   const labels = {current:'Aktuell',available:'Update verfügbar','local-newer':'Lokaler Stand neuer',modified:'Lokale Änderungen',diverged:'Stand prüfen',unknown:'Stand unbekannt',error:'Prüfung fehlgeschlagen'};
   badge.textContent = result ? labels[result.status] || 'Stand unbekannt' : 'Noch nicht geprüft';
@@ -27,10 +29,47 @@ async function checkVersionStatus() {
   $('#versionUpdate').textContent = 'Prüfe Updates …';
   try { const result = await api('/api/updates/check', {}); if (epoch === getEpoch()) showUpdate(result); }
   catch { if (epoch === getEpoch()) showVersionStatus({status:'error',message:'Update-Prüfung nicht erreichbar.',checkedAt:new Date().toISOString()}); }
-  finally { versionChecking = false; }
+  finally { versionChecking = false;if(installEpoch!==epoch){installEpoch=epoch;void pollInstall();} }
 }
 document.addEventListener('check-version-status', checkVersionStatus);
-$('#versionUpdate').addEventListener('click', () => { $('#systemMaintenance').open = true; document.dispatchEvent(new Event('open-system')); });
+$('#versionUpdate').addEventListener('click', event => { if(updateCandidate?.status==='available'||installActive){event.preventDefault();void openInstall();}else{$('#systemMaintenance').open = true; document.dispatchEvent(new Event('open-system'));} });
+
+function pendingInstall(){try{return sessionStorage.getItem(installKey)==='1';}catch{return false;}}
+function markInstall(value){try{if(value)sessionStorage.setItem(installKey,'1');else sessionStorage.removeItem(installKey);}catch{}}
+function showInstall(status){
+ installSupported=status.supported;installActive=['queued','running'].includes(status.phase);
+ $('#footerInstallUpdate').disabled=!installSupported||installActive||updateCandidate?.status!=='available';
+ $('#footerUpdate').hidden=updateCandidate?.status!=='available'&&!installActive;
+ $('#footerUpdate').textContent=installActive?'Update läuft …':'Update installieren';
+ $('#footerUpdateMessage').textContent=!status.supported?'Einmalig im LXC als root: bash /opt/proxmox-backup-client/deploy/enable-web-updates.sh. Danach Browser neu laden.':status.phase==='idle'?'Sichert Einstellungen und startet den Dienst neu. Backups müssen beendet sein. Danach ggf. erneut anmelden.':status.message;
+}
+async function pollInstall(){
+ clearTimeout(installTimer);if(!isAuthenticated())return;const epoch=getEpoch();
+ try{
+  const status=await api('/api/updates/install');if(epoch!==getEpoch())return;connectionAttempts=0;showInstall(status);
+  if(installActive){markInstall(true);$('#footerUpdatePanel').hidden=false;installTimer=setTimeout(pollInstall,2000);}
+  else if(pendingInstall()&&status.phase==='succeeded'){markInstall(false);$('#footerUpdateMessage').textContent='Update abgeschlossen. Seite wird neu geladen …';setTimeout(()=>location.reload(),700);}
+  else if(pendingInstall()&&status.phase==='failed'){markInstall(false);$('#footerUpdatePanel').hidden=false;}
+  else if(pendingInstall()){if(++unconfirmedAttempts>=5){markInstall(false);$('#footerUpdateMessage').textContent='Keine Update-Anforderung bestätigt. Bitte erneut starten.';}else installTimer=setTimeout(pollInstall,2000);}
+ }catch(error){
+  if(epoch!==getEpoch())return;
+  if(installActive||pendingInstall()){
+   $('#footerUpdatePanel').hidden=false;$('#footerUpdateMessage').textContent=connectionAttempts<15?'Warte auf die Verbindung nach dem Dienstneustart …':'Dienst noch nicht erreichbar. Im LXC: journalctl -u qnap-backup-update --no-pager. Verbindung wird weiter geprüft.';
+   if(++connectionAttempts<450)installTimer=setTimeout(pollInstall,2000);else{$('#footerUpdateMessage').textContent='Verbindung noch nicht wiederhergestellt. LXC-Dienst und Update-Protokoll prüfen.';}
+  }else if(!$('#footerUpdatePanel').hidden)$('#footerUpdateMessage').textContent=error.message;
+ }
+}
+async function openInstall(){
+ $('#footerUpdatePanel').hidden=false;$('#footerInstallUpdate').disabled=true;await pollInstall();$('#footerUpdatePanel').scrollIntoView({block:'nearest'});
+}
+$('#footerUpdate').onclick=openInstall;
+$('#footerCancelUpdate').onclick=()=>{$('#footerUpdatePanel').hidden=true;};
+$('#footerInstallUpdate').onclick=async()=>{
+ $('#footerInstallUpdate').disabled=true;$('#footerUpdateMessage').textContent='Update wird angefordert …';markInstall(true);unconfirmedAttempts=0;connectionAttempts=0;const epoch=getEpoch();
+ try{const status=await api('/api/updates/install',{confirm:true});if(epoch!==getEpoch())return;showInstall(status);installTimer=setTimeout(pollInstall,1500);}
+ catch(error){if(epoch!==getEpoch())return;if(error.status){markInstall(false);$('#footerUpdateMessage').textContent=error.message;$('#footerInstallUpdate').disabled=!installSupported;}else{installActive=true;void pollInstall();}}
+};
+
 function showUpdate(result) {
   showVersionStatus(result);
   $('#updateResult').textContent = result ? `${result.message} · geprüft ${date(result.checkedAt)}` : 'Noch nicht geprüft.';

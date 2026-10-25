@@ -20,6 +20,6 @@ export DATA_DIR=/var/lib/qnap-backup CONFIG_FILE=/var/lib/qnap-backup/config.jso
 cd "$APP_DIR"
 node scripts/check.js --env-file /etc/qnap-backup.env --user qnap-backup --require-client
 install -m 644 deploy/qnap-backup.service /etc/systemd/system/qnap-backup.service
-systemctl daemon-reload
+sh deploy/enable-web-updates.sh
 systemctl enable --now qnap-backup
 systemctl is-active --quiet qnap-backup

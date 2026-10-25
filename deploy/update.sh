@@ -60,7 +60,7 @@ trap on_exit EXIT
 git merge --ff-only origin/main
 node scripts/check.js --env-file "$ENV_FILE" --user qnap-backup --require-client
 install -m 644 deploy/qnap-backup.service /etc/systemd/system/qnap-backup.service
-systemctl daemon-reload
+sh deploy/enable-web-updates.sh
 if [ "$WAS_ACTIVE" -eq 1 ]; then
   systemctl start qnap-backup
   systemctl is-active --quiet qnap-backup

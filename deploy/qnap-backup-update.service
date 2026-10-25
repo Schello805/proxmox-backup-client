@@ -1,0 +1,14 @@
+[Unit]
+Description=Install a requested Backup Control update
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/bin/node /usr/local/lib/qnap-backup/web-update.cjs
+TimeoutStartSec=30min
+UMask=0022
+RuntimeDirectory=qnap-backup-update
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes

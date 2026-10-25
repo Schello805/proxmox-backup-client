@@ -28,8 +28,10 @@ Oberfläche: **http://LXC-IP:3000**. `APP_PASSWORD` schützt die App; leer lasse
 
 ## Aktualisieren
 
+Im Footer **Update installieren → Jetzt installieren** wählen. Auf älteren Installationen einmalig aktivieren:
+
 ```sh
-bash /opt/proxmox-backup-client/deploy/update.sh
+bash /opt/proxmox-backup-client/deploy/update.sh && bash /opt/proxmox-backup-client/deploy/enable-web-updates.sh
 ```
 
 Vor dem Update laufende Aufträge beenden. Konfiguration und Verlauf liegen unter `/var/lib/qnap-backup/`. Die App löscht keine PBS-Sicherungen; Aufbewahrung und Verify werden im PBS konfiguriert. PBS nutzt `.pxar`-Archive, Drive normale Dateien mit wählbarem Versions- oder Abgleichmodus.

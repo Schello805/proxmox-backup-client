@@ -117,7 +117,7 @@ Grundlage des Parsers: [Proxmox: Einführung der periodischen Fortschrittsmeldun
 
 Über das Zahnrad unten in der linken Navigation öffnet sich „System & Wartung“ mit Diagnose und Update-Prüfung. „Diagnose starten“ prüft die Laufzeitumgebung und den lokalen Datenspeicher erneut, öffnet die Quellverzeichnisse, prüft deren Mount-Zuordnung, liest den PBS-Snapshot-Bestand und zeigt die nächsten Termine in der gewählten Zeitzone. Die Prüfung läuft im Hintergrund; mehrfache Starts teilen sich einen laufenden Durchgang. Ohne Wochenplan erscheint ein Hinweis. Die Prüfung verändert keine Backups, verschickt keine Testbenachrichtigung und prüft nicht rekursiv die Lesbarkeit jeder Datei. Die vorhandene PBS-Bestandsanzeige wird beim Verbindungstest aktualisiert. Änderungen an der Konfiguration während der Prüfung erfordern einen neuen Durchgang.
 
-„Auf Updates prüfen“ vergleicht den beim Dienststart erfassten lokalen Commit mit `main` auf GitHub und zeigt die dortige Paketversion sowie einen Link zum Commit. Auch neue Commits ohne Versionsänderung werden erkannt. Lokale Änderungen, ein vorausliegender oder auseinander gelaufener Git-Stand werden gesondert angezeigt. Ohne Git-Checkout ist der Vergleich unbekannt; ein Netzwerkfehler gilt nicht als „aktuell“. GitHub wird nur beim ausdrücklichen Prüfen kontaktiert; Ergebnisse werden für eine Minute zwischengespeichert. Die Prüfung überträgt keine Konfiguration und verwendet keine PBS-Zugangsdaten. Updates werden weiterhin mit dem dokumentierten Update-Skript im LXC installiert.
+„Auf Updates prüfen“ vergleicht den beim Dienststart erfassten lokalen Commit mit `main` auf GitHub und zeigt die dortige Paketversion sowie einen Link zum Commit. Auch neue Commits ohne Versionsänderung werden erkannt. Lokale Änderungen, ein vorausliegender oder auseinander gelaufener Git-Stand werden gesondert angezeigt. Ohne Git-Checkout ist der Vergleich unbekannt; ein Netzwerkfehler gilt nicht als „aktuell“. GitHub wird nur beim ausdrücklichen Prüfen kontaktiert; Ergebnisse werden für eine Minute zwischengespeichert. Die Prüfung überträgt keine Konfiguration und verwendet keine PBS-Zugangsdaten. Bei „Update verfügbar“ kann die Installation direkt im Footer gestartet werden. „Jetzt installieren“ bestätigt den Neustart; nach Abschluss wird die Seite neu geladen. Bei aktivem Passwortschutz kann eine erneute Anmeldung erforderlich sein. Laufende oder wartende Backups, Systemabfragen, lokale Codeänderungen und nicht vorspulbare Git-Stände verhindern das Update. Die Web-App behält ihren unprivilegierten Dienstbenutzer. Ein gesonderter systemd-Pfad-Dienst startet ausschließlich das feste Update-Skript, erstellt damit die vorhandene Datensicherung und startet den App-Dienst neu. Es werden keine Befehle aus der Web-Anforderung ausgeführt.
 
 
 ### Prozent und Restzeit (ab 2.2.0)
@@ -252,3 +252,24 @@ Referenzen: [PBS-Oberfläche: Datastore-Content](https://github.com/proxmox/prox
 Quelle → Bearbeiten → Frequenz **Monatlich** → Monatstag und Uhrzeit wählen. Möglich sind der 1. bis 31. oder **Letzter Tag**. Gibt es den gewählten Tag im Monat nicht, wird am letzten vorhandenen Tag gesichert (z. B. 31. → 28./29. Februar oder 30. April). Es gilt die eingestellte Zeitzone samt Startfenster und Warteschlange.
 
 Nächster Termin, Überfälligkeit und Gantt berücksichtigen den Monatsplan. Eine erfolgreiche monatliche Sicherung wird nicht schon nach der üblichen 14-Tage-Schwelle als veraltet gemeldet, solange ihr nächster geplanter Termin noch nicht fällig ist. Nicht vorhandene Uhrzeiten bei der Zeitumstellung werden wie bei Wochenplänen übersprungen; doppelte Stunden starten nur einmal. Automatische Vorschläge verschieben monatliche Pläne nicht; tatsächliche Überschneidungen bleiben im Gantt sichtbar.
+
+### Web-Updates einmalig aktivieren
+
+Beim ersten Wechsel von einer älteren Version im LXC als root ausführen:
+
+```bash
+bash /opt/proxmox-backup-client/deploy/update.sh && bash /opt/proxmox-backup-client/deploy/enable-web-updates.sh
+```
+
+Danach die Browserseite neu laden. Künftige Updates: Footer → **Update installieren → Jetzt installieren**. Neue Installationen und spätere Updates richten `qnap-backup-update.path` automatisch ein. Die separate Aktivierung beim ersten Wechsel ist nötig, weil ein älteres Update-Skript vor dem Austausch eine eigene Kopie erstellt und deshalb neue Installationsschritte noch nicht kennt.
+
+Der Helfer `/usr/local/lib/qnap-backup/web-update.cjs` und seine Units werden als root installiert. Die Anforderungsdatei `/var/lib/qnap-backup/update-request` enthält keine Befehle. Der Helfer entfernt sie beim Start und schreibt seinen Status nach `/run/qnap-backup-update/status.json`; die Web-App kann diesen Status lesen. Der bestehende Update-Ablauf sichert Konfiguration, Planung und Laufzustand unter `/var/backups/qnap-backup/`. Ein fehlgeschlagenes Update nach dem Stoppen kann weiterhin einen manuellen Rückweg erfordern; siehe Wiederherstellung oben.
+
+Fehlerdiagnose im LXC:
+
+```bash
+systemctl status qnap-backup-update.path qnap-backup-update.service --no-pager
+journalctl -u qnap-backup-update -n 80 --no-pager
+```
+
+Web-Updates sind für die Standardinstallation unter `/opt/proxmox-backup-client` mit Datenverzeichnis `/var/lib/qnap-backup` vorgesehen. Andere Installationen verwenden weiter den dokumentierten CLI-Ablauf.

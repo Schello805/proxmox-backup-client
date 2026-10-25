@@ -59,6 +59,8 @@ require('../lib/updates').createUpdates = () => ({
   current: () => null,
   check: async () => ({ status: 'available', message: 'Ein neuer Stand ist verfügbar.', checkedAt: new Date().toISOString(), latest: { version: '9.0.0', commit: 'b'.repeat(40), url: 'https://github.com/Schello805/proxmox-backup-client/commit/' + 'b'.repeat(40) } })
 });
+const realWebUpdates=require('../lib/web-updates').createWebUpdates;
+require('../lib/web-updates').createWebUpdates=options=>realWebUpdates({...options,enabled:async()=>true,statusFile:path.join(options.data,'web-update-status.json')});
 let activeDriveChild=null;
 process.on('message',message=>{if(message?.type==='drive-fail'&&activeDriveChild){const current=activeDriveChild;current.stderr.emit('data',Buffer.from(JSON.stringify({level:'error',object:'Ordner/NichtLesbar.txt',msg:'Failed to copy: permission denied access_token=e2e-private-token'})+'\n'));current.emit('close',6);}});
 const realDrive = require('../lib/gdrive').createDrive;

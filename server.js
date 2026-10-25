@@ -46,11 +46,11 @@ let strategyDocument = fs.existsSync(STRATEGY) ? JSON.parse(fs.readFileSync(STRA
 const normalizedStrategy = strategy.normalize(strategyDocument).document;
 strategyDocument = {...normalizedStrategy, mapping: strategyDocument.mapping || {datasets:{},targets:{}}};
 for (const source of initial.sources) state.watchSince[source.id] ||= new Date().toISOString();
-let backups, pbs, capacity, drive, autoPartitions;
+let backups, pbs, capacity, drive, autoPartitions, webUpdates;
 const { createPartitions } = require('./lib/partitions');
 const configs = createConfigService({ initial, state, write: value => saveJSON(CONFIG, value), persist, password: PASS, isBusy: () => backups?.busy || drive?.busy || pbs?.busy || capacity?.busy, onChange: (previous, next) => { drive?.changed(previous, next); for (const target of [...new Set([...targetsFor(previous),...targetsFor(next)].map(item=>item.id))]) if (JSON.stringify(targetConfig(previous,target)) !== JSON.stringify(targetConfig(next,target))) state.pbsCheckAfter[target] = new Date().toISOString(); if (['additionalDatastores','repository','secondaryDatastore','password','fingerprint','namespace','secondaryPBS'].some(key => JSON.stringify(previous[key]) !== JSON.stringify(next[key]))) pbs.invalidate(); } });
 const getConfig = configs.get;
-const isMaintenance = () => fs.existsSync(path.join(DATA, 'maintenance'));
+const isMaintenance = () => fs.existsSync(path.join(DATA, 'maintenance')) || Boolean(webUpdates?.pending());
 const logbook = require('./lib/logbook').createLogbook({getConfig,state,data:DATA,password:PASS,getDiagnostics:()=>diagnostics.current(),getUpdates:()=>updates.current()});
 const history = createHistory({ state, data: DATA, persist, getConfig, password: PASS });
 const notifier = createNotifier({ getConfig, state, persist });
@@ -76,6 +76,7 @@ const capacityTimer=setInterval(()=>void pollCapacity().catch(()=>console.warn('
 void pollCapacity().catch(()=>console.warn('Speicherstand konnte nicht gespeichert werden.'));
 const system = createSystem({ run, getConfig, storageChecks });
 const updates = createUpdates({ run, root: ROOT });
+webUpdates = require('./lib/web-updates').createWebUpdates({data:DATA,updates,run,isBusy:()=>backups.busy||drive.active||pbs.busy||capacity.busy||diagnostics.current().running||fs.existsSync(path.join(DATA,'maintenance'))});
 void updates.installed();
 const diagnostics = createDiagnostics({ getConfig, system, inspectPath, pbs, storageChecks: () => checkRuntime({ data: DATA, configFile: CONFIG, port: PORT }) });
 const auth = createAuth({ getConfig, password: PASS, json });
@@ -106,6 +107,9 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/login') return auth.login(req, res, await body(req));
     if (!url.pathname.startsWith('/api/')) return json(res, 404, { error: 'Nicht gefunden.' });
     if (!auth.authorized(req)) return json(res, 401, { error: 'Bitte anmelden.' });
+    if (req.method==='POST' && isMaintenance()) return json(res,409,{error:'Update läuft oder wurde angefordert. Nach Abschluss erneut versuchen.'});
+    if (req.method==='GET' && url.pathname==='/api/updates/install') return json(res,200,await webUpdates.status());
+    if (req.method==='POST' && url.pathname==='/api/updates/install') return json(res,202,await webUpdates.start(await body(req)));
     if (req.method === 'GET' && url.pathname === '/api/strategy') return json(res,200,{document:strategyDocument,revision:strategy.revision(strategyDocument),view:strategy.strategyView(strategyDocument,getConfig(),state,drive.snapshot(),new Date(),url.searchParams.get('week'))});
     if (req.method === 'POST' && url.pathname === '/api/strategy/preview') {
       const input=await body(req),preview=strategy.normalize(input.document);

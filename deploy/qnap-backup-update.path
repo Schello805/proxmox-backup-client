@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch for Backup Control update requests
+
+[Path]
+PathExists=/var/lib/qnap-backup/update-request
+Unit=qnap-backup-update.service
+
+[Install]
+WantedBy=multi-user.target
