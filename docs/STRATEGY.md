@@ -71,3 +71,5 @@ Unter **Ziele → Gemeinsamer Zielkatalog → Gerät zuordnen** das Zielgerät f
 Die Gerätezuordnung wird ausdrücklich gespeichert. Der ursprüngliche Speicherort eines importierten Datenbestands wird nicht automatisch zum tatsächlichen Speicherort einer aktuell eingebundenen Kopie erklärt. Ohne Zuordnung bleibt das Gerät offen gekennzeichnet. Auch gleichlautende Namen führen nicht zu einer automatischen Zusammenführung.
 
 Ein Gerät kann sowohl Daten als auch Speicherziele bereitstellen. Verwendete Geräte können erst nach ihren Zuordnungen entfernt werden. Die Zuordnungen gehören zum Planungs-Export und bleiben beim Einlesen eigener Exporte erhalten.
+
+Unter **Geräte, Daten & Ziele → Daten → Bearbeiten** zeigt „Backup-Ziele und Pläne“ alle Sicherungswege dieses Datenbestands. Ziele geplanter und externer Pläne sind dort änderbar; **Eintrag speichern** übernimmt sie gemeinsam. Bei Plänen mit mehreren Datenbeständen muss die Zieländerung für den ganzen Plan ausdrücklich bestätigt werden. Für App-verknüpfte Pläne führen Links zur tatsächlichen Auftragskonfiguration und zur Plan-Verknüpfung. Externe Sicherungen müssen zusätzlich im ausführenden System geändert werden.

@@ -847,3 +847,9 @@ body[data-page=strategy] #strategy>.page-heading { padding-left:16px; border-lef
 .inventory-categories { display:flex; flex-wrap:wrap; gap:8px; margin:18px 0; }
 .inventory-categories button[aria-pressed="true"] { color:#5433a4; background:#eee8fb; border-color:#b8a3e4; }
 #strategyInventoryPanel .actions { margin-top:18px; }
+
+#strategyEditor .dataset-plan-targets { display:block; grid-column:1 / -1; min-width:0; }
+.dataset-plan-target { padding:14px 0; border-bottom:1px solid var(--line); }
+.dataset-plan-target:last-of-type { border-bottom:0; }
+.dataset-plan-target>strong,.dataset-plan-target>small { display:block; margin-bottom:6px; }
+.dataset-plan-target>label { margin:10px 0; }

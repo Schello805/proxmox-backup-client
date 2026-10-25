@@ -93,3 +93,18 @@ test('Standort mit Geräten und Zielen kann ausdrücklich gelöst und entfernt w
  await editor.getByRole('button',{name:'Zuordnung bearbeiten',exact:true}).first().click();await expect(editor.getByLabel('Name',{exact:true})).toHaveValue('Dokumente auf PBS');
  expect((await(await page.request.get('/api/status')).json()).config).toEqual(before);
 });
+
+test('Daten bearbeiten zeigt alle Planziele; Zielwechsel bleibt erhalten und gemeinsame Pläne brauchen Bestätigung',async({page},testInfo)=>{
+ await login(page,{sourceDetails:false});const before=(await(await page.request.get('/api/status')).json()).config,current=await(await page.request.get('/api/strategy')).json(),document=fixture();
+ document.data.targets.push({id:'new-target',name:'Neues Speicherziel'});document.data.datasets.push({id:'photos',name:'Weitere Fotos',source_id:'nas'});document.data.plans[0].dataset_ids.push('photos');
+ const response=await page.request.post('/api/strategy/import',{headers,data:{document,mapping:{datasets:{},targets:{}},revision:current.revision}});expect(response.ok()).toBe(true);
+ await page.getByRole('navigation',{name:'Hauptnavigation',exact:true}).getByRole('link',{name:/Backup-Planung$/}).click();await page.getByRole('button',{name:'Geräte, Daten & Ziele',exact:true}).click();await page.locator('[data-inventory-kind="datasets"]').click();
+ const row=page.locator('#strategyInventory tbody tr').filter({hasText:'Dokumente'}),editor=page.locator('#strategyEditor');await expect(row).toContainText('Plan-PBS');await expect(row).toContainText('Plan-Cloud');await row.getByRole('button',{name:'Bearbeiten',exact:true}).click();
+ await expect(editor.getByLabel('Ziel für Dokumente auf PBS',{exact:true})).toHaveValue('pbs');await expect(editor.getByLabel('Ziel für Dokumente in die Cloud',{exact:true})).toHaveValue('cloud');
+ await editor.getByLabel('Ziel für Dokumente in die Cloud',{exact:true}).selectOption('new-target');await editor.getByRole('button',{name:'Eintrag speichern',exact:true}).click();await expect(editor).toBeHidden();
+ await page.reload();await page.getByRole('button',{name:'Geräte, Daten & Ziele',exact:true}).click();await page.locator('[data-inventory-kind="datasets"]').click();await row.getByRole('button',{name:'Bearbeiten',exact:true}).click();await expect(editor.getByLabel('Ziel für Dokumente in die Cloud',{exact:true})).toHaveValue('new-target');
+ await editor.getByLabel('Ziel für Dokumente auf PBS',{exact:true}).selectOption('new-target');await editor.getByRole('button',{name:'Eintrag speichern',exact:true}).click();await expect(editor).toContainText('Zieländerung für den gesamten Plan „Dokumente auf PBS“ bestätigen.');
+ let saved=(await(await page.request.get('/api/strategy')).json()).document;expect(saved.data.plans.find(plan=>plan.id==='daily').target_id).toBe('pbs');
+ await expect(editor).toContainText('Dieser Plan sichert auch: Weitere Fotos');await editor.getByLabel('Zieländerung für den gesamten Plan bestätigen',{exact:true}).check();await page.screenshot({path:testInfo.outputPath('dataset-target-editor.png'),fullPage:true});await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await editor.getByRole('button',{name:'Eintrag speichern',exact:true}).click();await expect(editor).toBeHidden();
+ saved=(await(await page.request.get('/api/strategy')).json()).document;expect(saved.data.plans.find(plan=>plan.id==='daily')).toMatchObject({target_id:'new-target',dataset_ids:['docs','photos'],schedule_type:'daily',start_time:'02:00',duration_minutes:90});expect((await(await page.request.get('/api/status')).json()).config).toEqual(before);
+});
