@@ -1,7 +1,7 @@
 import { installExecutionViews } from '/js/execution.js';
-export function installStrategy({api,element,date,scheduleText,notice}) {
+export function installStrategy({api,element,date,scheduleText,notice,editAppSource}) {
  const $=selector=>document.querySelector(selector);
- let snapshot=null, stored=null, preview=null, loading=null, loadedAt=0, calendarMode='week', calendarOffset=0, activeTab='paths', importFile=null;
+ let snapshot=null, stored=null, preview=null, loading=null, loadedAt=0, calendarMode='week', calendarOffset=0, activeTab='paths', importFile=null, refreshPlanBindings=null;
  // Metadata IDs are not credentials; work on plain HTTP LAN addresses as well.
  const newId=()=> 'entry-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,12);
  const labels={backup:'Sicherung mit Versionen',synchronization:'Synchronisierung',archive:'Archiv',idle:'Noch kein Lauf',queued:'Wartet',running:'Läuft',success:'Erfolgreich',failed:'Fehlgeschlagen',interrupted:'Unterbrochen',cancelled:'Abgebrochen',cancelling:'Abbruch läuft',unverified:'Extern · ungeprüft'};
@@ -194,7 +194,7 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
   root.append(n('p','Sicherungsweg und Umsetzung dokumentieren. Geplant: noch nicht eingerichtet. Extern: wird im angegebenen System ausgeführt. App: mit passenden vorhandenen App-Aufträgen verbinden. Speichern startet keine Sicherung.','hint'),form);form.append(grid);
   const p=previous||{name:'',source_id:stored.document.data.sources[0]?.id,target_id:stored.document.data.targets[0]?.id,protection_type:'backup',schedule_type:'manual',weekdays:[],day_of_month:1,start_time:'02:00',duration_minutes:0,dataset_ids:[],notes:''};
   if(!previous&&presetDataset){const dataset=stored.document.data.datasets.find(item=>item.id===presetDataset);if(dataset){p.source_id=dataset.source_id;p.dataset_ids=[dataset.id];p.name=dataset.name+' sichern';}}
-  field(grid,'Name','name',p.name).required=true;
+  const planName=field(grid,'Name','name',p.name);planName.required=true;planName.closest('label').append(n('small','Frei wählbar. Die Zuordnung erfolgt über deine Auswahl, unabhängig vom Namen.','hint'));
   const implementation=field(grid,'Umsetzung','implementation',p.implementation||'planned',[{id:'planned',name:'Geplant · noch nicht eingerichtet'},{id:'external',name:'Extern umgesetzt'},{id:'app',name:'Durch diese App umgesetzt'}]);
   const executor=field(grid,'Ausführendes System','executor',p.executor||'');executor.placeholder='z. B. Proxmox pve · Datacenter → Backup';
   const source=field(grid,'Ursprüngliches Quellgerät','source_id',p.source_id,stored.document.data.sources);
@@ -230,9 +230,19 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
     if(!job.configured)appSchedules.append(n('p','Der Zielzugang dieses Auftrags ist noch unvollständig. Unter App-Ziele fertig einrichten.','strategy-warning'));
     else if(job.protection!==form.elements.protection_type.value)appSchedules.append(n('p','Die Schutzart passt noch nicht: Dieser Auftrag verwendet „'+labels[job.protection]+'“. Oben bei „Schutzart“ ebenfalls „'+labels[job.protection]+'“ auswählen.','strategy-warning'));
    }
-   if(!candidates.length)appSchedules.append(n('p','Noch kein passender App-Auftrag. Quelle und Ziel zuerst einrichten oder diesen Weg vorerst als geplant speichern.','hint'));
+   if(!candidates.length){
+    const ids=[...new Set(Object.values(selected.datasets))],targetId=selected.targets[form.elements.target_id.value];
+    if(!ids.length||!targetId)appSchedules.append(n('p','Ordner und App-Ziel auswählen. Die Namen von Plan und Auftrag müssen nicht übereinstimmen.','hint'));
+    for(const id of ids){const source=snapshot.config.sources.find(item=>item.id===id);if(!source)continue;
+     const existing=stored.view.jobs.filter(job=>job.sourceId===id||job.rootId===id||job.sourceIds?.includes(id));const destination=snapshot.targets.find(item=>item.id===targetId)?.name||(targetId==='gdrive'?'Google Drive':'das gewählte Ziel');
+     appSchedules.append(n('p',existing.length?'Für „'+source.name+'“ gibt es Aufträge zu '+[...new Set(existing.map(job=>job.target))].join(', ')+', aber noch keinen zu '+destination+'. Der Planname ist dafür unerheblich.':'Für „'+source.name+'“ ist noch kein passender App-Auftrag eingerichtet.','strategy-warning'));
+     if(editAppSource&&targetId&&targetId!=='gdrive'&&!source.partitioned)appSchedules.append(button('Auftrag für '+source.name+' auf '+destination+' einrichten',()=>editAppSource(id,targetId),'secondary'));
+    }
+   }
+
    appSchedules.append(link('Quelle über Assistent einrichten','#assistant/source'),link('App-Ziele einrichten','#targets'));
   }
+  refreshPlanBindings=paintAppSchedules;
   form.elements.protection_type.addEventListener('change',paintAppSchedules);
   appMapping.addEventListener('change',paintAppSchedules);
   datasetBox.addEventListener('change',paintAppMapping);form.elements.target_id.addEventListener('change',paintAppMapping);
@@ -337,5 +347,5 @@ export function installStrategy({api,element,date,scheduleText,notice}) {
  function calendar(mode){calendarMode=mode;$('#calendarWeek').setAttribute('aria-pressed',String(mode==='week'));$('#calendarAgenda').setAttribute('aria-pressed',String(mode==='agenda'));renderCalendar();}
  $('#calendarWeek').onclick=()=>calendar('week');$('#calendarAgenda').onclick=()=>calendar('agenda');
  $('#calendarPrevious').onclick=()=>{calendarOffset--;void load(true);};$('#calendarNext').onclick=()=>{calendarOffset++;void load(true);};$('#calendarToday').onclick=()=>{calendarOffset=0;void load(true);};
- return {sourcesRendered:execution.sources,sourceAliases:execution.sourceAliases,sourceStates:execution.sourceStates,update(data){snapshot=data;renderLivePaths();execution.render();filterJobs();void load();},activity(data){if(!snapshot)return;snapshot={...snapshot,drive:data.drive,folders:snapshot.folders.map(source=>({...source,job:data.jobs[source.id]||source.job}))};renderLivePaths();filterJobs();},async open(page,id,tab){await load(true);if(page==='strategy'){goTab(activeTab);if(id==='plan'&&tab)editPlan(tab);else if(id==='new')editPlan(undefined,tab);else if(id==='entity'&&tab){const [kind,key]=tab.split('~');if(['datasets','targets','sources','locations','software','networks'].includes(kind)){goTab('inventory');$('#inventoryKind').value=kind;renderInventory();editEntity(kind,key);}}else $('#strategyEditor').hidden=true;}else renderCalendar();}};
+ return {async refreshBindings(){await load(true);if(!$('#strategyEditor').hidden)refreshPlanBindings?.();},sourcesRendered:execution.sources,sourceAliases:execution.sourceAliases,sourceStates:execution.sourceStates,update(data){snapshot=data;renderLivePaths();execution.render();filterJobs();void load();},activity(data){if(!snapshot)return;snapshot={...snapshot,drive:data.drive,folders:snapshot.folders.map(source=>({...source,job:data.jobs[source.id]||source.job}))};renderLivePaths();filterJobs();},async open(page,id,tab){await load(true);if(page==='strategy'){goTab(activeTab);if(id==='plan'&&tab)editPlan(tab);else if(id==='new')editPlan(undefined,tab);else if(id==='entity'&&tab){const [kind,key]=tab.split('~');if(['datasets','targets','sources','locations','software','networks'].includes(kind)){goTab('inventory');$('#inventoryKind').value=kind;renderInventory();editEntity(kind,key);}}else $('#strategyEditor').hidden=true;}else renderCalendar();}};
 }

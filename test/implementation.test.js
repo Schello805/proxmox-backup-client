@@ -50,3 +50,16 @@ test('App-Verknüpfungsfehler nennen die tatsächlich fehlende oder widersprüch
  plan.protection_type='backup';cfg.password='';assert.throws(()=>validateImplementation(doc,cfg,state,{}),/vollständigen Zielzugang/);
  cfg.password='secret';doc.mapping.datasets.docs='serien';cfg.sources.find(item=>item.id==='serien').target='secondary';assert.throws(()=>validateImplementation(doc,cfg,state,{}),/Kein App-Auftrag.*Serien/);
 });
+
+test('Freie Plan-, Daten- und Zielnamen ändern keine explizite ID-Zuordnung',()=>{
+ const cfg=config(),doc=normalize(fixture()).document,state={jobs:{},history:{}};doc.data.plans=[doc.data.plans[0]];doc.data.plans[0].implementation='app';doc.data.plans[0].name='Familienarchiv ohne Quellnamen';doc.data.datasets[0].name='Familiendaten';doc.data.targets[0].name='Freies Sicherungsziel';cfg.sources.find(source=>source.id==='software').name='Daten auf dem NAS';doc.mapping={datasets:{docs:'software'},targets:{pbs:'primary'}};
+ validateImplementation(doc,cfg,state,{});let view=strategyView(doc,cfg,state,{});assert.deepEqual(view.external[0].bindings,['pbs:software']);
+ doc.data.plans[0].name='Anderer beliebiger Name';doc.data.datasets[0].name='Noch ein anderer Name';validateImplementation(doc,cfg,state,{});view=strategyView(doc,cfg,state,{});assert.deepEqual(view.external[0].bindings,['pbs:software']);
+});
+test('Ein aufgeteiltes Datenverzeichnis lässt sich je Ziel unabhängig verknüpfen',()=>{
+ const cfg=config(),doc=normalize(fixture()).document;cfg.secondaryDatastore='pbs2';cfg.additionalDatastores=[{id:'extra1',datastore:'pbs3'}];const root=cfg.sources.find(source=>source.id==='filme');root.partitioned=true;
+ for(const [id,target]of [['teil-a','secondary'],['teil-b','extra1']]){cfg.sources.push({...root,id,name:'Technischer Teilauftrag '+id,partitioned:false,parentId:'filme',target,selection:[id+'.mp4']});cfg.schedules[id]={days:[],time:''};}
+ const original=doc.data.plans[0];doc.data.plans=[{...original,name:'Kinofilme auf erstem Speicher',implementation:'app'},{...original,id:'zweiter-plan',name:'Weitere Filme',target_id:'cloud',implementation:'app'}];doc.mapping={datasets:{docs:'filme'},targets:{pbs:'secondary',cloud:'extra1'}};
+ validateImplementation(doc,cfg,{jobs:{},history:{}},{});const view=strategyView(doc,cfg,{jobs:{},history:{}},{});assert.deepEqual(view.external[0].bindings,['pbs:teil-a']);assert.deepEqual(view.external[1].bindings,['pbs:teil-b']);assert.equal(view.external.every(plan=>plan.executionReady),true);
+ cfg.sources=cfg.sources.filter(source=>source.id!=='teil-b');assert.throws(()=>validateImplementation(doc,cfg,{jobs:{},history:{}},{}),/kein Teilauftrag auf dem gewählten Ziel/);
+});

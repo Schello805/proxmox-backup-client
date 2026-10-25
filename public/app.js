@@ -127,11 +127,11 @@ function restoreContext() {
   $('#sourceDetail').hidden = true; $('#historyDialog').hidden = true; $('#restorePanel').hidden = true;
   detailId = null;
 }
-function closeContext() { location.hash = document.body.dataset.page === 'sourcesDialog' && detailId ? '#sourcesDialog' : '#jobs'; }
+function closeContext() { if(document.body.dataset.page==='strategy'){restoreContext();$('#strategyEditor').scrollIntoView({block:'nearest'});return;}location.hash = document.body.dataset.page === 'sourcesDialog' && detailId ? '#sourcesDialog' : '#jobs'; }
 function showContext(view, id) {
-  const base = ['jobs','sourcesDialog'].includes(document.body.dataset.page) ? document.body.dataset.page : 'jobs';
+  const base = ['jobs','sourcesDialog','strategy'].includes(document.body.dataset.page) ? document.body.dataset.page : 'jobs';
   const route = `${base}/${id}/${view === 'historyDialog' ? 'history' : view === 'restorePanel' ? 'restore' : 'edit'}`;
-  if (location.hash.slice(1) !== route) history.pushState(null, '', '#' + route);
+  if (base!=='strategy' && location.hash.slice(1) !== route) history.pushState(null, '', '#' + route);
   document.querySelectorAll('.page').forEach(el => el.hidden = el.id !== base);
   document.body.dataset.page = base; markNavigation(base); $('#' + base).append($('#sourceDetail'));
   if (base === 'jobs') $('#jobsActivitySlot').append($('.activity'));
@@ -400,7 +400,7 @@ $('#sourceForm').addEventListener('submit', async event => {
     const sources = sourceEditing ? savedConfig.sources.map(item => item.id === sourceEditing ? source : item) : [...savedConfig.sources, source];
     const monthly = form.elements.planMode.value === 'monthly';
     const schedule = { days: ['manual','monthly'].includes(form.elements.planMode.value) ? [] : chosenDays, time: form.elements.planMode.value === 'manual' ? '' : form.elements.planTime.value, ...(monthly ? { monthDay: form.elements.monthDay.value === 'last' ? 'last' : Number(form.elements.monthDay.value) } : {}) };
-    await api('/api/sources', { sources, schedule: { id: source.id, value: schedule } }); loaded = false; await refresh(); renderSources(); if (detailId) editSource(source.id, true); else resetSource(); $('#sourceResult').textContent = 'Daten und Sicherungsplan gespeichert.';
+    await api('/api/sources', { sources, schedule: { id: source.id, value: schedule } }); loaded = false; await refresh(); renderSources(); if (detailId) editSource(source.id, true); else resetSource(); $('#sourceResult').textContent = 'Daten und Sicherungsplan gespeichert.';if(document.body.dataset.page==='strategy')await strategyUI?.refreshBindings();
   } catch (e) { const field = serverField(e); if (field) showFieldErrors(form, { [field]: e.message }); $('#sourceResult').textContent = e.message; } finally { button.disabled = false; }
 });
 async function openHistory(id) {
@@ -585,7 +585,7 @@ for (const details of document.querySelectorAll('#targets>.target-accordion, #ov
   try { details.open = localStorage.getItem('backup-target-' + details.id) === 'open'; } catch {}
   details.addEventListener('toggle', () => { try { localStorage.setItem('backup-target-' + details.id, details.open ? 'open' : 'closed'); } catch {} });
 }
-strategyUI = installStrategy({api,element,date,scheduleText,notice});
+strategyUI = installStrategy({api,element,date,scheduleText,notice,editAppSource:(id,target)=>{const original=savedConfig.sources.find(item=>item.id===id);editSource(id,true);if(backupTargets().some(item=>item.id===target)){$('#sourceForm').elements.target.value=target;fillSourcePlan(savedConfig.schedules[id]||{days:[],time:''});renderSourceTargetHint();$('#sourceResult').textContent=original?.target!=='gdrive'&&(original?.target||'primary')!==target?'Beim Speichern wird das bisherige PBS-Ziel dieses Auftrags ersetzt. Ziel und Zeitplan prüfen. Dein Plan bleibt darüber geöffnet.':'Ziel und Zeitplan prüfen, dann Daten speichern. Dein Plan bleibt darüber geöffnet; eine bestehende Google-Drive-Auswahl bleibt erhalten.';}}});
 dashboard = installDashboard({ element, date, openSource: source => { $('#sourceSearch').value = source.name; $('#sourceSearch').dataset.exactId=source.id; location.hash = 'sourcesDialog'; renderSources(); }, resolveProblem: (source, issue) => { if (issue.view === 'source') location.hash = 'sourcesDialog/' + source.id + '/edit'; else if (issue.view === 'log') void openLog(source.id); else if (issue.view === 'backup') location.hash = 'jobs'; else { $('#pbsSettings').open=true;location.hash='targets'; } } });
 drive = installDrive({ api, element, notice, scheduleText, date });
 operations = installOperations({api,element,refresh,date});

@@ -51,7 +51,9 @@ export function installExecutionViews({n,badge,button,link,date,scheduleText,met
  }
  function jobDevices(){
   const stored=getStored();if(!stored)return;
-  for(const row of $('#folders').children){row.querySelectorAll('[data-job-device]').forEach(node=>node.remove());for(const [index,name]of [[0,sourceDeviceName(row.dataset.folder)],[1,targetDeviceName(getSnapshot().config.sources.find(source=>source.id===row.dataset.folder)?.target||'primary')]]){if(!name)continue;const note=n('small',name,'path-device');note.dataset.jobDevice='true';row.children[index].prepend(note);}}
+  const aliases=id=>[...new Set(stored.view.external.filter(plan=>plan.implementation==='app'&&plan.executionReady&&plan.bindings.includes(id)).map(plan=>plan.name))];
+  for(const row of $('#folders').children){const source=getSnapshot().config.sources.find(source=>source.id===row.dataset.folder),title=row.querySelector('.source-link'),names=aliases('pbs:'+row.dataset.folder);if(title){title.textContent=names.length?names.join(' · '):source?.name||row.dataset.folder;title.title=(source?.name||'')+' · Details, Zeitplan und Verlauf öffnen';}row.querySelectorAll('[data-job-device]').forEach(node=>node.remove());for(const [index,name]of [[0,sourceDeviceName(row.dataset.folder)],[1,targetDeviceName(getSnapshot().config.sources.find(source=>source.id===row.dataset.folder)?.target||'primary')]]){if(!name)continue;const note=n('small',name,'path-device');note.dataset.jobDevice='true';row.children[index].prepend(note);}}
+  const drive=$('#driveOverview');drive.querySelectorAll('[data-plan-name]').forEach(node=>node.remove());const driveNames=aliases('gdrive');if(driveNames.length){const title=n('strong',driveNames.join(' · '));title.dataset.planName='true';drive.firstElementChild.prepend(title);}
  }
  $('#addDataDevice').onclick=()=>deviceEditor();$('#dataDeviceFilter').onchange=()=>sources();
  function externalRows(){
